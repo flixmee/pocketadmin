@@ -48,6 +48,7 @@ import "./records/recordUpsertModal";
 import "./records/recordsList";
 import "./base/fieldSettings";
 import "./fields/text/init";
+import "./fields/slug/init";
 import "./fields/editor/init";
 import "./fields/number/init";
 import "./fields/bool/init";

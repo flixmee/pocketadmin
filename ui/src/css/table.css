@@ -181,7 +181,8 @@ table {
             min-width: 190px;
             max-width: 500px;
         }
-        &.col-field-type-text {
+        &.col-field-type-text,
+        &.col-field-type-slug {
             max-width: 300px;
         }
         &.col-field-type-editor {
