@@ -201,6 +201,10 @@ table {
         &.col-field-type-file {
             min-width: 120px;
         }
+        &.col-field-type-media {
+            min-width: 160px;
+            max-width: 360px;
+        }
         &.col-field-type-json {
             max-width: 300px;
         }

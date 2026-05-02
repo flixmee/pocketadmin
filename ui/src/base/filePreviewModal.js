@@ -26,7 +26,10 @@ function filePreviewModal(urlOrFactory) {
             const url = data.url;
             const queryParamsIdx = url.indexOf("?");
 
-            return url.substring(url.lastIndexOf("/") + 1, queryParamsIdx > 0 ? queryParamsIdx : undefined);
+            return url.substring(
+                url.lastIndexOf("/") + 1,
+                queryParamsIdx > 0 ? queryParamsIdx : undefined,
+            );
         },
         get fileType() {
             return app.utils.getFileType(data.filename);
@@ -85,6 +88,17 @@ function filePreviewModal(urlOrFactory) {
                     src: () => data.url,
                     alt: () => `Preview ${data.filename}`,
                 });
+            }
+
+            if (data.fileType == "video") {
+                return t.video(
+                    {
+                        controls: true,
+                        autoplay: false,
+                        src: () => data.url,
+                    },
+                    t.span("Your browser does not support the video tag."),
+                );
             }
 
             return t.object(
