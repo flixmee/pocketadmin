@@ -1,5 +1,38 @@
 Goal (incl. success criteria):
 
+- Prevent merge conflicts from `ui/dist` by making git keep the local version for generated UI build output.
+
+Constraints/Assumptions:
+
+- Keep the change focused to repository metadata and generated UI output rules.
+- The repo worktree is dirty; avoid reverting unrelated existing work.
+- `ui/dist` is tracked generated output, so ignore rules alone will not solve merge conflicts.
+
+Key decisions:
+
+- Use a repo-level `.gitattributes` rule for `ui/dist/**` with the `ours` merge driver so future merges and rebases keep local generated artifacts.
+
+State:
+
+- Done:
+- Read the current ledger and checked git status for `ui/dist` conflict state.
+- Added a repo-level `.gitattributes` rule for `ui/dist/**`.
+- Now:
+- Verify the change and confirm the worktree state.
+- Next:
+- None.
+
+Open questions (UNCONFIRMED if needed):
+
+- None.
+
+Working set (files/ids/commands):
+
+- `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/.gitattributes`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/dist/`
+  Goal (incl. success criteria):
+
 - Update the media picker and media field flow so `Set selection` stores absolute `_medias` file URLs produced by `app.pb.files.getURL(...)`, and remove the client-side `resolveMediaRecordsByPaths` path-resolution flow entirely.
 
 Constraints/Assumptions:
