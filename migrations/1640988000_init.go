@@ -74,6 +74,10 @@ func init() {
 			return fmt.Errorf("_authOrigins error: %w", err)
 		}
 
+		if err := createMediasCollection(txApp); err != nil {
+			return fmt.Errorf("_medias error: %w", err)
+		}
+
 		if err := createSuperusersCollection(txApp); err != nil {
 			return fmt.Errorf("_superusers error: %w", err)
 		}
@@ -90,6 +94,7 @@ func init() {
 			core.CollectionNameMFAs,
 			core.CollectionNameOTPs,
 			core.CollectionNameAuthOrigins,
+			core.CollectionNameMedias,
 			"_params",
 			"_collections",
 		}
@@ -310,6 +315,62 @@ func createSuperusersCollection(txApp core.App) error {
 	superusers.AuthToken.Duration = 86400 // 1 day
 
 	return txApp.Save(superusers)
+}
+
+func createMediasCollection(txApp core.App) error {
+	col := core.NewBaseCollection(core.CollectionNameMedias)
+	col.System = true
+
+	col.Fields.Add(&core.TextField{
+		Name:        "name",
+		System:      true,
+		Presentable: true,
+		Required:    true,
+		Max:         255,
+	})
+	col.Fields.Add(&core.SelectField{
+		Name:     "kind",
+		System:   true,
+		Required: true,
+		Values:   []string{core.MediaKindFile, core.MediaKindFolder},
+	})
+	col.Fields.Add(&core.TextField{
+		Name:   "parent",
+		System: true,
+		Max:    255,
+	})
+	col.Fields.Add(&core.FileField{
+		Name:      "file",
+		System:    true,
+		MaxSelect: 1,
+	})
+	col.Fields.Add(&core.TextField{
+		Name:   "mime",
+		System: true,
+		Hidden: true,
+		Max:    255,
+	})
+	col.Fields.Add(&core.NumberField{
+		Name:    "size",
+		System:  true,
+		Hidden:  true,
+		OnlyInt: true,
+	})
+	col.Fields.Add(&core.AutodateField{
+		Name:     "created",
+		System:   true,
+		OnCreate: true,
+	})
+	col.Fields.Add(&core.AutodateField{
+		Name:     "updated",
+		System:   true,
+		OnCreate: true,
+		OnUpdate: true,
+	})
+	col.AddIndex("idx_medias_unique_parent_name", true, "parent, name", "")
+	col.AddIndex("idx_medias_parent_kind", false, "parent, kind", "")
+
+	return txApp.Save(col)
 }
 
 func createUsersCollection(txApp core.App) error {

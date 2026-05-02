@@ -49,6 +49,7 @@ import "./records/recordsList";
 import "./base/fieldSettings";
 import "./fields/text/init";
 import "./fields/slug/init";
+import "./fields/media/init";
 import "./fields/editor/init";
 import "./fields/number/init";
 import "./fields/bool/init";
@@ -77,6 +78,9 @@ import "./collections/oauth2/oidcOptions";
 import "./collections/oauth2/appleOptions";
 import "./logs/logsSettingsModal";
 import "./logs/logPreviewModal";
+import "./media/mediaFolderModal";
+import "./media/mediaPickerModal";
+import "./media/mediaUploadModal";
 import { appHeader } from "./base/appHeader";
 import { initRouter } from "./router";
 

@@ -12,12 +12,7 @@ export function settings(props) {
                     label: () =>
                         t.div(
                             { className: "inline-flex gap-10" },
-                            t.i({
-                                className: app.fieldTypes[field.type]?.icon || app.utils.fallbackFieldIcon,
-                                ariaHidden: true,
-                            }),
                             t.span({ className: "txt" }, field.name),
-                            t.small({ className: "txt-hint" }, field.type),
                         ),
                 };
             });
@@ -27,7 +22,10 @@ export function settings(props) {
         header: t.div(
             {
                 className: "field header-select slug-attach-select",
-                ariaDescription: app.attrs.tooltip("Source field for slug generation", "left"),
+                ariaDescription: app.attrs.tooltip(
+                    "Source field for slug generation",
+                    "left",
+                ),
             },
             app.components.select({
                 placeholder: "No attachment",
@@ -50,7 +48,9 @@ export function settings(props) {
                             t.span({ className: "txt" }, "Min length"),
                             t.i({
                                 className: "ri-information-line link-hint",
-                                ariaDescription: app.attrs.tooltip("Clear the field or set it to 0 for no limit."),
+                                ariaDescription: app.attrs.tooltip(
+                                    "Clear the field or set it to 0 for no limit.",
+                                ),
                             }),
                         ),
                         t.input({
@@ -129,7 +129,9 @@ export function settings(props) {
                     t.small({ className: "txt-hint" }, "(!='')"),
                     t.i({
                         className: "ri-information-line link-hint",
-                        ariaDescription: app.attrs.tooltip("Requires the field value to be nonempty string"),
+                        ariaDescription: app.attrs.tooltip(
+                            "Requires the field value to be nonempty string",
+                        ),
                     }),
                 ),
             ),

@@ -37,6 +37,7 @@
 td .record-summary {
     .field-type-text,
     .field-type-slug,
+    .field-type-media,
     .field-type-editor,
     .field-type-json {
         max-width: 250px;
