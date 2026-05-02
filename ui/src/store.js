@@ -63,6 +63,11 @@ window.app.store = store({
             label: "Collections",
         },
         {
+            href: "#/media",
+            icon: "ri-folder-image-line",
+            label: "Media",
+        },
+        {
             href: "#/logs",
             icon: "ri-bar-chart-box-line",
             label: "Logs",

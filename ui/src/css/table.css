@@ -181,7 +181,8 @@ table {
             min-width: 190px;
             max-width: 500px;
         }
-        &.col-field-type-text {
+        &.col-field-type-text,
+        &.col-field-type-slug {
             max-width: 300px;
         }
         &.col-field-type-editor {
@@ -199,6 +200,10 @@ table {
         }
         &.col-field-type-file {
             min-width: 120px;
+        }
+        &.col-field-type-media {
+            min-width: 160px;
+            max-width: 360px;
         }
         &.col-field-type-json {
             max-width: 300px;

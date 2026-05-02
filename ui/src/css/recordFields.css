@@ -259,6 +259,15 @@
     }
 }
 
+.field-type-media {
+    &.record-field-view {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+}
+
 .field-type-editor {
     &.record-field-view {
         width: 100%;
