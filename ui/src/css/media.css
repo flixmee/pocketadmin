@@ -11,6 +11,21 @@
   --media-shadow-sm: 0 1px 3px rgb(0 0 0 / 8%);
   --media-shadow-md: 0 4px 12px rgb(0 0 0 / 12%);
 
+  [data-color-scheme="dark"] & {
+    color-scheme: dark;
+    --media-black: #ffffff;
+    --media-900: #f2f2f2;
+    --media-700: #d4d4d4;
+    --media-500: #a0a0a0;
+    --media-300: #606060;
+    --media-200: #333333;
+    --media-100: #242424;
+    --media-50: #1a1a1a;
+    --media-white: #252525;
+    --media-shadow-sm: 0 1px 3px rgb(0 0 0 / 35%);
+    --media-shadow-md: 0 8px 20px rgb(0 0 0 / 40%);
+  }
+
   .page-content {
     position: relative;
     gap: 20px;
@@ -465,6 +480,19 @@
 }
 
 .media-picker-modal {
+  [data-color-scheme="dark"] & {
+    color-scheme: dark;
+
+    .media-picker-dropzone-overlay {
+      background: rgb(0 0 0 / 55%);
+    }
+
+    .media-picker-item.selected {
+      border-color: var(--media-black, #fff);
+      box-shadow: inset 0 0 0 1px var(--media-black, #fff);
+    }
+  }
+
   .modal-content.media-picker-content {
     position: relative;
     display: grid;
@@ -911,6 +939,13 @@
     align-items: center;
     gap: 6px;
     max-width: 100%;
+  }
+
+  .thumb {
+    img {
+      height: 100%;
+      object-fit: cover;
+    }
   }
 
   .txt-break {
