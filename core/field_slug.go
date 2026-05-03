@@ -2,12 +2,15 @@ package core
 
 import (
 	"context"
+	"database/sql"
 	"regexp"
 	"strings"
 	"unicode"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core/validators"
+	"github.com/pocketbase/pocketbase/tools/security"
 	"github.com/spf13/cast"
 )
 
@@ -60,7 +63,7 @@ type SlugField struct {
 	// If zero, a default limit of 5000 is applied.
 	Max int `form:"max" json:"max"`
 
-	// AttachedField optionally references another field id whose value will be used as the slug source.
+	// AttachedField optionally references another field name whose value will be used as the slug source.
 	AttachedField string `form:"attachedField" json:"attachedField"`
 
 	// Required will require the field value to be non-empty string.
@@ -176,7 +179,7 @@ func (f *SlugField) ValidateSettings(ctx context.Context, app App, collection *C
 		validation.Field(&f.Min, validation.Min(0), validation.Max(maxSafeJSONInt)),
 		validation.Field(&f.Max, validation.Min(f.Min), validation.Max(maxSafeJSONInt)),
 		validation.Field(&f.AttachedField,
-			validation.When(f.AttachedField != "", validation.By(DefaultFieldIdValidationRule)),
+			validation.When(f.AttachedField != "", validation.By(DefaultFieldNameValidationRule)),
 			validation.By(f.checkAttachedField(collection)),
 		),
 	)
@@ -192,7 +195,7 @@ func (f *SlugField) Intercept(
 ) error {
 	switch actionName {
 	case InterceptorActionValidate, InterceptorActionCreate, InterceptorActionUpdate, InterceptorActionCreateExecute, InterceptorActionUpdateExecute:
-		f.syncAttachedValue(record)
+		f.syncAttachedValue(app, record)
 	}
 
 	return actionFunc()
@@ -205,11 +208,11 @@ func (f *SlugField) checkAttachedField(collection *Collection) validation.RuleFu
 			return nil
 		}
 
-		if name == f.Id {
+		if name == f.Name {
 			return validation.NewError("validation_invalid_attached_field", "The attached field cannot reference itself.")
 		}
 
-		if collection != nil && collection.Fields.GetById(name) == nil {
+		if collection != nil && collection.Fields.GetByName(name) == nil {
 			return validation.NewError("validation_invalid_attached_field", "The attached field does not exist.")
 		}
 
@@ -217,18 +220,48 @@ func (f *SlugField) checkAttachedField(collection *Collection) validation.RuleFu
 	}
 }
 
-func (f *SlugField) syncAttachedValue(record *Record) {
+func (f *SlugField) syncAttachedValue(app App, record *Record) {
 	current := record.GetString(f.Name)
 	normalizedCurrent := normalizeSlug(current)
 
+	// when no attached field is set -> autogenerate/value normalize
 	if f.AttachedField == "" {
+		if current == "" {
+			// generate unique random string using Min or fallback to 8
+			length := 8
+			if f.Min > 0 {
+				length = f.Min
+			}
+
+			// try a few attempts to find a unique candidate
+			var candidate string
+			for i := 0; i < 10; i++ {
+				candidate = strings.ToLower(security.RandomString(length))
+
+				// check uniqueness in the collection for this field
+				_, err := app.FindFirstRecordByFilter(record.Collection().Id, f.Name+"={:val}", dbx.Params{"val": candidate})
+				if err == sql.ErrNoRows {
+					record.SetRaw(f.Name, candidate)
+					return
+				}
+				if err != nil {
+					// on unexpected error, fallback to next attempt
+					break
+				}
+			}
+
+			// fallback: set something even if not proven unique
+			record.SetRaw(f.Name, strings.ToLower(security.RandomString(length)))
+			return
+		}
+
 		if current != normalizedCurrent {
 			record.SetRaw(f.Name, normalizedCurrent)
 		}
 		return
 	}
 
-	sourceField := record.Collection().Fields.GetById(f.AttachedField)
+	sourceField := record.Collection().Fields.GetByName(f.AttachedField)
 	if sourceField == nil {
 		return
 	}
