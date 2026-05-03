@@ -8,7 +8,7 @@ export function settings(props) {
             .filter((field) => !field[toDeleteProp] && field.name != props.field.name)
             .map((field) => {
                 return {
-                    value: field.id,
+                    value: field.name,
                     label: () =>
                         t.div(
                             { className: "inline-flex gap-10" },
@@ -29,7 +29,7 @@ export function settings(props) {
             },
             app.components.select({
                 placeholder: "No attachment",
-                options: getAttachmentOptions(),
+                options: () => getAttachmentOptions(),
                 value: () => props.field.attachedField || "",
                 onchange: (opts) => {
                     props.field.attachedField = opts?.[0]?.value || "";

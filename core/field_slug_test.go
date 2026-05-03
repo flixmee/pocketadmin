@@ -196,7 +196,7 @@ func TestSlugFieldIntercept(t *testing.T) {
 	collection := core.NewBaseCollection("test_collection")
 	collection.Fields.Add(&core.TextField{Name: "title", Id: "title_id"})
 
-	slugField := &core.SlugField{Name: "slug", Id: "slug_id", AttachedField: "title_id"}
+	slugField := &core.SlugField{Name: "slug", AttachedField: "title"}
 	collection.Fields.Add(slugField)
 
 	scenarios := []struct {
