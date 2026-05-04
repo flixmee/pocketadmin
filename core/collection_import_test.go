@@ -261,6 +261,7 @@ func TestImportCollectionsByMarshaledJSON(t *testing.T) {
 				{
 					"id":   "wsmn24bux7wo113",
 					"name": "demo",
+					"collectionGroup": "Primary",
 					"fields": [
 						{
 							"id":       "_2hlxbmp",
@@ -277,6 +278,7 @@ func TestImportCollectionsByMarshaledJSON(t *testing.T) {
 				},
 				{
 					"name": "import1",
+					"collectionGroup": "Imports",
 					"fields": [
 						{
 							"name": "active",
@@ -288,6 +290,23 @@ func TestImportCollectionsByMarshaledJSON(t *testing.T) {
 			deleteMissing:          true,
 			expectError:            false,
 			expectCollectionsCount: totalSystemCollections + 2,
+			afterTestFunc: func(testApp *tests.TestApp, resultCollections []*core.Collection) {
+				demo, err := testApp.FindCollectionByNameOrId("demo")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if demo.CollectionGroup != "Primary" {
+					t.Fatalf("Expected demo collectionGroup %q, got %q", "Primary", demo.CollectionGroup)
+				}
+
+				imported, err := testApp.FindCollectionByNameOrId("import1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if imported.CollectionGroup != "Imports" {
+					t.Fatalf("Expected import1 collectionGroup %q, got %q", "Imports", imported.CollectionGroup)
+				}
+			},
 		},
 	}
 

@@ -40,6 +40,7 @@ func init() {
 				[[system]]     BOOLEAN DEFAULT FALSE NOT NULL,
 				[[type]]       TEXT DEFAULT "base" NOT NULL,
 				[[name]]       TEXT UNIQUE NOT NULL,
+				[[collectionGroup]] TEXT DEFAULT "" NOT NULL,
 				[[fields]]     JSON DEFAULT "[]" NOT NULL,
 				[[indexes]]    JSON DEFAULT "[]" NOT NULL,
 				[[listRule]]   TEXT DEFAULT NULL,
@@ -53,6 +54,12 @@ func init() {
 			);
 
 			CREATE INDEX IF NOT EXISTS idx__collections_type on {{_collections}} ([[type]]);
+
+			CREATE TABLE {{_collection_groups}} (
+				[[name]]    TEXT PRIMARY KEY NOT NULL,
+				[[created]] TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%fZ')) NOT NULL,
+				[[updated]] TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%fZ')) NOT NULL
+			);
 		`).Execute()
 		if execerr != nil {
 			return fmt.Errorf("_collections exec error: %w", execerr)
@@ -96,6 +103,7 @@ func init() {
 			core.CollectionNameAuthOrigins,
 			core.CollectionNameMedias,
 			"_params",
+			"_collection_groups",
 			"_collections",
 		}
 

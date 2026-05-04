@@ -150,8 +150,10 @@ window.app.store = store({
     },
 
     collections: [],
+    collectionGroups: [],
     collectionScaffolds: {},
     isLoadingCollections: false,
+    isLoadingCollectionGroups: false,
     _activeCollectionIdOrName: "",
     get activeCollection() {
         const idOrName = app.store._activeCollectionIdOrName;
@@ -166,13 +168,23 @@ window.app.store = store({
     },
     async silentlyReloadCollections() {
         try {
-            let newCollections = await app.pb.collections.getFullList({
-                requestKey: "appStore.silentlyReloadCollections",
-            });
+            let [newCollections, newCollectionGroups] = await Promise.all([
+                app.pb.collections.getFullList({
+                    requestKey: "appStore.silentlyReloadCollections",
+                }),
+                app.pb.send("/api/collections/meta/groups", {
+                    requestKey: "appStore.silentlyReloadCollectionGroups",
+                }),
+            ]);
             newCollections = app.utils.sortedCollectionsByType(newCollections);
 
             if (JSON.stringify(newCollections) != JSON.stringify(app.store.collections)) {
                 app.store.collections = newCollections;
+            }
+
+            newCollectionGroups = app.utils.sortedStrings(newCollectionGroups || []);
+            if (JSON.stringify(newCollectionGroups) != JSON.stringify(app.store.collectionGroups)) {
+                app.store.collectionGroups = newCollectionGroups;
             }
         } catch (err) {
             if (!err.isAbort) {
@@ -182,30 +194,87 @@ window.app.store = store({
     },
     async loadCollections(activeIdOrName = null) {
         app.store.isLoadingCollections = true;
+        app.store.isLoadingCollectionGroups = true;
 
         try {
-            let [resultScaffolds, resultCollections] = await Promise.all([
+            let [resultScaffolds, resultCollections, resultCollectionGroups] = await Promise.all([
                 app.pb.collections.getScaffolds({ requestKey: "appStore.loadCollections.getScaffolds" }),
                 app.pb.collections.getFullList({ requestKey: "appStore.loadCollections.getFullList" }),
+                app.pb.send("/api/collections/meta/groups", {
+                    requestKey: "appStore.loadCollections.getGroups",
+                }),
             ]);
 
             resultCollections = app.utils.sortedCollectionsByType(resultCollections);
+            resultCollectionGroups = app.utils.sortedStrings(resultCollectionGroups || []);
 
             // replace only if there are changes to minimize flickering
             if (JSON.stringify(app.store.collections) != JSON.stringify(resultCollections)) {
                 app.store.collections = resultCollections;
+            }
+            if (JSON.stringify(app.store.collectionGroups) != JSON.stringify(resultCollectionGroups)) {
+                app.store.collectionGroups = resultCollectionGroups;
             }
 
             app.store.collectionScaffolds = resultScaffolds;
             app.store._activeCollectionIdOrName = activeIdOrName || app.store._activeCollectionIdOrName
                 || app.store.collections[0]?.id || "";
             app.store.isLoadingCollections = false;
+            app.store.isLoadingCollectionGroups = false;
         } catch (err) {
             if (!err.isAbort) {
                 app.store.isLoadingCollections = false;
+                app.store.isLoadingCollectionGroups = false;
                 app.checkApiError(err);
             }
         }
+    },
+    addCollectionGroup(groupName) {
+        const normalized = app.utils.normalizeCollectionGroup(groupName);
+        if (!normalized) {
+            return;
+        }
+
+        if (!app.store.collectionGroups.includes(normalized)) {
+            app.store.collectionGroups = app.utils.sortedStrings(app.store.collectionGroups.concat(normalized));
+        }
+    },
+    renameCollectionGroup(oldName, newName) {
+        const normalizedOld = app.utils.normalizeCollectionGroup(oldName);
+        const normalizedNew = app.utils.normalizeCollectionGroup(newName);
+        if (!normalizedOld || !normalizedNew) {
+            return;
+        }
+
+        app.store.collectionGroups = app.utils.sortedStrings(
+            app.store.collectionGroups
+                .filter((groupName) => groupName !== normalizedOld)
+                .concat(normalizedNew),
+        );
+
+        for (const collection of app.store.collections) {
+            if (app.utils.normalizeCollectionGroup(collection.collectionGroup) === normalizedOld) {
+                collection.collectionGroup = normalizedNew;
+            }
+        }
+
+        app.store.collections = app.utils.sortedCollectionsByType(app.store.collections);
+    },
+    removeCollectionGroup(groupName) {
+        const normalized = app.utils.normalizeCollectionGroup(groupName);
+        if (!normalized) {
+            return;
+        }
+
+        app.store.collectionGroups = app.store.collectionGroups.filter((name) => name !== normalized);
+
+        for (const collection of app.store.collections) {
+            if (app.utils.normalizeCollectionGroup(collection.collectionGroup) === normalized) {
+                collection.collectionGroup = "";
+            }
+        }
+
+        app.store.collections = app.utils.sortedCollectionsByType(app.store.collections);
     },
     addOrUpdateCollection(collection) {
         const index = app.store.collections.findIndex((c) => c.id == collection.id);
@@ -219,6 +288,7 @@ window.app.store = store({
             app.store.collections.push(collection);
         }
 
+        app.store.addCollectionGroup(collection.collectionGroup);
         app.store.collections = app.utils.sortedCollectionsByType(app.store.collections);
     },
 

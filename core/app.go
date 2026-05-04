@@ -399,6 +399,18 @@ type App interface {
 	// ReloadCachedCollections fetches all collections and caches them into the app store.
 	ReloadCachedCollections() error
 
+	// FindAllCollectionGroups returns all registered collection group names.
+	FindAllCollectionGroups() ([]string, error)
+
+	// EnsureCollectionGroup stores the provided group name in the groups registry if it is non-empty.
+	EnsureCollectionGroup(name string) error
+
+	// RenameCollectionGroup renames a registered collection group and updates all collections using it.
+	RenameCollectionGroup(oldName, newName string) error
+
+	// DeleteCollectionGroup removes a registered collection group and clears it from all collections using it.
+	DeleteCollectionGroup(name string) error
+
 	// FindCollectionByNameOrId finds a single collection by its name (case insensitive) or id.s
 	FindCollectionByNameOrId(nameOrId string) (*Collection, error)
 

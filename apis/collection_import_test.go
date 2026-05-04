@@ -119,6 +119,7 @@ func TestCollectionsImport(t *testing.T) {
 				"collections":[
 					{
 						"name": "import1",
+						"collectionGroup": "Imports",
 						"fields": [
 							{
 							  "id": "koih1lqx",
@@ -129,6 +130,7 @@ func TestCollectionsImport(t *testing.T) {
 					},
 					{
 						"name": "import2",
+						"collectionGroup": "Imports",
 						"fields": [
 							{
 							  "id": "koih1lqx",
@@ -184,6 +186,7 @@ func TestCollectionsImport(t *testing.T) {
 				"collections":[
 					{
 						"name": "import1",
+						"collectionGroup": "Imports",
 						"fields": [
 							{
 							  "id": "koih1lqx",
@@ -194,6 +197,7 @@ func TestCollectionsImport(t *testing.T) {
 					},
 					{
 						"name": "import2",
+						"collectionGroup": "Imports",
 						"fields": [
 							{
 							  "id": "koih1lqx",
@@ -240,6 +244,14 @@ func TestCollectionsImport(t *testing.T) {
 				if err != nil || indexes["idx_test"] == "" {
 					t.Fatalf("Missing index %s (%v)", "idx_test", err)
 				}
+
+				collection, err := app.FindCollectionByNameOrId("import1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if collection.CollectionGroup != "Imports" {
+					t.Fatalf("Expected collectionGroup %q, got %q", "Imports", collection.CollectionGroup)
+				}
 			},
 		},
 		{
@@ -253,6 +265,7 @@ func TestCollectionsImport(t *testing.T) {
 					{
 						"id":"wsmn24bux7wo113",
 						"name":"demo1",
+						"collectionGroup":"Primary",
 						"fields":[
 							{
 								"id":"_2hlxbmp",
@@ -314,6 +327,14 @@ func TestCollectionsImport(t *testing.T) {
 				if len(collections) != expected {
 					t.Fatalf("Expected %d collections, got %d", expected, len(collections))
 				}
+
+				collection, err := app.FindCollectionByNameOrId("demo1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if collection.CollectionGroup != "Primary" {
+					t.Fatalf("Expected collectionGroup %q, got %q", "Primary", collection.CollectionGroup)
+				}
 			},
 		},
 		{
@@ -327,6 +348,7 @@ func TestCollectionsImport(t *testing.T) {
 					{
 						"id":"wsmn24bux7wo113",
 						"name":"demo1",
+						"collectionGroup":"Primary",
 						"fields":[
 							{
 								"id":"_2hlxbmp",

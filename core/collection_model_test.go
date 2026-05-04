@@ -32,6 +32,7 @@ func TestNewCollection(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":""`,
+				`"collectionGroup":""`,
 				`"type":"base"`,
 				`"system":false`,
 				`"indexes":[]`,
@@ -51,6 +52,7 @@ func TestNewCollection(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"type":"base"`,
 				`"system":false`,
 				`"indexes":[]`,
@@ -70,6 +72,7 @@ func TestNewCollection(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"type":"base"`,
 				`"system":false`,
 				`"indexes":[]`,
@@ -89,6 +92,7 @@ func TestNewCollection(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"type":"view"`,
 				`"indexes":[]`,
 				`"fields":[]`,
@@ -106,6 +110,7 @@ func TestNewCollection(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"type":"auth"`,
 				`"fields":[{`,
 				`"system":false`,
@@ -154,6 +159,7 @@ func TestNewBaseCollection(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":""`,
+				`"collectionGroup":""`,
 				`"type":"base"`,
 				`"system":false`,
 				`"indexes":[]`,
@@ -172,6 +178,7 @@ func TestNewBaseCollection(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"type":"base"`,
 				`"system":false`,
 				`"indexes":[]`,
@@ -212,6 +219,7 @@ func TestNewViewCollection(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":""`,
+				`"collectionGroup":""`,
 				`"type":"view"`,
 				`"indexes":[]`,
 				`"fields":[]`,
@@ -228,6 +236,7 @@ func TestNewViewCollection(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"type":"view"`,
 				`"indexes":[]`,
 				`"fields":[]`,
@@ -266,6 +275,7 @@ func TestNewAuthCollection(t *testing.T) {
 			[]string{
 				`"id":""`,
 				`"name":""`,
+				`"collectionGroup":""`,
 				`"type":"auth"`,
 				`"fields":[{`,
 				`"system":false`,
@@ -292,6 +302,7 @@ func TestNewAuthCollection(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"type":"auth"`,
 				`"fields":[{`,
 				`"system":false`,
@@ -518,6 +529,7 @@ func TestCollectionUnmarshalJSON(t *testing.T) {
 				`"type":"base"`,
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"listRule":"1=2"`,
 				`"fields":[`,
 				`"name":"id"`,
@@ -538,6 +550,7 @@ func TestCollectionUnmarshalJSON(t *testing.T) {
 				`"type":"view"`,
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"listRule":"1=2"`,
 				`"fields":[]`,
 				`"viewQuery":"abc"`,
@@ -557,6 +570,7 @@ func TestCollectionUnmarshalJSON(t *testing.T) {
 				`"type":"auth"`,
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"listRule":"1=2"`,
 				`"authRule":"1=3"`,
 				`"fields":[`,
@@ -579,6 +593,7 @@ func TestCollectionUnmarshalJSON(t *testing.T) {
 				`"type":"base"`,
 				`"id":""`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"listRule":"1=2"`,
 				`"fields":[]`,
 			},
@@ -597,6 +612,7 @@ func TestCollectionUnmarshalJSON(t *testing.T) {
 			[]string{
 				`"type":"auth"`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"listRule":"1=2"`,
 				`"authRule":"1=3"`,
 				`"fields":[`,
@@ -661,6 +677,7 @@ func TestCollectionSerialize(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"type":"base"`,
 			},
 			[]string{
@@ -689,6 +706,7 @@ func TestCollectionSerialize(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"type":"view"`,
 				`"viewQuery":"1=1"`,
 			},
@@ -717,6 +735,7 @@ func TestCollectionSerialize(t *testing.T) {
 			[]string{
 				`"id":"pbc_`,
 				`"name":"test"`,
+				`"collectionGroup":""`,
 				`"type":"auth"`,
 				`"oauth2":{`,
 				`"providers":[{`,
@@ -817,19 +836,19 @@ func TestCollectionDBExport(t *testing.T) {
 	}{
 		{
 			"unknown",
-			`{"createRule":"1=3","created":"2024-07-01 01:02:03.456Z","deleteRule":"1=5","fields":[{"help":"","hidden":false,"id":"f1_id","name":"f1","presentable":false,"required":false,"system":true,"type":"bool"},{"help":"","hidden":false,"id":"f2_id","name":"f2","presentable":false,"required":true,"system":false,"type":"bool"}],"id":"test_id","indexes":["CREATE INDEX idx1 on test_name(id)","CREATE INDEX idx2 on test_name(id)"],"listRule":"1=1","name":"test_name","options":"{}","system":true,"type":"unknown","updateRule":"1=4","updated":"2024-07-01 01:02:03.456Z","viewRule":"1=7"}`,
+			`{"collectionGroup":"Group A","createRule":"1=3","created":"2024-07-01 01:02:03.456Z","deleteRule":"1=5","fields":[{"help":"","hidden":false,"id":"f1_id","name":"f1","presentable":false,"required":false,"system":true,"type":"bool"},{"help":"","hidden":false,"id":"f2_id","name":"f2","presentable":false,"required":true,"system":false,"type":"bool"}],"id":"test_id","indexes":["CREATE INDEX idx1 on test_name(id)","CREATE INDEX idx2 on test_name(id)"],"listRule":"1=1","name":"test_name","options":"{}","system":true,"type":"unknown","updateRule":"1=4","updated":"2024-07-01 01:02:03.456Z","viewRule":"1=7"}`,
 		},
 		{
 			core.CollectionTypeBase,
-			`{"createRule":"1=3","created":"2024-07-01 01:02:03.456Z","deleteRule":"1=5","fields":[{"help":"","hidden":false,"id":"f1_id","name":"f1","presentable":false,"required":false,"system":true,"type":"bool"},{"help":"","hidden":false,"id":"f2_id","name":"f2","presentable":false,"required":true,"system":false,"type":"bool"}],"id":"test_id","indexes":["CREATE INDEX idx1 on test_name(id)","CREATE INDEX idx2 on test_name(id)"],"listRule":"1=1","name":"test_name","options":"{}","system":true,"type":"base","updateRule":"1=4","updated":"2024-07-01 01:02:03.456Z","viewRule":"1=7"}`,
+			`{"collectionGroup":"Group A","createRule":"1=3","created":"2024-07-01 01:02:03.456Z","deleteRule":"1=5","fields":[{"help":"","hidden":false,"id":"f1_id","name":"f1","presentable":false,"required":false,"system":true,"type":"bool"},{"help":"","hidden":false,"id":"f2_id","name":"f2","presentable":false,"required":true,"system":false,"type":"bool"}],"id":"test_id","indexes":["CREATE INDEX idx1 on test_name(id)","CREATE INDEX idx2 on test_name(id)"],"listRule":"1=1","name":"test_name","options":"{}","system":true,"type":"base","updateRule":"1=4","updated":"2024-07-01 01:02:03.456Z","viewRule":"1=7"}`,
 		},
 		{
 			core.CollectionTypeView,
-			`{"createRule":"1=3","created":"2024-07-01 01:02:03.456Z","deleteRule":"1=5","fields":[{"help":"","hidden":false,"id":"f1_id","name":"f1","presentable":false,"required":false,"system":true,"type":"bool"},{"help":"","hidden":false,"id":"f2_id","name":"f2","presentable":false,"required":true,"system":false,"type":"bool"}],"id":"test_id","indexes":["CREATE INDEX idx1 on test_name(id)","CREATE INDEX idx2 on test_name(id)"],"listRule":"1=1","name":"test_name","options":{"viewQuery":"select 1"},"system":true,"type":"view","updateRule":"1=4","updated":"2024-07-01 01:02:03.456Z","viewRule":"1=7"}`,
+			`{"collectionGroup":"Group A","createRule":"1=3","created":"2024-07-01 01:02:03.456Z","deleteRule":"1=5","fields":[{"help":"","hidden":false,"id":"f1_id","name":"f1","presentable":false,"required":false,"system":true,"type":"bool"},{"help":"","hidden":false,"id":"f2_id","name":"f2","presentable":false,"required":true,"system":false,"type":"bool"}],"id":"test_id","indexes":["CREATE INDEX idx1 on test_name(id)","CREATE INDEX idx2 on test_name(id)"],"listRule":"1=1","name":"test_name","options":{"viewQuery":"select 1"},"system":true,"type":"view","updateRule":"1=4","updated":"2024-07-01 01:02:03.456Z","viewRule":"1=7"}`,
 		},
 		{
 			core.CollectionTypeAuth,
-			`{"createRule":"1=3","created":"2024-07-01 01:02:03.456Z","deleteRule":"1=5","fields":[{"help":"","hidden":false,"id":"f1_id","name":"f1","presentable":false,"required":false,"system":true,"type":"bool"},{"help":"","hidden":false,"id":"f2_id","name":"f2","presentable":false,"required":true,"system":false,"type":"bool"}],"id":"test_id","indexes":["CREATE INDEX idx1 on test_name(id)","CREATE INDEX idx2 on test_name(id)"],"listRule":"1=1","name":"test_name","options":{"authRule":null,"manageRule":"1=6","authAlert":{"enabled":false,"emailTemplate":{"subject":"","body":""}},"oauth2":{"providers":null,"mappedFields":{"id":"","name":"","username":"","avatarURL":""},"enabled":false},"passwordAuth":{"enabled":false,"identityFields":null},"mfa":{"enabled":false,"duration":0,"rule":""},"otp":{"enabled":false,"duration":0,"length":0,"emailTemplate":{"subject":"","body":""}},"authToken":{"duration":0},"passwordResetToken":{"duration":0},"emailChangeToken":{"duration":0},"verificationToken":{"duration":0},"fileToken":{"duration":0},"verificationTemplate":{"subject":"","body":""},"resetPasswordTemplate":{"subject":"","body":""},"confirmEmailChangeTemplate":{"subject":"","body":""}},"system":true,"type":"auth","updateRule":"1=4","updated":"2024-07-01 01:02:03.456Z","viewRule":"1=7"}`,
+			`{"collectionGroup":"Group A","createRule":"1=3","created":"2024-07-01 01:02:03.456Z","deleteRule":"1=5","fields":[{"help":"","hidden":false,"id":"f1_id","name":"f1","presentable":false,"required":false,"system":true,"type":"bool"},{"help":"","hidden":false,"id":"f2_id","name":"f2","presentable":false,"required":true,"system":false,"type":"bool"}],"id":"test_id","indexes":["CREATE INDEX idx1 on test_name(id)","CREATE INDEX idx2 on test_name(id)"],"listRule":"1=1","name":"test_name","options":{"authRule":null,"manageRule":"1=6","authAlert":{"enabled":false,"emailTemplate":{"subject":"","body":""}},"oauth2":{"providers":null,"mappedFields":{"id":"","name":"","username":"","avatarURL":""},"enabled":false},"passwordAuth":{"enabled":false,"identityFields":null},"mfa":{"enabled":false,"duration":0,"rule":""},"otp":{"enabled":false,"duration":0,"length":0,"emailTemplate":{"subject":"","body":""}},"authToken":{"duration":0},"passwordResetToken":{"duration":0},"emailChangeToken":{"duration":0},"verificationToken":{"duration":0},"fileToken":{"duration":0},"verificationTemplate":{"subject":"","body":""},"resetPasswordTemplate":{"subject":"","body":""},"confirmEmailChangeTemplate":{"subject":"","body":""}},"system":true,"type":"auth","updateRule":"1=4","updated":"2024-07-01 01:02:03.456Z","viewRule":"1=7"}`,
 		},
 	}
 
@@ -839,6 +858,7 @@ func TestCollectionDBExport(t *testing.T) {
 			c.Type = s.typ
 			c.Id = "test_id"
 			c.Name = "test_name"
+			c.CollectionGroup = "Group A"
 			c.System = true
 			c.ListRule = types.Pointer("1=1")
 			c.ViewRule = types.Pointer("1=2")
