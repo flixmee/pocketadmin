@@ -104,11 +104,15 @@ function collectionUpsertModal(rawCollection, modalSettings) {
     });
 
     async function initCollection(collection) {
-        if (app.utils.isEmpty(collection)) {
+        if (app.utils.isEmpty(collection) || !collection.id) {
             collection = JSON.parse(JSON.stringify(app.store.collectionScaffolds.base)) || {
                 type: "base",
                 fields: [],
             };
+
+            if (rawCollection.group) {
+                collection.collectionGroup = rawCollection.group;
+            }
 
             // add commonly used timestamp fields
             collection.fields.push({

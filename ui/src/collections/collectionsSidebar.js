@@ -291,6 +291,29 @@ export function collectionsSidebar() {
                                     t.span({ className: "flex-fill" }),
                                     t.span(
                                         { className: "actions" },
+                                        // create collection with the group preselected
+                                        t.button(
+                                            {
+                                                type: "button",
+                                                className: "btn xs circle transparent secondary",
+                                                ariaDescription: app.attrs.tooltip(
+                                                    "New collection in group",
+                                                    "left",
+                                                ),
+                                                onclick: (e) => {
+                                                    e.preventDefault();
+                                                    app.modals.openCollectionUpsert(
+                                                        { group: group.name },
+                                                        {
+                                                            onsave: (newCollection) => {
+                                                                app.store.activeCollection = newCollection.id;
+                                                            },
+                                                        },
+                                                    );
+                                                },
+                                            },
+                                            t.i({ className: "ri-add-line", ariaHidden: true }),
+                                        ),
                                         t.button(
                                             {
                                                 type: "button",
