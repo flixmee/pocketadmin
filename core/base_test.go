@@ -113,6 +113,28 @@ func TestBaseAppBootstrap(t *testing.T) {
 
 	runNilChecks(nilChecksBeforeReset)
 
+	var totalCollectionGroupColumns int
+	err := app.DB().
+		NewQuery("SELECT count(*) FROM pragma_table_info('_collections') WHERE name = 'collectionGroup'").
+		Row(&totalCollectionGroupColumns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if totalCollectionGroupColumns != 1 {
+		t.Fatalf("Expected _collections.collectionGroup to exist, got %d matches", totalCollectionGroupColumns)
+	}
+
+	var totalCollectionGroupsTables int
+	err = app.DB().
+		NewQuery("SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = '_collection_groups'").
+		Row(&totalCollectionGroupsTables)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if totalCollectionGroupsTables != 1 {
+		t.Fatalf("Expected _collection_groups table to exist, got %d matches", totalCollectionGroupsTables)
+	}
+
 	// reset
 	if err := app.ResetBootstrapState(); err != nil {
 		t.Fatal(err)
@@ -131,6 +153,61 @@ func TestBaseAppBootstrap(t *testing.T) {
 	}
 
 	runNilChecks(nilChecksAfterReset)
+}
+
+func TestBaseAppRunSystemMigrationsAddsCollectionGroupColumn(t *testing.T) {
+	const testDataDir = "./pb_base_app_test_data_dir/"
+	defer os.RemoveAll(testDataDir)
+
+	app := core.NewBaseApp(core.BaseAppConfig{
+		DataDir: testDataDir,
+	})
+	defer app.ResetBootstrapState()
+
+	if err := app.Bootstrap(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := app.DB().DropColumn("_collections", "collectionGroup").Execute()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = app.DB().NewQuery("DROP TABLE IF EXISTS {{_collection_groups}}").Execute()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = app.DB().Delete("_migrations", dbx.HashExp{"file": "1762156800_collection_group.go"}).Execute()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.RunSystemMigrations(); err != nil {
+		t.Fatal(err)
+	}
+
+	var totalCollectionGroupColumns int
+	err = app.DB().
+		NewQuery("SELECT count(*) FROM pragma_table_info('_collections') WHERE name = 'collectionGroup'").
+		Row(&totalCollectionGroupColumns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if totalCollectionGroupColumns != 1 {
+		t.Fatalf("Expected rerun migrations to restore _collections.collectionGroup, got %d matches", totalCollectionGroupColumns)
+	}
+
+	var totalCollectionGroupsTables int
+	err = app.DB().
+		NewQuery("SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = '_collection_groups'").
+		Row(&totalCollectionGroupsTables)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if totalCollectionGroupsTables != 1 {
+		t.Fatalf("Expected rerun migrations to restore _collection_groups, got %d matches", totalCollectionGroupsTables)
+	}
 }
 
 func TestNewBaseAppTx(t *testing.T) {

@@ -1,4 +1,5 @@
 const PINNED_STORAGE_KEY = "pbPinnedCollections";
+const GROUPS_OPEN_STORAGE_KEY = "pbCollectionGroupsOpen";
 
 const compactThreshold = 12;
 
@@ -6,6 +7,7 @@ export function collectionsSidebar() {
     const data = store({
         search: "",
         pinned: app.utils.getLocalHistory(PINNED_STORAGE_KEY, []),
+        openGroups: app.utils.getLocalHistory(GROUPS_OPEN_STORAGE_KEY, {}),
         get filteredCollections() {
             if (!data.search.length) {
                 return app.store.collections;
@@ -14,26 +16,114 @@ export function collectionsSidebar() {
             const normalizedSearch = data.search.replaceAll(" ", "").toLowerCase();
 
             return app.store.collections.filter((c) => {
-                return (c.name + c.id + c.type).toLowerCase().includes(normalizedSearch);
+                return (c.name + c.id + c.type + (c.collectionGroup || ""))
+                    .toLowerCase()
+                    .includes(normalizedSearch);
             });
         },
         get systemCollections() {
-            return data.filteredCollections.filter((c) => c.system && !data.pinned.includes(c.id));
+            return app.utils.sortedCollectionsByType(
+                data.filteredCollections.filter(
+                    (c) => c.system && !data.pinned.includes(c.id),
+                ),
+            );
         },
-        get regularCollections() {
-            return data.filteredCollections.filter((c) => !c.system && !data.pinned.includes(c.id));
+        get regularCollectionSections() {
+            return app.utils.partitionCollectionsByGroup(
+                data.filteredCollections.filter(
+                    (c) => !c.system && !data.pinned.includes(c.id),
+                ),
+            );
         },
         get pinnedCollections() {
             if (!data.pinned.length) {
                 return [];
             }
 
-            return data.filteredCollections.filter((c) => data.pinned.includes(c.id));
+            return app.utils.sortedCollectionsByType(
+                data.filteredCollections.filter((c) => data.pinned.includes(c.id)),
+            );
+        },
+        get totalRegularCollections() {
+            return (
+                data.regularCollectionSections.ungrouped.length
+                + data.regularCollectionSections.groups.reduce(
+                    (total, group) => total + group.collections.length,
+                    0,
+                )
+            );
         },
     });
 
     function clearSearch() {
         data.search = "";
+    }
+
+    function isGroupOpen(groupName) {
+        const normalized = app.utils.normalizeCollectionGroup(groupName);
+        return data.openGroups[normalized] !== false;
+    }
+
+    function setGroupOpen(groupName, isOpen) {
+        const normalized = app.utils.normalizeCollectionGroup(groupName);
+        data.openGroups = {
+            ...data.openGroups,
+            [normalized]: !!isOpen,
+        };
+    }
+
+    async function renameGroup(groupName) {
+        app.modals.openCollectionGroupUpsert({
+            initialName: groupName,
+            title: "Edit collection group",
+            submitLabel: "Save",
+            onsubmit: async (nextName) => {
+                if (nextName === groupName) {
+                    return;
+                }
+
+                const groups = await app.pb.send(
+                    `/api/collections/meta/groups/${encodeURIComponent(groupName)}`,
+                    {
+                        method: "PATCH",
+                        body: { name: nextName },
+                    },
+                );
+
+                app.store.renameCollectionGroup(groupName, nextName);
+                app.store.collectionGroups = app.utils.sortedStrings(groups || []);
+
+                const normalizedOld = app.utils.normalizeCollectionGroup(groupName);
+                if (data.openGroups[normalizedOld] !== undefined) {
+                    const nextOpenGroups = { ...data.openGroups };
+                    nextOpenGroups[nextName] = nextOpenGroups[normalizedOld];
+                    delete nextOpenGroups[normalizedOld];
+                    data.openGroups = nextOpenGroups;
+                }
+            },
+        });
+    }
+
+    async function removeGroup(groupName) {
+        app.modals.confirm(
+            `Remove collection group "${groupName}"? Collections in this group will become ungrouped.`,
+            async () => {
+                await app.pb.send(
+                    `/api/collections/meta/groups/${encodeURIComponent(groupName)}`,
+                    {
+                        method: "DELETE",
+                    },
+                );
+                app.store.removeCollectionGroup(groupName);
+
+                const normalized = app.utils.normalizeCollectionGroup(groupName);
+                if (data.openGroups[normalized] !== undefined) {
+                    const nextOpenGroups = { ...data.openGroups };
+                    delete nextOpenGroups[normalized];
+                    data.openGroups = nextOpenGroups;
+                }
+            },
+        );
     }
 
     const watchers = [];
@@ -43,24 +133,39 @@ export function collectionsSidebar() {
             className: () => `collections-sidebar ${data.responsiveShow ? "active" : ""}`,
             onmount: (el) => {
                 // init and persist pinned changes
-                watchers.push(watch(() => {
-                    app.utils.saveLocalHistory(PINNED_STORAGE_KEY, JSON.stringify(data.pinned));
-                }));
+                watchers.push(
+                    watch(() => {
+                        app.utils.saveLocalHistory(
+                            PINNED_STORAGE_KEY,
+                            JSON.stringify(data.pinned),
+                        );
+                    }),
+                );
+                watchers.push(
+                    watch(() => {
+                        app.utils.saveLocalHistory(
+                            GROUPS_OPEN_STORAGE_KEY,
+                            JSON.stringify(data.openGroups),
+                        );
+                    }),
+                );
 
                 // scroll to the active item
-                watchers.push(watch(
-                    () => app.store.activeCollection?.id,
-                    async () => {
-                        await new Promise((r) => setTimeout(r, 0));
+                watchers.push(
+                    watch(
+                        () => app.store.activeCollection?.id,
+                        async () => {
+                            await new Promise((r) => setTimeout(r, 0));
 
-                        const activeNavItem = el?.querySelector(".nav-item.active");
-                        const details = activeNavItem?.closest("details");
-                        if (details) {
-                            details.open = true;
-                            activeNavItem?.scrollIntoView({ block: "nearest" });
-                        }
-                    },
-                ));
+                            const activeNavItem = el?.querySelector(".nav-item.active");
+                            const details = activeNavItem?.closest("details");
+                            if (details) {
+                                details.open = true;
+                                activeNavItem?.scrollIntoView({ block: "nearest" });
+                            }
+                        },
+                    ),
+                );
             },
             onunmount: () => {
                 watchers.forEach((w) => w?.unwatch());
@@ -77,7 +182,7 @@ export function collectionsSidebar() {
                         type: "text",
                         placeholder: "Search collections...",
                         value: () => data.search,
-                        oninput: (e) => data.search = e.target.value,
+                        oninput: (e) => (data.search = e.target.value),
                     }),
                 ),
                 t.div(
@@ -100,7 +205,10 @@ export function collectionsSidebar() {
                                 `btn sm circle transparent secondary link-faded ${
                                     app.store.isLoadingCollections ? "loading" : ""
                                 }`,
-                            ariaDescription: app.attrs.tooltip("Collections overview", "left"),
+                            ariaDescription: app.attrs.tooltip(
+                                "Collections overview",
+                                "left",
+                            ),
                             onclick: () => app.modals.openCollectionsOverview(),
                         },
                         t.i({ className: "ri-organization-chart", ariaHidden: true }),
@@ -131,7 +239,10 @@ export function collectionsSidebar() {
         // show the standalone loader only when there are no other collections loaded
         () => {
             if (app.store.isLoadingCollections && !data.filteredCollections.length) {
-                return t.div({ className: "sidebar-content txt-center" }, t.span({ className: "loader sm" }));
+                return t.div(
+                    { className: "sidebar-content txt-center" },
+                    t.span({ className: "loader sm" }),
+                );
             }
         },
         () => {
@@ -140,7 +251,8 @@ export function collectionsSidebar() {
                     {
                         className: () =>
                             `sidebar-content collections-list scrollable ${
-                                data.regularCollections.length + data.pinnedCollections >= compactThreshold
+                                data.totalRegularCollections + data.pinnedCollections.length
+                                        >= compactThreshold
                                     ? "compact"
                                     : ""
                             }`,
@@ -151,29 +263,80 @@ export function collectionsSidebar() {
                             className: () => `nav-group nav-group-pinned-collections`,
                             open: true,
                         },
-                        t.summary(
-                            { tabIndex: -1, onfocusout: () => false, onclick: () => false, onkeyup: () => false },
-                            "Pinned",
-                        ),
+                        t.summary(null, "Pinned"),
                         () => data.pinnedCollections.map((c) => collectionItem(c, data)),
                     ),
                     t.details(
                         {
-                            hidden: () => !data.regularCollections.length,
+                            hidden: () => !data.regularCollectionSections.ungrouped.length,
                             className: "nav-group nav-group-regular-collections",
                             open: true,
                         },
-                        t.summary(
-                            { tabIndex: -1, onfocusout: () => false, onclick: () => false, onkeyup: () => false },
-                            () => data.pinnedCollections.length ? "Others" : "Collections",
-                        ),
-                        () => data.regularCollections.map((c) => collectionItem(c, data)),
+                        t.summary(null, "Collections"),
+                        () => data.regularCollectionSections.ungrouped.map((c) => collectionItem(c, data)),
                     ),
+                    () => {
+                        return data.regularCollectionSections.groups.map((group) => {
+                            return t.details(
+                                {
+                                    className: "nav-group nav-group-regular-collections",
+                                    open: () => isGroupOpen(group.name),
+                                    ontoggle: (e) => setGroupOpen(group.name, e.target.open),
+                                },
+                                t.summary(
+                                    {
+                                        className: "inline-flex gap-5 flex-nowrap group-summary",
+                                    },
+                                    t.span({ className: "txt" }, group.name),
+                                    t.span({ className: "flex-fill" }),
+                                    t.span(
+                                        { className: "actions" },
+                                        t.button(
+                                            {
+                                                type: "button",
+                                                className: "btn xs circle transparent secondary",
+                                                ariaDescription: app.attrs.tooltip(
+                                                    "Edit group",
+                                                    "left",
+                                                ),
+                                                onclick: async (e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    await renameGroup(group.name);
+                                                },
+                                            },
+                                            t.i({ className: "ri-pencil-line", ariaHidden: true }),
+                                        ),
+                                        t.button(
+                                            {
+                                                type: "button",
+                                                className: "btn xs circle transparent secondary",
+                                                ariaDescription: app.attrs.tooltip(
+                                                    "Remove group",
+                                                    "left",
+                                                ),
+                                                onclick: async (e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    await removeGroup(group.name);
+                                                },
+                                            },
+                                            t.i({
+                                                className: "ri-delete-bin-line",
+                                                ariaHidden: true,
+                                            }),
+                                        ),
+                                    ),
+                                ),
+                                () => group.collections.map((c) => collectionItem(c, data)),
+                            );
+                        });
+                    },
                     t.details(
                         {
                             hidden: () => !data.systemCollections.length,
                             className: "nav-group nav-group-system-collections",
-                            open: () => data.search.length,
+                            open: () => !!data.search.length,
                         },
                         t.summary(null, "System"),
                         () => data.systemCollections.map((c) => collectionItem(c, data)),
@@ -189,11 +352,14 @@ export function collectionsSidebar() {
                             type: "button",
                             className: "btn outline block",
                             onclick: () => {
-                                app.modals.openCollectionUpsert({}, {
-                                    onsave: (newCollection) => {
-                                        app.store.activeCollection = newCollection.id;
+                                app.modals.openCollectionUpsert(
+                                    {},
+                                    {
+                                        onsave: (newCollection) => {
+                                            app.store.activeCollection = newCollection.id;
+                                        },
                                     },
-                                });
+                                );
                             },
                         },
                         t.i({ className: "ri-add-line", ariaHidden: true }),
@@ -215,7 +381,11 @@ function collectionItem(collection, data) {
             title: () => collection.name,
             onauxclick: (e) => {
                 e.preventDefault();
-                window.open(`#/collections?collection=${collection.name}`, "_blank", "noreferrer,noopener");
+                window.open(
+                    `#/collections?collection=${collection.name}`,
+                    "_blank",
+                    "noreferrer,noopener",
+                );
             },
             onclick: (e) => {
                 e.preventDefault();
@@ -223,7 +393,9 @@ function collectionItem(collection, data) {
             },
         },
         t.i({
-            className: () => app.collectionTypes[collection.type]?.icon || app.utils.fallbackCollectionIcon,
+            className: () =>
+                app.collectionTypes[collection.type]?.icon
+                || app.utils.fallbackCollectionIcon,
             ariaHidden: true,
         }),
         t.span({ className: "txt" }, () => collection.name),
@@ -252,7 +424,7 @@ function collectionItem(collection, data) {
                     tabIndex: -1,
                     role: "button",
                     className: "pin",
-                    title: () => pinnedIndex >= 0 ? "Unpin" : "Pin",
+                    title: () => (pinnedIndex >= 0 ? "Unpin" : "Pin"),
                     onclick: (e) => {
                         e.preventDefault();
                         e.stopPropagation();

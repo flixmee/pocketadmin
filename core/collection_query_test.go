@@ -37,7 +37,17 @@ func TestReloadCachedCollections(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	defer app.Cleanup()
 
-	err := app.ReloadCachedCollections()
+	collection, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	collection.CollectionGroup = "Content"
+	if err := app.Save(collection); err != nil {
+		t.Fatal(err)
+	}
+
+	err = app.ReloadCachedCollections()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,6 +73,9 @@ func TestReloadCachedCollections(t *testing.T) {
 		for _, cc := range cachedCollections {
 			if cc.Id == c.Id {
 				exists = true
+				if c.Name == "demo1" && cc.CollectionGroup != "Content" {
+					t.Fatalf("Expected cached collectionGroup %q, got %q", "Content", cc.CollectionGroup)
+				}
 				break
 			}
 		}
@@ -110,6 +123,81 @@ func TestFindAllCollections(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestFindAllCollectionGroups(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	collection.CollectionGroup = "Content"
+	if err := app.Save(collection); err != nil {
+		t.Fatal(err)
+	}
+
+	groups, err := app.FindAllCollectionGroups()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(groups, "Content") {
+		t.Fatalf("Expected groups to contain %q, got %v", "Content", groups)
+	}
+}
+
+func TestRenameAndDeleteCollectionGroup(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	collection.CollectionGroup = "Content"
+	if err := app.Save(collection); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.RenameCollectionGroup("Content", "Primary"); err != nil {
+		t.Fatal(err)
+	}
+
+	renamed, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.CollectionGroup != "Primary" {
+		t.Fatalf("Expected collectionGroup %q after rename, got %q", "Primary", renamed.CollectionGroup)
+	}
+
+	groups, err := app.FindAllCollectionGroups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(groups, "Primary") || slices.Contains(groups, "Content") {
+		t.Fatalf("Unexpected groups after rename: %v", groups)
+	}
+
+	if err := app.DeleteCollectionGroup("Primary"); err != nil {
+		t.Fatal(err)
+	}
+
+	cleared, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.CollectionGroup != "" {
+		t.Fatalf("Expected empty collectionGroup after delete, got %q", cleared.CollectionGroup)
 	}
 }
 

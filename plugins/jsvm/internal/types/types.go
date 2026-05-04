@@ -413,6 +413,7 @@ interface Collection extends core.Collection{
  * const collection = new Collection({
  *     type:       "base",
  *     name:       "article",
+ *     collectionGroup: "Content",
  *     listRule:   "@request.auth.id != '' || status = 'public'",
  *     viewRule:   "@request.auth.id != '' || status = 'public'",
  *     deleteRule: "@request.auth.id != ''",

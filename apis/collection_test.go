@@ -49,6 +49,7 @@ func TestCollectionsList(t *testing.T) {
 				`"perPage":30`,
 				`"totalItems":17`,
 				`"items":[{`,
+				`"collectionGroup":""`,
 				`"name":"` + core.CollectionNameSuperusers + `"`,
 				`"name":"` + core.CollectionNameAuthOrigins + `"`,
 				`"name":"` + core.CollectionNameExternalAuths + `"`,
@@ -207,6 +208,7 @@ func TestCollectionView(t *testing.T) {
 			ExpectedStatus: 200,
 			ExpectedContent: []string{
 				`"id":"wsmn24bux7wo113"`,
+				`"collectionGroup":""`,
 				`"name":"demo1"`,
 			},
 			ExpectedEvents: map[string]int{
@@ -526,13 +528,14 @@ func TestCollectionCreate(t *testing.T) {
 			Name:   "authorized as superuser + valid data",
 			Method: http.MethodPost,
 			URL:    "/api/collections",
-			Body:   strings.NewReader(`{"name":"new","type":"base","fields":[{"type":"text","id":"12345789","name":"test"}]}`),
+			Body:   strings.NewReader(`{"name":"new","type":"base","collectionGroup":"Content","fields":[{"type":"text","id":"12345789","name":"test"}]}`),
 			Headers: map[string]string{
 				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
 			},
 			ExpectedStatus: 200,
 			ExpectedContent: []string{
 				`"id":`,
+				`"collectionGroup":"Content"`,
 				`"name":"new"`,
 				`"type":"base"`,
 				`"system":false`,
@@ -1102,13 +1105,14 @@ func TestCollectionUpdate(t *testing.T) {
 			Name:   "authorized as superuser + valid data",
 			Method: http.MethodPatch,
 			URL:    "/api/collections/demo1",
-			Body:   strings.NewReader(`{"name":"new"}`),
+			Body:   strings.NewReader(`{"name":"new","collectionGroup":"Content"}`),
 			Headers: map[string]string{
 				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
 			},
 			ExpectedStatus: 200,
 			ExpectedContent: []string{
 				`"id":`,
+				`"collectionGroup":"Content"`,
 				`"name":"new"`,
 			},
 			ExpectedEvents: map[string]int{
@@ -1627,6 +1631,118 @@ func TestCollectionOAuth2Providers(t *testing.T) {
 				`"authURL":`,
 				`"tokenURL":`,
 				`"userInfoURL":`,
+			},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
+func TestCollectionGroups(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "unauthorized",
+			Method:          http.MethodGet,
+			URL:             "/api/collections/meta/groups",
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as regular user",
+			Method: http.MethodGet,
+			URL:    "/api/collections/meta/groups",
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjRxMXhsY2xtZmxva3UzMyIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoiX3BiX3VzZXJzX2F1dGhfIiwiZXhwIjoyNTI0NjA0NDYxLCJyZWZyZXNoYWJsZSI6dHJ1ZX0.ZT3F0Z3iM-xbGgSG3LEKiEzHrPHr8t8IuHLZGGNuxLo",
+			},
+			ExpectedStatus:  403,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as superuser",
+			Method: http.MethodGet,
+			URL:    "/api/collections/meta/groups",
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				collection, err := app.FindCollectionByNameOrId("demo1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				collection.CollectionGroup = "Content"
+				if err := app.Save(collection); err != nil {
+					t.Fatal(err)
+				}
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`["Content"]`,
+			},
+		},
+		{
+			Name:   "rename group",
+			Method: http.MethodPatch,
+			URL:    "/api/collections/meta/groups/Content",
+			Body:   strings.NewReader(`{"name":"Primary"}`),
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				collection, err := app.FindCollectionByNameOrId("demo1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				collection.CollectionGroup = "Content"
+				if err := app.Save(collection); err != nil {
+					t.Fatal(err)
+				}
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`["Primary"]`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				collection, err := app.FindCollectionByNameOrId("demo1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if collection.CollectionGroup != "Primary" {
+					t.Fatalf("Expected collectionGroup %q, got %q", "Primary", collection.CollectionGroup)
+				}
+			},
+		},
+		{
+			Name:   "delete group",
+			Method: http.MethodDelete,
+			URL:    "/api/collections/meta/groups/Content",
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				collection, err := app.FindCollectionByNameOrId("demo1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				collection.CollectionGroup = "Content"
+				if err := app.Save(collection); err != nil {
+					t.Fatal(err)
+				}
+			},
+			ExpectedStatus: 204,
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				collection, err := app.FindCollectionByNameOrId("demo1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if collection.CollectionGroup != "" {
+					t.Fatalf("Expected empty collectionGroup, got %q", collection.CollectionGroup)
+				}
 			},
 		},
 	}

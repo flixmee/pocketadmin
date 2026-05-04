@@ -25,6 +25,9 @@ func bindCollectionApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 	subGroup.DELETE("/{collection}/truncate", collectionTruncate)
 	subGroup.PUT("/import", collectionsImport)
 	subGroup.GET("/meta/scaffolds", collectionScaffolds)
+	subGroup.GET("/meta/groups", collectionListGroups)
+	subGroup.PATCH("/meta/groups/{name}", collectionRenameGroup)
+	subGroup.DELETE("/meta/groups/{name}", collectionDeleteGroup)
 
 	// @todo experimental
 	subGroup.GET("/meta/oauth2-providers", collectionListOAuth2Providers)
@@ -33,7 +36,7 @@ func bindCollectionApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 
 func collectionsList(e *core.RequestEvent) error {
 	fieldResolver := search.NewSimpleFieldResolver(
-		"id", "created", "updated", "name", "system", "type",
+		"id", "created", "updated", "name", "collectionGroup", "system", "type",
 	)
 
 	collections := []*core.Collection{}
@@ -212,6 +215,44 @@ func collectionScaffolds(e *core.RequestEvent) error {
 	}
 
 	return e.JSON(http.StatusOK, collections)
+}
+
+func collectionListGroups(e *core.RequestEvent) error {
+	groups, err := e.App.FindAllCollectionGroups()
+	if err != nil {
+		return e.BadRequestError("Failed to load collection groups.", err)
+	}
+
+	return e.JSON(http.StatusOK, groups)
+}
+
+func collectionRenameGroup(e *core.RequestEvent) error {
+	form := struct {
+		Name string `form:"name" json:"name"`
+	}{}
+	if err := e.BindBody(&form); err != nil {
+		return e.BadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+	}
+
+	if err := e.App.RenameCollectionGroup(e.Request.PathValue("name"), form.Name); err != nil {
+		return e.BadRequestError("Failed to rename collection group.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		groups, err := e.App.FindAllCollectionGroups()
+		if err != nil {
+			return err
+		}
+		return e.JSON(http.StatusOK, groups)
+	})
+}
+
+func collectionDeleteGroup(e *core.RequestEvent) error {
+	if err := e.App.DeleteCollectionGroup(e.Request.PathValue("name")); err != nil {
+		return e.BadRequestError("Failed to delete collection group.", err)
+	}
+
+	return e.NoContent(http.StatusNoContent)
 }
 
 type providerListItem struct {

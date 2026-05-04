@@ -1375,6 +1375,26 @@ const utils = {
     },
 
     /**
+     * Normalizes a collection group label.
+     *
+     * @param  {string} value
+     * @return {string}
+     */
+    normalizeCollectionGroup(value = "") {
+        return String(value || "").trim();
+    },
+
+    /**
+     * Returns a sorted shallow copy of the provided strings.
+     *
+     * @param  {Array<string>} values
+     * @return {Array<string>}
+     */
+    sortedStrings(values = []) {
+        return values.slice().sort((a, b) => String(a).localeCompare(String(b)));
+    },
+
+    /**
      * Groups and sorts collections array by type (auth, base, view) and name.
      *
      * @param  {Array} collections
@@ -1400,6 +1420,59 @@ const utils = {
             app.utils.sortedCollections(base),
             app.utils.sortedCollections(view),
         );
+    },
+
+    /**
+     * Partitions non-system collections into ungrouped and named group sections.
+     *
+     * @param  {Array} collections
+     * @return {{ ungrouped: Array, groups: Array<{name: string, collections: Array}> }}
+     */
+    partitionCollectionsByGroup(collections = []) {
+        const grouped = new Map();
+        const ungrouped = [];
+
+        for (const collection of collections) {
+            const groupName = app.utils.normalizeCollectionGroup(collection.collectionGroup);
+
+            if (!groupName) {
+                ungrouped.push(collection);
+                continue;
+            }
+
+            if (!grouped.has(groupName)) {
+                grouped.set(groupName, []);
+            }
+
+            grouped.get(groupName).push(collection);
+        }
+
+        const groups = Array.from(grouped.entries())
+            .sort(([groupA], [groupB]) => groupA.localeCompare(groupB))
+            .map(([name, items]) => ({
+                name: name,
+                collections: app.utils.sortedCollectionsByType(items),
+            }));
+
+        return {
+            ungrouped: app.utils.sortedCollectionsByType(ungrouped),
+            groups: groups,
+        };
+    },
+
+    /**
+     * Sorts collections by group and then by existing type/name rules.
+     *
+     * @param  {Array} collections
+     * @return {Array}
+     */
+    sortedCollectionsByGroupAndType(collections = []) {
+        const sections = app.utils.partitionCollectionsByGroup(collections);
+
+        return [
+            ...sections.ungrouped,
+            ...sections.groups.flatMap((group) => group.collections),
+        ];
     },
 
     /**

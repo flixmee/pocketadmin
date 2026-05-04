@@ -10,7 +10,7 @@ export function pageExportCollections(route) {
         collections: [],
         bulkSelected: {},
         get bulkSelectStr() {
-            return JSON.stringify(app.utils.sortedCollectionsByType(Object.values(data.bulkSelected)), null, 2);
+            return JSON.stringify(app.utils.sortedCollectionsByGroupAndType(Object.values(data.bulkSelected)), null, 2);
         },
         get totalSelected() {
             return Object.keys(data.bulkSelected).length;
@@ -39,7 +39,7 @@ export function pageExportCollections(route) {
                 delete collection.oauth2?.providers;
             }
 
-            data.collections = app.utils.sortedCollectionsByType(collections);
+            data.collections = app.utils.sortedCollectionsByGroupAndType(collections);
 
             selectAll();
 
@@ -53,7 +53,7 @@ export function pageExportCollections(route) {
     }
 
     function download() {
-        const collectionsArr = app.utils.sortedCollectionsByType(Object.values(data.bulkSelected));
+        const collectionsArr = app.utils.sortedCollectionsByGroupAndType(Object.values(data.bulkSelected));
         app.utils.downloadJSON(collectionsArr, "pb_schema");
     }
 

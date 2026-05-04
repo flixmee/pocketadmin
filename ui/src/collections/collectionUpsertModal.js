@@ -248,6 +248,18 @@ function collectionUpsertModal(rawCollection, modalSettings) {
         }
     }
 
+    function addNewCollectionGroup() {
+        app.modals.openCollectionGroupUpsert({
+            initialName: data.collection.collectionGroup || "",
+            title: "Create collection group",
+            submitLabel: "Create",
+            onsubmit: async (groupName) => {
+                app.store.addCollectionGroup(groupName);
+                data.collection.collectionGroup = groupName;
+            },
+        });
+    }
+
     modal = t.div(
         {
             pbEvent: "collectionUpsertModal",
@@ -478,6 +490,48 @@ function collectionUpsertModal(rawCollection, modalSettings) {
                                         return;
                                     }
                                     data.collection.name = e.target.value;
+                                },
+                            }),
+                        ),
+                        t.div(
+                            { className: "field" },
+                            t.label({
+                                htmlFor: uniqueId + "col_group",
+                                textContent: "Group",
+                            }),
+                            app.components.select({
+                                id: uniqueId + "col_group",
+                                name: "collectionGroup",
+                                placeholder: "- Select group -",
+                                options: () => {
+                                    const current = app.utils.normalizeCollectionGroup(data.collection.collectionGroup);
+                                    let groups = app.store.collectionGroups || [];
+                                    if (current && !groups.includes(current)) {
+                                        groups = groups.concat(current);
+                                    }
+
+                                    return app.utils.sortedStrings(groups).map((groupName) => ({
+                                        value: groupName,
+                                        label: groupName,
+                                    }));
+                                },
+                                value: () => data.collection.collectionGroup || "",
+                                onchange: (opts) => {
+                                    data.collection.collectionGroup = opts?.[0]?.value || "";
+                                },
+                                after: () => {
+                                    return [
+                                        t.hr({ className: "m-t-5 m-b-5" }),
+                                        t.button(
+                                            {
+                                                type: "button",
+                                                className: "btn sm outline",
+                                                onclick: () => addNewCollectionGroup(),
+                                            },
+                                            t.i({ className: "ri-add-line", ariaHidden: true }),
+                                            t.span({ className: "txt" }, "Add new group"),
+                                        ),
+                                    ];
                                 },
                             }),
                         ),
