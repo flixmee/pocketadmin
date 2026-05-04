@@ -171,6 +171,173 @@ func TestJSONFieldValidateValue(t *testing.T) {
 			},
 			false,
 		},
+		// --- JSON Schema validation tests ---
+		{
+			"value matching schema (object with required property)",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`{"name":"hello"}`))
+				return record
+			},
+			false,
+		},
+		{
+			"value violating schema (wrong type)",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`{"name":123}`))
+				return record
+			},
+			true,
+		},
+		{
+			"value violating schema (missing required)",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`{"other":"value"}`))
+				return record
+			},
+			true,
+		},
+		{
+			"null value bypasses schema validation",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"object","required":["name"]}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`null`))
+				return record
+			},
+			false,
+		},
+		{
+			"empty string value bypasses schema validation",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"object","required":["name"]}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(``))
+				return record
+			},
+			false,
+		},
+		{
+			"empty object bypasses schema validation",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`{}`))
+				return record
+			},
+			false,
+		},
+		{
+			"schema with number constraints (valid)",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"number","minimum":0,"maximum":100}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`50`))
+				return record
+			},
+			false,
+		},
+		{
+			"schema with number constraints (invalid - too high)",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"number","minimum":0,"maximum":100}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`150`))
+				return record
+			},
+			true,
+		},
+		{
+			"schema with string pattern (valid)",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"string","pattern":"^[a-z]+$"}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`"hello"`))
+				return record
+			},
+			false,
+		},
+		{
+			"schema with string pattern (invalid)",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"string","pattern":"^[a-z]+$"}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`"HELLO123"`))
+				return record
+			},
+			true,
+		},
+		{
+			"schema with array items type (valid)",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"array","items":{"type":"string"}}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`["a","b","c"]`))
+				return record
+			},
+			false,
+		},
+		{
+			"schema with array items type (invalid)",
+			&core.JSONField{
+				Name:       "test",
+				JsonSchema: `{"type":"array","items":{"type":"string"}}`,
+			},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`["a",2,"c"]`))
+				return record
+			},
+			true,
+		},
+		{
+			"no schema set (value passes without schema validation)",
+			&core.JSONField{Name: "test"},
+			func() *core.Record {
+				record := core.NewRecord(collection)
+				record.SetRaw("test", types.JSONRaw(`{"anything":"goes"}`))
+				return record
+			},
+			false,
+		},
 	}
 
 	for _, s := range scenarios {
@@ -242,6 +409,62 @@ func TestJSONFieldValidateSettings(t *testing.T) {
 				}
 			},
 			[]string{"maxSize"},
+		},
+		// --- JSON Schema settings validation tests ---
+		{
+			"valid JSON Schema",
+			func() *core.JSONField {
+				return &core.JSONField{
+					Id:         "test",
+					Name:       "test",
+					JsonSchema: `{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}`,
+				}
+			},
+			[]string{},
+		},
+		{
+			"empty JSON Schema (allowed)",
+			func() *core.JSONField {
+				return &core.JSONField{
+					Id:         "test",
+					Name:       "test",
+					JsonSchema: "",
+				}
+			},
+			[]string{},
+		},
+		{
+			"invalid JSON Schema (not valid JSON)",
+			func() *core.JSONField {
+				return &core.JSONField{
+					Id:         "test",
+					Name:       "test",
+					JsonSchema: `{"type":`,
+				}
+			},
+			[]string{"jsonSchema"},
+		},
+		{
+			"invalid JSON Schema (invalid type keyword)",
+			func() *core.JSONField {
+				return &core.JSONField{
+					Id:         "test",
+					Name:       "test",
+					JsonSchema: `{"type":"notavalidtype"}`,
+				}
+			},
+			[]string{"jsonSchema"},
+		},
+		{
+			"JSON Schema exceeding 50KB size limit",
+			func() *core.JSONField {
+				return &core.JSONField{
+					Id:         "test",
+					Name:       "test",
+					JsonSchema: `{"type":"string","description":"` + strings.Repeat("a", 51*1024) + `"}`,
+				}
+			},
+			[]string{"jsonSchema"},
 		},
 	}
 

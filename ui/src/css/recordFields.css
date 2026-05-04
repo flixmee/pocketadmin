@@ -219,6 +219,109 @@
     }
 }
 
+.json-schema-section {
+    .json-schema-banner {
+        position: relative;
+        font-size: var(--smFontSize);
+        padding-right: 30px;
+        .close {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            border: 0;
+            background: none;
+            cursor: pointer;
+            color: inherit;
+            opacity: 0.6;
+            padding: 2px;
+            &:hover {
+                opacity: 1;
+            }
+        }
+    }
+}
+
+.json-schema-modal {
+    width: 600px;
+    .modal-content {
+        min-height: 200px;
+    }
+}
+
+.json-schema-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 var(--baseSpacing);
+    border-bottom: 1px solid var(--surfaceAlt4Color);
+    .tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 8px 15px;
+        border: 0;
+        background: none;
+        cursor: pointer;
+        color: var(--surfaceTxtHintColor);
+        border-bottom: 2px solid transparent;
+        transition:
+            color var(--animationSpeed),
+            border-color var(--animationSpeed);
+        &:hover {
+            color: var(--surfaceTxtColor);
+        }
+        &.active {
+            color: var(--surfaceTxtColor);
+            border-bottom-color: var(--primaryColor);
+        }
+    }
+}
+
+.json-schema-visual {
+    animation: fadeIn var(--animationSpeed);
+}
+
+.json-schema-properties {
+    margin-top: var(--smSpacing);
+}
+
+.json-schema-property-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.json-schema-property-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border-radius: var(--borderRadius);
+    background: var(--surfaceAlt1Color);
+    > .field {
+        margin-bottom: 0;
+        &:nth-child(1) {
+            flex: 2;
+        }
+        &:nth-child(2) {
+            flex: 1;
+        }
+        &:nth-child(3) {
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+    }
+    > .btn {
+        flex-shrink: 0;
+    }
+}
+
+.json-schema-raw {
+    animation: fadeIn var(--animationSpeed);
+    .input.code-editor {
+        min-height: 200px;
+    }
+}
+
 .field-type-geoPoint {
     &.record-field-view {
         white-space: nowrap;

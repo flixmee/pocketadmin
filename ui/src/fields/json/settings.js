@@ -1,3 +1,5 @@
+import { openSchemaEditorModal } from "./schemaEditorModal";
+
 // {
 //     originalCollection: undefined,
 //     collection: undefined,
@@ -10,6 +12,7 @@ export function settings(data) {
 
     const local = store({
         showInfo: false,
+        showSchemaBanner: !!data.field.jsonSchema,
     });
 
     return app.components.fieldSettings(data, {
@@ -38,6 +41,90 @@ export function settings(data) {
                                 data.field.maxSize = parseInt(e.target.value, 10);
                             },
                         }),
+                    ),
+                ),
+                // --- JSON Schema toggle + config ---
+                t.div(
+                    { className: "col-sm-12" },
+                    t.div(
+                        { className: "json-schema-section" },
+                        t.div(
+                            { className: "flex" },
+                            t.div(
+                                { className: "field m-r-auto" },
+                                t.input({
+                                    type: "checkbox",
+                                    id: uniqueId + ".schemaEnabled",
+                                    className: "sm",
+                                    checked: () => !!data.field.jsonSchema,
+                                    onchange: (e) => {
+                                        if (!e.target.checked) {
+                                            data.field.jsonSchema = "";
+                                            local.showSchemaBanner = false;
+                                        } else {
+                                            // Initialize with a default schema.
+                                            data.field.jsonSchema = "{\"type\":\"object\"}";
+                                            local.showSchemaBanner = true;
+                                        }
+                                    },
+                                }),
+                                t.label(
+                                    { htmlFor: uniqueId + ".schemaEnabled" },
+                                    t.span({ className: "txt" }, "Schema validation"),
+                                    t.i({
+                                        className: "ri-information-line link-hint",
+                                        ariaDescription: app.attrs.tooltip(
+                                            "Validate JSON values against a JSON Schema (draft-07)",
+                                        ),
+                                    }),
+                                ),
+                            ),
+                            () => {
+                                if (!data.field.jsonSchema) return null;
+
+                                return t.button(
+                                    {
+                                        type: "button",
+                                        className: "btn sm secondary",
+                                        onclick: () => {
+                                            openSchemaEditorModal({
+                                                schema: data.field.jsonSchema || "",
+                                                onSave: (schemaStr) => {
+                                                    data.field.jsonSchema = schemaStr;
+                                                    if (!schemaStr) {
+                                                        local.showSchemaBanner = false;
+                                                    }
+                                                },
+                                            });
+                                        },
+                                    },
+                                    t.i({ className: "ri-settings-3-line", ariaHidden: true }),
+                                    t.span({ className: "txt" }, " Configure"),
+                                );
+                            },
+                        ),
+                        // Info banner
+                        () => {
+                            if (!local.showSchemaBanner || !data.field.jsonSchema) return null;
+
+                            return t.div(
+                                { className: "alert info m-t-10 json-schema-banner" },
+                                t.div(
+                                    { className: "content" },
+                                    t.i({ className: "ri-information-line" }),
+                                    " Existing records are not retroactively validated. They will be validated on next save.",
+                                ),
+                                t.button(
+                                    {
+                                        type: "button",
+                                        className: "close",
+                                        ariaLabel: "Dismiss",
+                                        onclick: () => (local.showSchemaBanner = false),
+                                    },
+                                    t.i({ className: "ri-close-line" }),
+                                ),
+                            );
+                        },
                     ),
                 ),
                 t.div(

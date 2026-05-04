@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"github.com/go-ozzo/ozzo-validation/v4/is"
 	"github.com/pocketbase/pocketbase/core/validators"
 	"github.com/pocketbase/pocketbase/tools/types"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func init() {
@@ -63,6 +66,10 @@ type JSONField struct {
 	// Required will require the field value to be non-empty JSON value
 	// (aka. not "null", `""`, "[]", "{}").
 	Required bool `form:"required" json:"required"`
+
+	// JsonSchema is an optional JSON Schema (draft-07) definition string.
+	// When set, non-null and non-empty record values are validated against it.
+	JsonSchema string `form:"jsonSchema" json:"jsonSchema"`
 }
 
 // Type implements [Field.Type] interface method.
@@ -177,17 +184,96 @@ func (f *JSONField) ValidateValue(ctx context.Context, app App, record *Record) 
 		return validation.ErrRequired
 	}
 
+	// JSON Schema validation (skipped for null/empty values).
+	if f.JsonSchema != "" && !slices.Contains(emptyJSONValues, rawStr) {
+		collectionId := ""
+		if record.Collection() != nil {
+			collectionId = record.Collection().Id
+		}
+
+		compiledSchema, err := GetOrCompileJSONSchema(collectionId, f.Name, f.JsonSchema)
+		if err != nil {
+			return validation.NewError(
+				"validation_json_schema_compile",
+				"Failed to compile JSON Schema: {{.details}}",
+			).SetParams(map[string]any{"details": err.Error()})
+		}
+
+		var value any
+		if err := json.Unmarshal([]byte(rawStr), &value); err != nil {
+			return validation.NewError("validation_invalid_json", "Must be a valid json value")
+		}
+
+		if err := compiledSchema.Validate(value); err != nil {
+			if valErr, ok := err.(*jsonschema.ValidationError); ok {
+				instancePath, msg := ExtractFirstValidationError(valErr)
+				errorMsg := msg
+				if instancePath != "" {
+					errorMsg = fmt.Sprintf("%s: %s", instancePath, msg)
+				}
+				return validation.NewError(
+					"validation_json_schema",
+					"JSON schema validation failed: {{.details}}",
+				).SetParams(map[string]any{"details": errorMsg})
+			}
+			return validation.NewError(
+				"validation_json_schema",
+				"JSON schema validation failed: {{.details}}",
+			).SetParams(map[string]any{"details": err.Error()})
+		}
+	}
+
 	return nil
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
 func (f *JSONField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
+	// Invalidate cached schema on every settings save so recompilation picks up changes.
+	if collection != nil {
+		InvalidateJSONSchemaCache(collection.Id, f.Name)
+	}
+
 	return validation.ValidateStruct(f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(&f.Help, validation.By(DefaultFieldHelpValidationRule)),
 		validation.Field(&f.MaxSize, validation.Min(0), validation.Max(maxSafeJSONInt)),
+		validation.Field(&f.JsonSchema, validation.By(f.validateJSONSchema)),
 	)
+}
+
+// validateJSONSchema validates the JsonSchema field option value.
+func (f *JSONField) validateJSONSchema(value any) error {
+	v, _ := value.(string)
+	if v == "" {
+		return nil
+	}
+
+	// Check size limit.
+	if len(v) > MaxJSONSchemaSize {
+		return validation.NewError(
+			"validation_json_schema_too_large",
+			"The JSON Schema exceeds the maximum allowed size of {{.maxSize}} bytes",
+		).SetParams(map[string]any{"maxSize": MaxJSONSchemaSize})
+	}
+
+	// Check nesting depth.
+	if err := CheckJSONSchemaDepth(v, MaxJSONSchemaDepth); err != nil {
+		return validation.NewError(
+			"validation_json_schema_too_deep",
+			"The JSON Schema nesting depth exceeds the maximum of {{.maxDepth}} levels",
+		).SetParams(map[string]any{"maxDepth": MaxJSONSchemaDepth})
+	}
+
+	// Try to compile the schema to verify structural validity.
+	if _, err := CompileJSONSchema(v); err != nil {
+		return validation.NewError(
+			"validation_json_schema_invalid",
+			"Invalid JSON Schema: {{.details}}",
+		).SetParams(map[string]any{"details": err.Error()})
+	}
+
+	return nil
 }
 
 // CalculateMaxBodySize implements the [MaxBodySizeCalculator] interface.
