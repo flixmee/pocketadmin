@@ -579,6 +579,11 @@ type App interface {
 
 	// ---------------------------------------------------------------
 
+	// RunAutomationManually runs the specified automation using the manual trigger type.
+	RunAutomationManually(automationID string) error
+
+	// ---------------------------------------------------------------
+
 	// RecordQuery returns a new Record select query from a collection model, id or name.
 	//
 	// In case a collection id or name is provided and that collection doesn't

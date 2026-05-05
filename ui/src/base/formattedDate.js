@@ -27,7 +27,7 @@ window.app.components.formattedDate = function(propsArg = {}) {
                 return null;
             }),
             "html-class": "formatted-date",
-            className: () => `formatted-date ${props.short ? "short" : "full"}`,
+            className: () => `formatted-date txt-right ${props.short ? "short" : "full"}`,
             onunmount: () => {
                 watchers.forEach((w) => w?.unwatch());
             },

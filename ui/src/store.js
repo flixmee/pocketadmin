@@ -107,6 +107,11 @@ window.app.store = store({
                 icon: "ri-time-line",
                 label: "Crons",
             },
+            {
+                href: "#/settings/automations",
+                icon: "ri-git-branch-line",
+                label: "Automations",
+            },
         ],
         Sync: [
             {

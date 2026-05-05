@@ -1,0 +1,335 @@
+import { openAutomationRunPreviewModal } from "./automationRunPreviewModal";
+
+const defaultRunsPageSize = 20;
+
+export function openAutomationRunsModal(automation, settings = {
+    onbeforeopen: null,
+    onafteropen: null,
+    onbeforeclose: null,
+    onafterclose: null,
+}) {
+    const modal = automationRunsModal(automation, settings);
+    if (!modal) {
+        return;
+    }
+
+    document.body.appendChild(modal);
+    app.modals.open(modal);
+}
+
+function automationRunsModal(automation, settings) {
+    if (!automation?.id) {
+        app.toasts.error("Failed to load automation runs.");
+        return null;
+    }
+
+    let modal;
+
+    const data = store({
+        isLoading: false,
+        isLoadingMore: false,
+        isRefreshing: false,
+        hasLoaded: false,
+        runs: [],
+        offset: 0,
+        hasMore: false,
+    });
+
+    async function loadRuns(reset = false) {
+        if (data.isLoading || data.isLoadingMore) {
+            return;
+        }
+
+        const offset = reset ? 0 : data.offset;
+        if (!reset && !data.hasMore && data.hasLoaded) {
+            return;
+        }
+
+        if (reset) {
+            data.isLoading = true;
+            data.isRefreshing = data.hasLoaded;
+        } else {
+            data.isLoadingMore = true;
+        }
+
+        try {
+            const suffix = new URLSearchParams({
+                limit: defaultRunsPageSize,
+                offset: offset,
+            }).toString();
+
+            const runs = await app.pb.send(`/api/automations/${automation.id}/runs?${suffix}`, {
+                requestKey: `automationRuns_${automation.id}_${offset}`,
+            });
+
+            data.runs = reset ? runs : data.runs.concat(runs);
+            data.offset = data.runs.length;
+            data.hasMore = runs.length === defaultRunsPageSize;
+            data.hasLoaded = true;
+        } catch (err) {
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+            }
+        }
+
+        data.isLoading = false;
+        data.isLoadingMore = false;
+        data.isRefreshing = false;
+    }
+
+    modal = t.div(
+        {
+            pbEvent: "automationRunsModal",
+            className: "modal popup lg automation-runs-modal",
+            onbeforeopen: (el) => {
+                loadRuns(true);
+                return settings.onbeforeopen?.(el);
+            },
+            onafteropen: (el) => settings.onafteropen?.(el),
+            onbeforeclose: (el) => settings.onbeforeclose?.(el),
+            onafterclose: (el) => {
+                settings.onafterclose?.(el);
+                el?.remove();
+            },
+        },
+        t.header(
+            { className: "modal-header" },
+            t.h5(
+                null,
+                t.span({ className: "txt-bold" }, automation.name || "Automation"),
+                " runs",
+            ),
+            t.button(
+                {
+                    type: "button",
+                    className: () => `btn sm circle transparent m-l-auto ${data.isRefreshing ? "loading" : ""}`,
+                    disabled: () => data.isLoading || data.isLoadingMore,
+                    ariaLabel: app.attrs.tooltip("Refresh"),
+                    onclick: () => loadRuns(true),
+                },
+                t.i({ className: "ri-refresh-line", ariaHidden: true }),
+            ),
+        ),
+        t.div(
+            { className: "modal-content" },
+            t.div(
+                {
+                    hidden: () => !data.isLoading || data.hasLoaded,
+                    className: "block txt-center",
+                },
+                t.span({ className: "loader" }),
+            ),
+            t.div(
+                {
+                    hidden: () => data.isLoading || !data.hasLoaded || data.runs.length > 0,
+                    className: "content block txt-hint",
+                },
+                "No runs recorded yet.",
+            ),
+            t.div(
+                {
+                    hidden: () => !data.hasLoaded || data.runs.length === 0,
+                    className: "list",
+                },
+                () =>
+                    data.runs.map((run, index) => {
+                        return t.div(
+                            {
+                                rid: `${run.id}_${index}`,
+                                className: "list-item",
+                            },
+                            t.i({
+                                className: () => `ri-timer-flash-line ${runStatusIconClass(run.status)}`,
+                                ariaHidden: true,
+                            }),
+                            t.div(
+                                { className: "content block" },
+                                t.div(
+                                    { className: "flex gap-5 flex-wrap" },
+                                    t.span({ className: "txt-bold txt-code" }, () => run.id),
+                                    t.span({ className: () => `label ${runStatusClass(run.status)}` }, () =>
+                                        formatRunStatus(run.status)),
+                                    t.span({ className: "label" }, () =>
+                                        formatTriggerType(run.triggerType)),
+                                    () => {
+                                        if (!hasStepResults(run)) {
+                                            return null;
+                                        }
+
+                                        return t.span(
+                                            { className: "label info" },
+                                            `${run.stepResults.length} step(s)`,
+                                        );
+                                    },
+                                ),
+                                t.div(
+                                    { className: "txt-sm txt-hint m-t-5" },
+                                    () => describeRunTiming(run),
+                                ),
+                                () => {
+                                    const summary = describeRunSummary(run);
+                                    if (!summary) {
+                                        return null;
+                                    }
+
+                                    return t.div(
+                                        {
+                                            className: () =>
+                                                `txt-sm m-t-5 ${run.status === "failed" ? "txt-danger" : "txt-hint"}`,
+                                        },
+                                        summary,
+                                    );
+                                },
+                            ),
+                            t.nav(
+                                { className: "actions" },
+                                t.button(
+                                    {
+                                        type: "button",
+                                        className: "btn sm circle secondary transparent",
+                                        ariaLabel: app.attrs.tooltip("View run details"),
+                                        onclick: () => openAutomationRunPreviewModal(run),
+                                    },
+                                    t.i({ className: "ri-eye-line", ariaHidden: true }),
+                                ),
+                            ),
+                        );
+                    }),
+            ),
+        ),
+        t.footer(
+            { className: "modal-footer" },
+            t.button(
+                {
+                    type: "button",
+                    className: "btn transparent m-r-auto",
+                    onclick: () => app.modals.close(modal),
+                },
+                t.span({ className: "txt" }, "Close"),
+            ),
+            t.button(
+                {
+                    type: "button",
+                    className: () => `btn secondary ${data.isLoadingMore ? "loading" : ""}`,
+                    hidden: () => !data.hasMore,
+                    disabled: () => data.isLoading || data.isLoadingMore,
+                    onclick: () => loadRuns(false),
+                },
+                t.span({ className: "txt" }, "Load more"),
+            ),
+        ),
+    );
+
+    return modal;
+}
+
+function formatTriggerType(triggerType) {
+    switch (triggerType) {
+        case "manual":
+            return "Manual";
+        case "schedule.cron":
+            return "Scheduled cron";
+        case "record.create":
+            return "Record create";
+        case "record.update":
+            return "Record update";
+        case "record.delete":
+            return "Record delete";
+        default:
+            return triggerType || "Unknown trigger";
+    }
+}
+
+function formatRunStatus(status) {
+    switch (status) {
+        case "queued":
+            return "Queued";
+        case "running":
+            return "Running";
+        case "success":
+            return "Succeeded";
+        case "failed":
+            return "Failed";
+        default:
+            return status || "Unknown";
+    }
+}
+
+function runStatusClass(status) {
+    if (status === "success") {
+        return "success";
+    }
+    if (status === "failed") {
+        return "danger";
+    }
+    if (status === "queued" || status === "running") {
+        return "warning";
+    }
+
+    return "";
+}
+
+function runStatusIconClass(status) {
+    if (status === "success") {
+        return "txt-success";
+    }
+    if (status === "failed") {
+        return "txt-danger";
+    }
+    if (status === "queued" || status === "running") {
+        return "txt-warning";
+    }
+
+    return "txt-hint";
+}
+
+function describeRunTiming(run) {
+    if (!run?.started && !run?.finished) {
+        return "No timing data";
+    }
+
+    const started = run?.started ? app.utils.toLocalDatetime(run.started) : "N/A";
+    const finished = run?.finished ? app.utils.toLocalDatetime(run.finished) : "N/A";
+
+    if (run?.started && run?.finished) {
+        return `${started} -> ${finished}`;
+    }
+
+    return `Started ${started} • Finished ${finished}`;
+}
+
+function describeRunSummary(run) {
+    if (run?.error) {
+        const prefix = hasErrorStepIndex(run) ? `Step ${run.errorStepIndex + 1}: ` : "";
+        return prefix + app.utils.truncate(run.error, 240);
+    }
+
+    if (hasStepResults(run)) {
+        const stoppedCount = run.stepResults.filter((result) => result?.status === "stopped").length;
+        if (stoppedCount > 0) {
+            return `${stoppedCount} step(s) stopped the workflow early.`;
+        }
+
+        const latest = run.stepResults[run.stepResults.length - 1];
+        if (typeof latest?.durationMs === "number") {
+            return `Last step finished in ${latest.durationMs}ms.`;
+        }
+    }
+
+    if (run?.input && typeof run.input === "object") {
+        const keys = Object.keys(run.input);
+        if (keys.length > 0) {
+            return `Trigger payload keys: ${keys.join(", ")}.`;
+        }
+    }
+
+    return "";
+}
+
+function hasStepResults(run) {
+    return Array.isArray(run?.stepResults) && run.stepResults.length > 0;
+}
+
+function hasErrorStepIndex(run) {
+    return typeof run?.errorStepIndex === "number" && run.errorStepIndex >= 0;
+}
