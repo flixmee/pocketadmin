@@ -12,25 +12,9 @@
 }
 
 .app-header {
-  --headerItemsGap: var(--inputPadding);
+    --headerItemsGap: var(--inputPadding);
 
-  display: flex;
-  align-items: center;
-  padding: 2px 10px;
-  width: 100%;
-  flex-shrink: 0;
-  min-height: 38px;
-  gap: var(--headerItemsGap);
-  font-size: var(--smFontSize);
-  line-height: var(--smLineHeight);
-  /* for when the page is opened in "app" mode */
-  @media (display-mode: minimal-ui) or (display-mode: standalone) {
-    border-top: 1px solid var(--accentAlt1Color);
-    border-bottom: 1px solid transparent;
-  }
-  .logo {
-    display: inline-flex;
-    vertical-align: top;
+    display: flex;
     align-items: center;
     padding: 2px 10px;
     width: 100%;
@@ -63,20 +47,7 @@
         gap: 7px;
         padding-left: 5px;
         padding-right: 5px;
-    justify-content: center;
-    gap: 5px;
-    text-decoration: none;
-    border-radius: var(--borderRadius);
-    img {
-      vertical-align: top;
-      max-height: 26px;
     }
-  }
-  @media (max-width: 400px) {
-    gap: 7px;
-    padding-left: 5px;
-    padding-right: 5px;
-  }
 }
 
 .app-main-nav {
