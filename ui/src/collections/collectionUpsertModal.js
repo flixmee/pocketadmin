@@ -1,4 +1,5 @@
 import { toDeleteProp } from "@/base/fieldSettings";
+import { cloneCollectionWithJsonSchemaState } from "@/fields/json/schemaState";
 import { collectionAuthOptionsTab } from "./collectionAuthOptionsTab";
 import { collectionFieldsTab } from "./collectionFieldsTab";
 import { collectionRulesTab } from "./collectionRulesTab";
@@ -90,7 +91,7 @@ function collectionUpsertModal(rawCollection, modalSettings) {
         },
         get collectionHash() {
             Object.keys(data.collection).length;
-            return JSON.stringify(data.collection);
+            return JSON.stringify(cloneCollectionWithJsonSchemaState(data.collection));
         },
         get originalCollectionHash() {
             return JSON.stringify(data.originalCollection);
@@ -141,7 +142,7 @@ function collectionUpsertModal(rawCollection, modalSettings) {
 
         app.modals.openCollectionChangesConfirmation(
             data.originalCollection,
-            data.collection,
+            cloneCollectionWithJsonSchemaState(data.collection),
             () => save(close),
             () => {
                 data.isSaving = false;
@@ -150,7 +151,7 @@ function collectionUpsertModal(rawCollection, modalSettings) {
     }
 
     function exportPayload() {
-        const payload = JSON.parse(JSON.stringify(data.collection));
+        const payload = cloneCollectionWithJsonSchemaState(data.collection);
         payload.fields = payload.fields || [];
 
         // remove fields marked for deletion

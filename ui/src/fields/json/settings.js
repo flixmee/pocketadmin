@@ -1,4 +1,5 @@
 import { openSchemaEditorModal } from "./schemaEditorModal";
+import { defaultJsonSchema, getJsonSchemaState, setJsonSchemaState } from "./schemaState";
 
 // {
 //     originalCollection: undefined,
@@ -9,10 +10,13 @@ import { openSchemaEditorModal } from "./schemaEditorModal";
 // }
 export function settings(data) {
     const uniqueId = "f_" + app.utils.randomString();
+    const initialSchemaState = getJsonSchemaState(data.field);
 
     const local = store({
         showInfo: false,
-        showSchemaBanner: !!data.field.jsonSchema,
+        schemaEnabled: initialSchemaState.enabled,
+        schemaValue: initialSchemaState.value,
+        showSchemaBanner: initialSchemaState.showBanner,
     });
 
     return app.components.fieldSettings(data, {
@@ -56,16 +60,23 @@ export function settings(data) {
                                     type: "checkbox",
                                     id: uniqueId + ".schemaEnabled",
                                     className: "sm",
-                                    checked: () => !!data.field.jsonSchema,
+                                    checked: () => local.schemaEnabled,
                                     onchange: (e) => {
-                                        if (!e.target.checked) {
-                                            data.field.jsonSchema = "";
+                                        local.schemaEnabled = e.target.checked;
+
+                                        if (!local.schemaEnabled) {
+                                            local.schemaValue = "";
                                             local.showSchemaBanner = false;
                                         } else {
-                                            // Initialize with a default schema.
-                                            data.field.jsonSchema = "{\"type\":\"object\"}";
+                                            local.schemaValue = local.schemaValue || defaultJsonSchema;
                                             local.showSchemaBanner = true;
                                         }
+
+                                        setJsonSchemaState(data.field, {
+                                            enabled: local.schemaEnabled,
+                                            value: local.schemaValue,
+                                            showBanner: local.showSchemaBanner,
+                                        });
                                     },
                                 }),
                                 t.label(
@@ -79,52 +90,61 @@ export function settings(data) {
                                     }),
                                 ),
                             ),
-                            () => {
-                                if (!data.field.jsonSchema) return null;
-
-                                return t.button(
-                                    {
-                                        type: "button",
-                                        className: "btn sm secondary",
-                                        onclick: () => {
-                                            openSchemaEditorModal({
-                                                schema: data.field.jsonSchema || "",
-                                                onSave: (schemaStr) => {
-                                                    data.field.jsonSchema = schemaStr;
-                                                    if (!schemaStr) {
-                                                        local.showSchemaBanner = false;
-                                                    }
-                                                },
-                                            });
-                                        },
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "btn sm secondary",
+                                    hidden: () => !local.schemaEnabled,
+                                    onclick: () => {
+                                        openSchemaEditorModal({
+                                            schema: local.schemaValue || "",
+                                            onSave: (schemaStr) => {
+                                                local.schemaValue = schemaStr;
+                                                local.schemaEnabled = !!schemaStr;
+                                                if (!schemaStr) {
+                                                    local.showSchemaBanner = false;
+                                                }
+                                                setJsonSchemaState(data.field, {
+                                                    enabled: local.schemaEnabled,
+                                                    value: local.schemaValue,
+                                                    showBanner: local.showSchemaBanner,
+                                                });
+                                            },
+                                        });
                                     },
-                                    t.i({ className: "ri-settings-3-line", ariaHidden: true }),
-                                    t.span({ className: "txt" }, " Configure"),
-                                );
-                            },
+                                },
+                                t.i({ className: "ri-settings-3-line", ariaHidden: true }),
+                                t.span({ className: "txt" }, " Configure"),
+                            ),
                         ),
                         // Info banner
-                        () => {
-                            if (!local.showSchemaBanner || !data.field.jsonSchema) return null;
-
-                            return t.div(
-                                { className: "alert info m-t-10 json-schema-banner" },
-                                t.div(
-                                    { className: "content" },
-                                    t.i({ className: "ri-information-line" }),
-                                    " Existing records are not retroactively validated. They will be validated on next save.",
-                                ),
-                                t.button(
-                                    {
-                                        type: "button",
-                                        className: "close",
-                                        ariaLabel: "Dismiss",
-                                        onclick: () => (local.showSchemaBanner = false),
+                        t.div(
+                            {
+                                className: "alert info m-t-10 json-schema-banner",
+                                hidden: () => !local.schemaEnabled || !local.showSchemaBanner,
+                            },
+                            t.div(
+                                { className: "content" },
+                                t.i({ className: "ri-information-line" }),
+                                " Existing records are not retroactively validated. They will be validated on next save.",
+                            ),
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "close",
+                                    ariaLabel: "Dismiss",
+                                    onclick: () => {
+                                        local.showSchemaBanner = false;
+                                        setJsonSchemaState(data.field, {
+                                            enabled: local.schemaEnabled,
+                                            value: local.schemaValue,
+                                            showBanner: local.showSchemaBanner,
+                                        });
                                     },
-                                    t.i({ className: "ri-close-line" }),
-                                ),
-                            );
-                        },
+                                },
+                                t.i({ className: "ri-close-line" }),
+                            ),
+                        ),
                     ),
                 ),
                 t.div(
@@ -151,7 +171,7 @@ export function settings(data) {
                         },
                         t.span({ className: "txt" }, "String value normalizations"),
                         t.i({
-                            className: () => (local.showInfo ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"),
+                            className: () => local.showInfo ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line",
                             ariaHidden: true,
                         }),
                     ),
@@ -170,10 +190,26 @@ export function settings(data) {
                                 " field is a plain string:",
                                 t.ul(
                                     null,
-                                    t.li(null, `"true" is converted to the json `, t.code(null, "true")),
-                                    t.li(null, `"false" is converted to the json `, t.code(null, "false")),
-                                    t.li(null, `"null" is converted to the json `, t.code(null, "null")),
-                                    t.li(null, `"[1,2,3]" is converted to the json `, t.code(null, "[1,2,3]")),
+                                    t.li(
+                                        null,
+                                        `"true" is converted to the json `,
+                                        t.code(null, "true"),
+                                    ),
+                                    t.li(
+                                        null,
+                                        `"false" is converted to the json `,
+                                        t.code(null, "false"),
+                                    ),
+                                    t.li(
+                                        null,
+                                        `"null" is converted to the json `,
+                                        t.code(null, "null"),
+                                    ),
+                                    t.li(
+                                        null,
+                                        `"[1,2,3]" is converted to the json `,
+                                        t.code(null, "[1,2,3]"),
+                                    ),
                                     t.li(
                                         null,
                                         `'{"a":1,"b":2}' is converted to the json `,
@@ -184,7 +220,10 @@ export function settings(data) {
                                         null,
                                         `double quoted strings are left as they are (aka. without normalizations)`,
                                     ),
-                                    t.li(null, `any other string (empty string too) is double quoted`),
+                                    t.li(
+                                        null,
+                                        `any other string (empty string too) is double quoted`,
+                                    ),
                                 ),
                                 "Alternatively, if you want to avoid the string value normalizations, you can wrap your data inside an object, eg. ",
                                 t.code(null, "{\"data\": anything}"),
@@ -210,7 +249,9 @@ export function settings(data) {
                     t.span({ className: "txt" }, "Required"),
                     t.i({
                         className: "ri-information-line link-hint",
-                        ariaDescription: app.attrs.tooltip("Requires the field value NOT to be null, '', [], {}"),
+                        ariaDescription: app.attrs.tooltip(
+                            "Requires the field value NOT to be null, '', [], {}",
+                        ),
                     }),
                 ),
             ),
