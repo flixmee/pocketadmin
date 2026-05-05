@@ -38,6 +38,10 @@ PocketAdmin is a Go module for PocketBase. The repository contains the core libr
 - Standard verification is `go test ./...`.
 - When touching the frontend, review `ui/package.json` and `ui/vite.config.js` for build/runtime details.
 - **When updating the UI**, refer to `UI_DOCS.md` for field type architecture, component patterns, utilities, CSS conventions, and slug field examples.
+- Never introduce native HTML `<select>` elements in the admin UI. Use the shared dropdown/select component (`app.components.select`) instead.
+- In the admin UI, avoid storing ephemeral view state on reactive `field`/`collection` objects if the value is only needed for presentation. Prefer local component state or an out-of-band store and materialize derived values only for change detection / export payloads.
+- In reactive list editors, avoid cloning and reassigning the whole array on each keystroke for row-local edits. Prefer per-row stores and reserve array replacement for structural changes such as add/remove/reorder.
+- JSON schema field UI currently lives in `ui/src/fields/json/settings.js`, `ui/src/fields/json/schemaEditorModal.js`, and `ui/src/fields/json/schemaState.js`; collection save/change detection for schema state is normalized in `ui/src/collections/collectionUpsertModal.js`.
 
 ## Continuity Ledger (compaction-safe)
 

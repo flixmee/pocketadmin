@@ -9,6 +9,20 @@
 
 const SUPPORTED_TYPES = ["object", "array", "string", "number", "integer", "boolean"];
 const PROPERTY_TYPES = ["string", "number", "integer", "boolean", "object", "array"];
+const SUPPORTED_TYPE_OPTIONS = buildTypeOptions(SUPPORTED_TYPES);
+const PROPERTY_TYPE_OPTIONS = buildTypeOptions(PROPERTY_TYPES);
+
+function buildTypeOptions(types) {
+    return types.map((type) => ({ value: type, label: type }));
+}
+
+function createPropertyState(prop = {}) {
+    return store({
+        name: prop.name || "",
+        type: prop.type || "string",
+        required: !!prop.required,
+    });
+}
 
 /**
  * Opens the JSON Schema editor modal.
@@ -34,6 +48,7 @@ function schemaEditorModal(settings) {
 
         // Visual mode state
         rootType: "object",
+        rootRepeated: false,
         properties: [], // [{name, type, required}]
         arrayItemType: "string",
         stringMinLength: "",
@@ -86,7 +101,7 @@ function schemaEditorModal(settings) {
     }
 
     function addProperty() {
-        data.properties = [...data.properties, { name: "", type: "string", required: false }];
+        data.properties = [...data.properties, createPropertyState()];
     }
 
     function removeProperty(index) {
@@ -154,18 +169,42 @@ function schemaEditorModal(settings) {
                             t.div(
                                 { className: "field" },
                                 t.label({ htmlFor: uniqueId + ".rootType" }, "Root type"),
-                                t.select(
-                                    {
-                                        id: uniqueId + ".rootType",
-                                        value: () => data.rootType,
-                                        onchange: (e) => (data.rootType = e.target.value),
+                                app.components.select({
+                                    id: uniqueId + ".rootType",
+                                    options: SUPPORTED_TYPE_OPTIONS,
+                                    value: () => data.rootType,
+                                    onchange: (opts) => {
+                                        data.rootType = opts?.[0]?.value || "object";
+                                        if (data.rootType !== "object") {
+                                            data.rootRepeated = false;
+                                        }
                                     },
-                                    ...SUPPORTED_TYPES.map((type) =>
-                                        t.option({ value: type, selected: () => data.rootType === type }, type)
-                                    ),
-                                ),
+                                }),
                             ),
                         ),
+                        () => {
+                            if (data.rootType !== "object") return null;
+
+                            return t.div(
+                                { className: "col-sm-12" },
+                                t.div(
+                                    { className: "field" },
+                                    t.input({
+                                        type: "checkbox",
+                                        id: uniqueId + ".rootRepeated",
+                                        className: "sm",
+                                        checked: () => !!data.rootRepeated,
+                                        onchange: (e) => {
+                                            data.rootRepeated = e.target.checked;
+                                        },
+                                    }),
+                                    t.label(
+                                        { htmlFor: uniqueId + ".rootRepeated" },
+                                        "Repeated",
+                                    ),
+                                ),
+                            );
+                        },
                     ),
                     // Object properties
                     () => {
@@ -206,10 +245,9 @@ function schemaEditorModal(settings) {
                                             t.input({
                                                 type: "text",
                                                 placeholder: "Property name",
-                                                value: prop.name || "",
+                                                value: () => prop.name,
                                                 oninput: (e) => {
-                                                    data.properties[index].name = e.target.value;
-                                                    data.properties = [...data.properties];
+                                                    prop.name = e.target.value;
                                                 },
                                             }),
                                         ),
@@ -219,24 +257,13 @@ function schemaEditorModal(settings) {
                                                 { className: "txt-hint txt-sm" },
                                                 "Type",
                                             ),
-                                            t.select(
-                                                {
-                                                    value: prop.type || "string",
-                                                    onchange: (e) => {
-                                                        data.properties[index].type = e.target.value;
-                                                        data.properties = [...data.properties];
-                                                    },
+                                            app.components.select({
+                                                options: PROPERTY_TYPE_OPTIONS,
+                                                value: () => prop.type,
+                                                onchange: (opts) => {
+                                                    prop.type = opts?.[0]?.value || "string";
                                                 },
-                                                ...PROPERTY_TYPES.map((ptype) =>
-                                                    t.option(
-                                                        {
-                                                            value: ptype,
-                                                            selected: prop.type === ptype,
-                                                        },
-                                                        ptype,
-                                                    )
-                                                ),
-                                            ),
+                                            }),
                                         ),
                                         t.div(
                                             { className: "field" },
@@ -244,15 +271,14 @@ function schemaEditorModal(settings) {
                                                 type: "checkbox",
                                                 id: uniqueId + ".prop." + index + ".required",
                                                 className: "sm",
-                                                checked: !!prop.required,
+                                                checked: () => !!prop.required,
                                                 onchange: (e) => {
-                                                    data.properties[index].required = e.target.checked;
-                                                    data.properties = [...data.properties];
+                                                    prop.required = e.target.checked;
                                                 },
                                             }),
                                             t.label(
                                                 { htmlFor: uniqueId + ".prop." + index + ".required" },
-                                                "Required",
+                                                "Req",
                                             ),
                                         ),
                                         t.button(
@@ -280,19 +306,14 @@ function schemaEditorModal(settings) {
                                 t.div(
                                     { className: "field" },
                                     t.label({ htmlFor: uniqueId + ".arrayItemType" }, "Item type"),
-                                    t.select(
-                                        {
-                                            id: uniqueId + ".arrayItemType",
-                                            value: () => data.arrayItemType,
-                                            onchange: (e) => (data.arrayItemType = e.target.value),
+                                    app.components.select({
+                                        id: uniqueId + ".arrayItemType",
+                                        options: PROPERTY_TYPE_OPTIONS,
+                                        value: () => data.arrayItemType,
+                                        onchange: (opts) => {
+                                            data.arrayItemType = opts?.[0]?.value || "string";
                                         },
-                                        ...PROPERTY_TYPES.map((type) =>
-                                            t.option(
-                                                { value: type, selected: () => data.arrayItemType === type },
-                                                type,
-                                            )
-                                        ),
-                                    ),
+                                    }),
                                 ),
                             ),
                         );
@@ -423,6 +444,7 @@ function initFromSchema(schemaStr, data) {
     if (!schemaStr) {
         data.rawSchema = "";
         data.rootType = "object";
+        data.rootRepeated = false;
         data.properties = [];
         return;
     }
@@ -438,6 +460,7 @@ function initFromSchema(schemaStr, data) {
 function parseSchemaToVisual(schemaStr, data) {
     if (!schemaStr || !schemaStr.trim()) {
         data.rootType = "object";
+        data.rootRepeated = false;
         data.properties = [];
         data.visualUnsupported = false;
         return true;
@@ -477,50 +500,126 @@ function parseSchemaToVisual(schemaStr, data) {
         return false;
     }
 
-    data.rootType = type;
     data.visualUnsupported = false;
 
     if (type === "object") {
-        const props = schema.properties || {};
-        const required = new Set(schema.required || []);
-
-        // Check for unsupported per-property keywords.
-        for (const [, propSchema] of Object.entries(props)) {
-            if (typeof propSchema === "object" && propSchema !== null) {
-                const propKeys = Object.keys(propSchema);
-                if (propKeys.some((k) => k !== "type")) {
-                    return false;
-                }
-            }
-        }
-
-        data.properties = Object.entries(props).map(([name, propSchema]) => ({
-            name,
-            type: propSchema?.type || "string",
-            required: required.has(name),
-        }));
-    } else if (type === "array") {
-        data.arrayItemType = schema.items?.type || "string";
-        if (schema.items && Object.keys(schema.items).some((k) => k !== "type")) {
+        data.rootType = "object";
+        data.rootRepeated = false;
+        if (!parseVisualObjectSchema(schema, data)) {
             return false;
         }
+    } else if (type === "array") {
+        if (schema.items?.type === "object") {
+            if (Object.keys(schema.items).some((k) => !["type", "properties", "required"].includes(k))) {
+                return false;
+            }
+            data.rootType = "object";
+            data.rootRepeated = true;
+            if (!parseVisualObjectSchema(schema.items, data)) {
+                return false;
+            }
+        } else {
+            data.rootType = "array";
+            data.rootRepeated = false;
+            data.arrayItemType = schema.items?.type || "string";
+            if (schema.items && Object.keys(schema.items).some((k) => k !== "type")) {
+                return false;
+            }
+        }
     } else if (type === "string") {
+        data.rootType = "string";
+        data.rootRepeated = false;
         data.stringMinLength = schema.minLength != null ? String(schema.minLength) : "";
         data.stringMaxLength = schema.maxLength != null ? String(schema.maxLength) : "";
     } else if (type === "number" || type === "integer") {
+        data.rootType = type;
+        data.rootRepeated = false;
         data.numberMinimum = schema.minimum != null ? String(schema.minimum) : "";
         data.numberMaximum = schema.maximum != null ? String(schema.maximum) : "";
+    } else {
+        data.rootType = type;
+        data.rootRepeated = false;
     }
 
     return true;
 }
 
 function buildSchemaFromVisual(data) {
+    if (data.rootType === "object") {
+        const objectSchema = buildVisualObjectSchema(data);
+        if (data.rootRepeated) {
+            return JSON.stringify(
+                {
+                    type: "array",
+                    items: objectSchema,
+                },
+                null,
+                2,
+            );
+        }
+
+        return JSON.stringify(objectSchema, null, 2);
+    } else if (data.rootType === "array") {
+        const schema = {
+            type: data.rootType,
+        };
+        schema.items = { type: data.arrayItemType };
+        return JSON.stringify(schema, null, 2);
+    } else if (data.rootType === "string") {
+        const schema = {
+            type: data.rootType,
+        };
+        if (data.stringMinLength !== "") {
+            schema.minLength = parseInt(data.stringMinLength, 10);
+        }
+        if (data.stringMaxLength !== "") {
+            schema.maxLength = parseInt(data.stringMaxLength, 10);
+        }
+        return JSON.stringify(schema, null, 2);
+    } else if (data.rootType === "number" || data.rootType === "integer") {
+        const schema = {
+            type: data.rootType,
+        };
+        if (data.numberMinimum !== "") {
+            schema.minimum = parseFloat(data.numberMinimum);
+        }
+        if (data.numberMaximum !== "") {
+            schema.maximum = parseFloat(data.numberMaximum);
+        }
+        return JSON.stringify(schema, null, 2);
+    }
+
+    return JSON.stringify({ type: data.rootType }, null, 2);
+}
+
+function parseVisualObjectSchema(schema, data) {
+    const props = schema.properties || {};
+    const required = new Set(schema.required || []);
+
+    for (const [, propSchema] of Object.entries(props)) {
+        if (typeof propSchema === "object" && propSchema !== null) {
+            const propKeys = Object.keys(propSchema);
+            if (propKeys.some((k) => k !== "type")) {
+                return false;
+            }
+        }
+    }
+
+    data.properties = Object.entries(props).map(([name, propSchema]) => ({
+        name,
+        type: propSchema?.type || "string",
+        required: required.has(name),
+    })).map(createPropertyState);
+
+    return true;
+}
+
+function buildVisualObjectSchema(data) {
     const schema = {
-        type: data.rootType,
+        type: "object",
     };
 
-    if (data.rootType === "object" && data.properties.length > 0) {
+    if (data.properties.length > 0) {
         schema.properties = {};
         const required = [];
         for (const prop of data.properties) {
@@ -533,25 +632,9 @@ function buildSchemaFromVisual(data) {
         if (required.length > 0) {
             schema.required = required;
         }
-    } else if (data.rootType === "array") {
-        schema.items = { type: data.arrayItemType };
-    } else if (data.rootType === "string") {
-        if (data.stringMinLength !== "") {
-            schema.minLength = parseInt(data.stringMinLength, 10);
-        }
-        if (data.stringMaxLength !== "") {
-            schema.maxLength = parseInt(data.stringMaxLength, 10);
-        }
-    } else if (data.rootType === "number" || data.rootType === "integer") {
-        if (data.numberMinimum !== "") {
-            schema.minimum = parseFloat(data.numberMinimum);
-        }
-        if (data.numberMaximum !== "") {
-            schema.maximum = parseFloat(data.numberMaximum);
-        }
     }
 
-    return JSON.stringify(schema, null, 2);
+    return schema;
 }
 
 function formatJSON(str) {
