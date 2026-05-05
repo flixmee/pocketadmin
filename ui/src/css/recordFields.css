@@ -203,6 +203,9 @@
 }
 
 .field-type-json {
+  & > .field > label {
+    padding-bottom: 1rem;
+  }
   &.record-field-view {
     overflow: auto;
     max-height: 400px;
@@ -228,7 +231,7 @@
     padding: 10px;
     border: 1px solid var(--surfaceAlt4Color);
     border-radius: var(--baseRadius);
-    background: var(--surfaceAlt2Color);
+    background: var(--surfaceAlt1Color);
   }
   .json-schema-group {
     display: flex;
