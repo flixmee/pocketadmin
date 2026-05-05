@@ -695,6 +695,120 @@ button {
         label {
             color: var(--surfaceTxtColor);
         }
+    }
+    &::placeholder {
+      user-select: none;
+      color: var(--surfaceTxtDisabledColor);
+      font-weight: inherit;
+      font-family: inherit;
+    }
+    &:autofill {
+      background: none;
+      -webkit-text-fill-color: var(--surfaceTxtColor);
+      /* workaround for Firefox's yellow fill */
+      box-shadow: 0 0 0 50px var(--inputColor) inset;
+      transition: box-shadow var(--animationSpeed);
+    }
+    &:focus,
+    &:focus-visible,
+    &:focus-within {
+      outline: 0;
+      &:autofill {
+        box-shadow: 0 0 0 50px var(--inputFocusColor) inset;
+      }
+    }
+    &.readonly,
+    &[readonly] {
+      cursor: default;
+      color: var(--surfaceTxtHintColor);
+    }
+    &.disabled,
+    &[disabled] {
+      cursor: default;
+      color: var(--surfaceTxtDisabledColor);
+    }
+    &:only-child {
+      height: 100%;
+    }
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    position: relative;
+    left: var(--inputPadding);
+    width: calc(100% - 2 * var(--inputPadding));
+    height: 6px;
+    padding: 0;
+    margin-top: 16px;
+    margin-bottom: 16px;
+    border-radius: var(--borderRadius) !important;
+    background: var(--surfaceAlt5Color);
+    accent-color: var(--surfaceTxtHintColor);
+  }
+  input[type="color"] {
+    -webkit-appearance: none;
+    border: 0;
+    height: 36px;
+    margin: 1px 0;
+    &::-webkit-color-swatch-wrapper {
+      padding: 0;
+      border-radius: var(--borderRadius);
+    }
+    &::-webkit-color-swatch {
+      border: none;
+      border-radius: var(--borderRadius);
+    }
+    &::-moz-color-swatch {
+      border: none;
+      border-radius: var(--borderRadius);
+    }
+  }
+  .autoexpand-wrapper > .input,
+  textarea {
+    padding-top: 8px;
+    padding-bottom: 9px;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 38px;
+    max-height: 300px;
+    &.autoexpand {
+      @supports (field-sizing: content) {
+        field-sizing: content;
+        resize: none;
+      }
+    }
+  }
+
+  /* @todo remove after Firefox add support for "field-sizing:content" */
+  /* note: based on https://chriscoyier.net/2023/09/29/css-solves-auto-expanding-textareas-probably-eventually/ */
+  .autoexpand-wrapper {
+    display: grid;
+    > textarea {
+      resize: none;
+    }
+    > .input {
+      white-space: pre-wrap;
+      visibility: hidden;
+      overflow: auto;
+    }
+    > .input,
+    > textarea {
+      /* Place on top of each other */
+      grid-area: 1 / 1 / 2 / 2;
+    }
+  }
+
+  &.addon {
+    display: inline-flex;
+    align-items: center;
+    width: auto;
+    flex-shrink: 0;
+    color: var(--surfaceTxtHintColor);
+    &::after {
+      content: none;
+      display: none;
+    }
+  }
+
   &:focus-within:not(.addon) {
     background: var(--inputFocusColor);
     label {
