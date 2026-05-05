@@ -44,6 +44,7 @@ State:
   - Updated `ui/src/fields/json/input.js` so repeated root objects render as an array-of-object form UI instead of falling back to the raw editor.
   - Refactored `ui/src/fields/json/input.js` so schema-backed JSON inputs keep a local root value, buffer text/number edits locally, and commit them to the record on blur instead of on every keystroke.
   - Kept structural array changes and boolean toggles committing explicitly, while removing most schema-form rerenders caused by reactive record writes during typing.
+  - Added `docs/json-field-api.md` documenting JSON field collection payloads, record payloads, normalization rules, schema validation, and error shapes.
   - Added schema input styling in `ui/src/css/recordFields.css`.
   - Updated `AGENTS.md` with durable frontend reactivity guidance from the JSON schema UI work, including avoiding ephemeral state on reactive field objects and avoiding whole-array replacement for row-local edits.
   - Updated `AGENTS.md` to require the shared dropdown/select component instead of native HTML `<select>` in the admin UI.
@@ -73,6 +74,7 @@ Working set (files/ids/commands):
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/base/select.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/fields/json/input.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/fields/json/schemaEditorModal.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/docs/json-field-api.md`
 - `cd ui && npm run build` (build succeeded; dprint incremental cache write reported `Operation not permitted`)
 - `/Users/suytbily/dev/gits/harry/pocketadmin/go.mod`
 - `/Users/suytbily/dev/gits/harry/pocketadmin/go.sum`
