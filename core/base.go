@@ -38,8 +38,9 @@ const (
 
 	LocalStorageDirName       string = "storage"
 	LocalBackupsDirName       string = "backups"
-	LocalTempDirName          string = ".pb_temp_to_delete" // temp pb_data sub directory that will be deleted on each app.Bootstrap()
 	LocalAutocertCacheDirName string = ".autocert_cache"
+	LocalNotifyDirName        string = ".notify"            // optional watched directory that is used as a cross-platform workaround for synchronizing various runtime states between multiple PocketBase instances pointing to the same pb_data
+	LocalTempDirName          string = ".pb_temp_to_delete" // temp pb_data sub directory that will be deleted on each app.Bootstrap()
 
 	// @todo consider removing after backups refactoring
 	lostFoundDirName string = "lost+found"
@@ -1384,6 +1385,7 @@ func (app *BaseApp) registerBaseHooks() {
 	app.registerAuthOriginHooks()
 	app.registerAutomationHooks()
 	app.registerMediaHooks()
+	app.registerNotifyWatcherHooks()
 }
 
 // getLoggerMinLevel returns the logger min level based on the
