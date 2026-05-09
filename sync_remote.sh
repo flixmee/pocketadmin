@@ -29,9 +29,9 @@ if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
     git checkout "$BRANCH"
 fi
 
-# Sync develop branch with upstream
-echo "⬆️  Syncing $BRANCH with upstream/$BRANCH..."
-git rebase "upstream/$BRANCH"
+# Merge upstream develop branch
+echo "⬆️  Merging upstream/$BRANCH into $BRANCH..."
+git merge "upstream/$BRANCH"
 
 echo "✅ Sync complete!"
 echo "📊 Current status:"

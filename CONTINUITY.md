@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Add a per-run replay action to recent automation runs so superusers can rerun a specific saved trigger item, not just start a generic manual run.
-- Success: each recent run row exposes a replay control, the backend reruns from the saved run input payload, the replay preserves the original trigger context (for example webhook request data), and the recent-runs list refreshes after success.
+- Update `sync_remote.sh` so syncing from the upstream PocketBase repo uses a normal Git merge instead of rebase.
+- Success: the script fetches `upstream`, switches to `develop` if needed, then merges `upstream/develop`.
 
 Constraints/Assumptions:
 
@@ -38,6 +38,9 @@ Key decisions:
 
 State:
   - Done:
+    - Read the prior continuity ledger and inspected `sync_remote.sh`.
+    - Updated `sync_remote.sh` to merge `upstream/develop` instead of rebasing onto it.
+    - Verified shell syntax with `bash -n sync_remote.sh`.
     - Confirmed the original footer-level `Run again` button was the wrong behavior for the clarified request because it only triggered a generic manual run.
     - Confirmed `AutomationRun.input` stores enough exported trigger payload data to support replaying a specific saved run.
     - Added a core replay seam and API route for rerunning a specific automation run from its stored payload.
@@ -131,6 +134,8 @@ Open questions (UNCONFIRMED if needed):
 
 Working set (files/ids/commands):
 
+- `/Volumes/MacOS_WD/Developer/pocketadmin/sync_remote.sh`
+- `bash -n sync_remote.sh`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/AUTOMATION_PLAN.md`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1775000000_automations.go`
