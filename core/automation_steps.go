@@ -13,10 +13,15 @@ const (
 	automationStepStatusFailed  = "failed"
 	automationStepStatusStopped = "stopped"
 
-	automationConditionOpEq     = "eq"
-	automationConditionOpNeq    = "neq"
-	automationConditionOpIn     = "in"
-	automationConditionOpExists = "exists"
+	automationConditionOpEq            = "eq"
+	automationConditionOpNeq           = "neq"
+	automationConditionOpIn            = "in"
+	automationConditionOpExists        = "exists"
+	automationConditionOpStartsWith    = "startsWith"
+	automationConditionOpEndsWith      = "endsWith"
+	automationConditionOpNotStartsWith = "notStartsWith"
+	automationConditionOpNotEndsWith   = "notEndsWith"
+	automationConditionOpContains      = "contains"
 )
 
 type automationExecutionContext struct {
@@ -42,7 +47,9 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 				"type":           payload.TriggerType,
 				"collectionId":   payload.CollectionId,
 				"collectionName": payload.CollectionName,
+				"request":        payload.Request,
 			},
+			"request":        payload.Request,
 			"record":         payload.Record,
 			"recordOriginal": payload.RecordOriginal,
 			"automation":     automationTemplateRecordData(automation.Record),
@@ -91,7 +98,14 @@ func executeAutomationConditionStep(ctx *automationExecutionContext, step map[st
 		}
 
 		return automationStepStatusStopped, nil
-	case automationConditionOpEq, automationConditionOpNeq, automationConditionOpIn:
+	case automationConditionOpEq,
+		automationConditionOpNeq,
+		automationConditionOpIn,
+		automationConditionOpStartsWith,
+		automationConditionOpEndsWith,
+		automationConditionOpNotStartsWith,
+		automationConditionOpNotEndsWith,
+		automationConditionOpContains:
 		if !found {
 			return automationStepStatusStopped, nil
 		}
@@ -109,6 +123,16 @@ func executeAutomationConditionStep(ctx *automationExecutionContext, step map[st
 			matched = !automationValuesEqual(actual, expected)
 		case automationConditionOpIn:
 			matched = automationValueIn(actual, expected)
+		case automationConditionOpStartsWith:
+			matched = automationValueStartsWith(actual, expected)
+		case automationConditionOpEndsWith:
+			matched = automationValueEndsWith(actual, expected)
+		case automationConditionOpNotStartsWith:
+			matched = !automationValueStartsWith(actual, expected)
+		case automationConditionOpNotEndsWith:
+			matched = !automationValueEndsWith(actual, expected)
+		case automationConditionOpContains:
+			matched = automationValueContains(actual, expected)
 		}
 
 		if matched {

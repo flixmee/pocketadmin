@@ -17,6 +17,21 @@ func (app *BaseApp) FindAutomationById(id string) (*Automation, error) {
 	return result, nil
 }
 
+// FindAutomationRunById returns a single AutomationRun model by its id.
+func (app *BaseApp) FindAutomationRunById(id string) (*AutomationRun, error) {
+	result := &AutomationRun{}
+
+	err := app.RecordQuery(CollectionNameAutomationRuns).
+		AndWhere(dbx.HashExp{"id": id}).
+		Limit(1).
+		One(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 // FindAllActiveAutomations returns all active Automation models.
 func (app *BaseApp) FindAllActiveAutomations() ([]*Automation, error) {
 	result := []*Automation{}

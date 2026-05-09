@@ -14,6 +14,7 @@ const (
 	AutomationTriggerRecordUpdate = "record.update"
 	AutomationTriggerRecordDelete = "record.delete"
 	AutomationTriggerScheduleCron = "schedule.cron"
+	AutomationTriggerWebhook      = "webhook"
 	AutomationTriggerManual       = "manual"
 
 	AutomationStepCondition    = "condition"

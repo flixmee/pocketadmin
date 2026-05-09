@@ -366,6 +366,18 @@ func TestAutomationValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("valid webhook trigger", func(t *testing.T) {
+		automation := &core.Automation{}
+		automation.SetProxyRecord(core.NewRecord(automationsCol))
+		populateValidAutomation(automation)
+		automation.SetTriggerType(core.AutomationTriggerWebhook)
+		automation.SetSteps(mustParseJSONRaw(t, `[{"type":"condition","path":"request.method","op":"eq","value":"POST"}]`))
+
+		if err := app.Validate(automation); err != nil {
+			t.Fatalf("Expected validation to succeed, got %v", err)
+		}
+	})
+
 	t.Run("valid mail step with record attachments", func(t *testing.T) {
 		automation := &core.Automation{}
 		automation.SetProxyRecord(core.NewRecord(automationsCol))

@@ -3,6 +3,7 @@ package core_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -220,6 +221,307 @@ func TestAutomationConditionStepStopsRemainingSteps(t *testing.T) {
 	}
 	if results[0]["status"] != "stopped" {
 		t.Fatalf("Expected stopped condition step, got %v", results[0]["status"])
+	}
+}
+
+func TestAutomationConditionStringOperators(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []struct {
+		name               string
+		op                 string
+		expectedValue      string
+		recordTitle        string
+		expectHTTPCalls    int
+		expectedStepStatus string
+	}{
+		{
+			name:               "starts with",
+			op:                 "startsWith",
+			expectedValue:      "phase3",
+			recordTitle:        "phase3_condition_title",
+			expectHTTPCalls:    1,
+			expectedStepStatus: "success",
+		},
+		{
+			name:               "ends with",
+			op:                 "endsWith",
+			expectedValue:      "title",
+			recordTitle:        "phase3_condition_title",
+			expectHTTPCalls:    1,
+			expectedStepStatus: "success",
+		},
+		{
+			name:               "does not start with",
+			op:                 "notStartsWith",
+			expectedValue:      "other",
+			recordTitle:        "phase3_condition_title",
+			expectHTTPCalls:    1,
+			expectedStepStatus: "success",
+		},
+		{
+			name:               "does not end with",
+			op:                 "notEndsWith",
+			expectedValue:      "other",
+			recordTitle:        "phase3_condition_title",
+			expectHTTPCalls:    1,
+			expectedStepStatus: "success",
+		},
+		{
+			name:               "contains",
+			op:                 "contains",
+			expectedValue:      "condition",
+			recordTitle:        "phase3_condition_title",
+			expectHTTPCalls:    1,
+			expectedStepStatus: "success",
+		},
+		{
+			name:               "starts with mismatch stops workflow",
+			op:                 "startsWith",
+			expectedValue:      "other",
+			recordTitle:        "phase3_condition_title",
+			expectHTTPCalls:    0,
+			expectedStepStatus: "stopped",
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+
+			app, _ := tests.NewTestApp()
+			defer app.Cleanup()
+
+			httpCalls := 0
+			app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+				httpCalls++
+				return &http.Response{
+					StatusCode: http.StatusNoContent,
+					Body:       io.NopCloser(strings.NewReader("")),
+					Header:     make(http.Header),
+				}, nil
+			}))
+
+			collection, err := app.FindCollectionByNameOrId("demo2")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			automation := core.NewAutomation(app)
+			populateValidAutomation(automation)
+			automation.SetActive(true)
+			automation.SetTriggerType(core.AutomationTriggerRecordCreate)
+			automation.SetCollectionRef(collection.Id)
+			automation.SetSteps(mustParseJSONRaw(t, fmt.Sprintf(`[
+				{"type":"condition","path":"record.title","op":"%s","value":%q},
+				{"type":"http","url":"https://example.com/hooks"}
+			]`, scenario.op, scenario.expectedValue)))
+
+			if err := app.Save(automation); err != nil {
+				t.Fatal(err)
+			}
+
+			record := core.NewRecord(collection)
+			record.Set("title", scenario.recordTitle)
+			if err := app.Save(record); err != nil {
+				t.Fatal(err)
+			}
+
+			runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+			if runs[0].Status() != core.AutomationRunStatusSuccess {
+				t.Fatalf("Expected successful run, got %q", runs[0].Status())
+			}
+			if httpCalls != scenario.expectHTTPCalls {
+				t.Fatalf("Expected %d HTTP calls, got %d", scenario.expectHTTPCalls, httpCalls)
+			}
+
+			results := decodeStepResults(t, runs[0])
+			if len(results) == 0 {
+				t.Fatal("Expected at least one step result")
+			}
+			if results[0]["status"] != scenario.expectedStepStatus {
+				t.Fatalf("Expected first step status %q, got %v", scenario.expectedStepStatus, results[0]["status"])
+			}
+		})
+	}
+}
+
+func TestAutomationWebhookRunExposesRequestTemplateData(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	gotMethod := ""
+	gotURL := ""
+	gotHeader := ""
+	gotBody := ""
+	httpCalls := 0
+
+	app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+		httpCalls++
+		gotMethod = req.Method
+		gotURL = req.URL.String()
+		gotHeader = req.Header.Get("X-Source-Ip")
+
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		gotBody = string(body)
+
+		return &http.Response{
+			StatusCode: http.StatusNoContent,
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header:     make(http.Header),
+		}, nil
+	}))
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerWebhook)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"condition","path":"request.headers.x_automation_event","op":"eq","value":"invoice.paid"},
+		{
+			"type":"http",
+			"method":"POST",
+			"url":"https://example.com/hooks/{{request.query.tenant}}",
+			"headers":{"X-Source-Ip":"{{request.remoteIP}}"},
+			"body":{"trigger":"{{trigger.type}}","event":"{{request.body.event}}","path":"{{request.path}}"}
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	err := app.RunAutomationWebhook(automation.Id, &core.AutomationWebhookRequest{
+		Method:   http.MethodPost,
+		Path:     "/api/automation-webhooks/" + automation.Id,
+		Query:    map[string]string{"tenant": "acme"},
+		Headers:  map[string]string{"X-Automation-Event": "invoice.paid"},
+		Body:     map[string]any{"event": "invoice.paid"},
+		RemoteIP: "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("Expected webhook run to succeed, got %v", err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q", runs[0].Status())
+	}
+	if httpCalls != 1 {
+		t.Fatalf("Expected 1 HTTP call, got %d", httpCalls)
+	}
+	if gotMethod != http.MethodPost {
+		t.Fatalf("Expected HTTP method %q, got %q", http.MethodPost, gotMethod)
+	}
+	if gotURL != "https://example.com/hooks/acme" {
+		t.Fatalf("Expected rendered URL, got %q", gotURL)
+	}
+	if gotHeader != "127.0.0.1" {
+		t.Fatalf("Expected rendered request header, got %q", gotHeader)
+	}
+	if !strings.Contains(gotBody, `"trigger":"webhook"`) || !strings.Contains(gotBody, `"event":"invoice.paid"`) {
+		t.Fatalf("Expected rendered request body, got %q", gotBody)
+	}
+
+	input := decodeAutomationRunInput(t, runs[0])
+	request, ok := input["request"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected request payload in run input, got %#v", input["request"])
+	}
+	if request["method"] != http.MethodPost {
+		t.Fatalf("Expected request method %q, got %#v", http.MethodPost, request["method"])
+	}
+	if request["path"] != "/api/automation-webhooks/"+automation.Id {
+		t.Fatalf("Expected request path in run input, got %#v", request["path"])
+	}
+}
+
+func TestAutomationRunReplayUsesStoredWebhookPayload(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	httpCalls := 0
+	gotMethod := ""
+	gotURL := ""
+
+	app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+		httpCalls++
+		gotMethod = req.Method
+		gotURL = req.URL.String()
+
+		return &http.Response{
+			StatusCode: http.StatusNoContent,
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header:     make(http.Header),
+		}, nil
+	}))
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerWebhook)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"condition","path":"request.headers.x_automation_event","op":"eq","value":"invoice.paid"},
+		{"type":"http","method":"POST","url":"https://example.com/hooks/{{request.query.tenant}}"}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.RunAutomationWebhook(automation.Id, &core.AutomationWebhookRequest{
+		Method:   http.MethodPost,
+		Path:     "/api/automation-webhooks/" + automation.Id,
+		Query:    map[string]string{"tenant": "acme"},
+		Headers:  map[string]string{"X-Automation-Event": "invoice.paid"},
+		Body:     map[string]any{"event": "invoice.paid"},
+		RemoteIP: "127.0.0.1",
+	}); err != nil {
+		t.Fatalf("Expected webhook run to succeed, got %v", err)
+	}
+
+	originalRuns := waitForCompletedAutomationRuns(t, app, automation, 1)
+	originalRun := originalRuns[0]
+
+	if err := app.RunAutomationFromRun(originalRun.Id); err != nil {
+		t.Fatalf("Expected replayed run to succeed, got %v", err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 2)
+	replayedRun := runs[0]
+	if replayedRun.Id == originalRun.Id {
+		t.Fatalf("Expected a new run id, got the original %q", replayedRun.Id)
+	}
+	if replayedRun.TriggerType() != core.AutomationTriggerWebhook {
+		t.Fatalf("Expected replay trigger type %q, got %q", core.AutomationTriggerWebhook, replayedRun.TriggerType())
+	}
+	if replayedRun.Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful replay run, got %q", replayedRun.Status())
+	}
+	if httpCalls != 2 {
+		t.Fatalf("Expected 2 HTTP calls across original and replayed runs, got %d", httpCalls)
+	}
+	if gotMethod != http.MethodPost {
+		t.Fatalf("Expected replayed HTTP method %q, got %q", http.MethodPost, gotMethod)
+	}
+	if gotURL != "https://example.com/hooks/acme" {
+		t.Fatalf("Expected replayed URL to preserve request query data, got %q", gotURL)
+	}
+
+	input := decodeAutomationRunInput(t, replayedRun)
+	request, ok := input["request"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected request payload in replayed run input, got %#v", input["request"])
+	}
+	if request["path"] != "/api/automation-webhooks/"+automation.Id {
+		t.Fatalf("Expected replayed request path, got %#v", request["path"])
 	}
 }
 
@@ -706,6 +1008,22 @@ func decodeStepResults(t *testing.T, run *core.AutomationRun) []map[string]any {
 	result := []map[string]any{}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("Failed to decode step results: %v", err)
+	}
+
+	return result
+}
+
+func decodeAutomationRunInput(t *testing.T, run *core.AutomationRun) map[string]any {
+	t.Helper()
+
+	raw := strings.TrimSpace(run.Input().String())
+	if raw == "" || raw == "null" {
+		return nil
+	}
+
+	result := map[string]any{}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("Failed to decode automation run input: %v", err)
 	}
 
 	return result

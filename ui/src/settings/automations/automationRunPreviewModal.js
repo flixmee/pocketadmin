@@ -285,6 +285,8 @@ function formatTriggerType(triggerType) {
     switch (triggerType) {
         case "manual":
             return "Manual";
+        case "webhook":
+            return "Webhook";
         case "schedule.cron":
             return "Scheduled cron";
         case "record.create":

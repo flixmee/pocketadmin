@@ -275,6 +275,201 @@ func TestAutomationRun(t *testing.T) {
 	}
 }
 
+func TestAutomationRunRerun(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:           "unauthorized",
+			Method:         http.MethodPost,
+			URL:            "/api/automations/autoapi00000053/runs/runapi000000053/rerun",
+			ExpectedStatus: 401,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "authorized as superuser missing run",
+			Method: http.MethodPost,
+			URL:    "/api/automations/autoapi00000053/runs/missing/rerun",
+			Headers: map[string]string{
+				"Authorization": testSuperuserAuthHeader,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				createWebhookAutomationFixture(t, app, "autoapi00000053", "API rerun automation")
+			},
+			ExpectedStatus:  404,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "authorized as superuser existing run",
+			Method: http.MethodPost,
+			URL:    "/api/automations/autoapi00000054/runs/runapi000000054/rerun",
+			Headers: map[string]string{
+				"Authorization": testSuperuserAuthHeader,
+			},
+			Delay: 100 * time.Millisecond,
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				automation := createWebhookAutomationFixture(t, app, "autoapi00000054", "API rerun automation")
+
+				run := core.NewAutomationRun(app)
+				run.SetRaw("id", "runapi000000054")
+				run.SetAutomationRef(automation.Id)
+				run.SetTriggerType(core.AutomationTriggerWebhook)
+				run.SetStatus(core.AutomationRunStatusSuccess)
+				run.SetInput(mustAutomationJSONRaw(t, `{
+					"triggerType":"webhook",
+					"request":{
+						"method":"POST",
+						"path":"/api/automation-webhooks/autoapi00000054",
+						"query":{"tenant":"acme"},
+						"headers":{"x_automation_event":"invoice.paid"},
+						"body":{"event":"invoice.paid"},
+						"remoteIP":"127.0.0.1"
+					}
+				}`))
+
+				if err := app.Save(run); err != nil {
+					t.Fatalf("Failed to create automation run fixture: %v", err)
+				}
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				automationRecord, err := app.FindRecordById(core.CollectionNameAutomations, "autoapi00000054")
+				if err != nil {
+					t.Fatalf("Expected automation to exist: %v", err)
+				}
+
+				automation := &core.Automation{}
+				automation.SetProxyRecord(automationRecord)
+
+				runs := waitForAutomationRunsAPI(t, app, automation, 2)
+				latest := runs[0]
+				if latest.Id == "runapi000000054" {
+					t.Fatalf("Expected rerun to create a new run id, got %q", latest.Id)
+				}
+				if latest.TriggerType() != core.AutomationTriggerWebhook {
+					t.Fatalf("Expected rerun trigger type %q, got %q", core.AutomationTriggerWebhook, latest.TriggerType())
+				}
+
+				input := decodeAutomationRunInputAPI(t, latest)
+				request, ok := input["request"].(map[string]any)
+				if !ok {
+					t.Fatalf("Expected request payload in rerun input, got %#v", input["request"])
+				}
+				if request["path"] != "/api/automation-webhooks/autoapi00000054" {
+					t.Fatalf("Expected rerun request path, got %#v", request["path"])
+				}
+			},
+			ExpectedStatus: 204,
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
+func TestAutomationWebhook(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "missing automation",
+			Method:          http.MethodPost,
+			URL:             "/api/automation-webhooks/missing",
+			ExpectedStatus:  404,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "non-webhook automation",
+			Method: http.MethodPost,
+			URL:    "/api/automation-webhooks/autoapi00000050",
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				createAutomationFixture(t, app, "autoapi00000050", "API non-webhook automation")
+			},
+			ExpectedStatus:  404,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "invalid webhook json",
+			Method: http.MethodPost,
+			URL:    "/api/automation-webhooks/autoapi00000051",
+			Body:   strings.NewReader(`{"event":`),
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				createWebhookAutomationFixture(t, app, "autoapi00000051", "API invalid webhook automation")
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"message":"Failed to load webhook request."`,
+			},
+		},
+		{
+			Name:   "valid webhook automation",
+			Method: http.MethodPost,
+			URL:    "/api/automation-webhooks/autoapi00000052?tenant=acme",
+			Body:   strings.NewReader(`{"event":"invoice.paid"}`),
+			Headers: map[string]string{
+				"Content-Type":       "application/json",
+				"X-Automation-Event": "invoice.paid",
+			},
+			Delay: 100 * time.Millisecond,
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				createWebhookAutomationFixture(t, app, "autoapi00000052", "API webhook automation")
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				automationRecord, err := app.FindRecordById(core.CollectionNameAutomations, "autoapi00000052")
+				if err != nil {
+					t.Fatalf("Expected webhook automation to exist: %v", err)
+				}
+
+				automation := &core.Automation{}
+				automation.SetProxyRecord(automationRecord)
+
+				runs := waitForAutomationRunsAPI(t, app, automation, 1)
+				run := runs[0]
+				if run.TriggerType() != core.AutomationTriggerWebhook {
+					t.Fatalf("Expected webhook trigger type %q, got %q", core.AutomationTriggerWebhook, run.TriggerType())
+				}
+
+				input := decodeAutomationRunInputAPI(t, run)
+				request, ok := input["request"].(map[string]any)
+				if !ok {
+					t.Fatalf("Expected request payload in automation run input, got %#v", input["request"])
+				}
+				if request["method"] != http.MethodPost {
+					t.Fatalf("Expected request method %q, got %#v", http.MethodPost, request["method"])
+				}
+				if request["path"] != "/api/automation-webhooks/autoapi00000052" {
+					t.Fatalf("Expected request path, got %#v", request["path"])
+				}
+
+				headers, ok := request["headers"].(map[string]any)
+				if !ok || headers["x_automation_event"] != "invoice.paid" {
+					t.Fatalf("Expected normalized request headers, got %#v", request["headers"])
+				}
+
+				query, ok := request["query"].(map[string]any)
+				if !ok || query["tenant"] != "acme" {
+					t.Fatalf("Expected request query payload, got %#v", request["query"])
+				}
+
+				body, ok := request["body"].(map[string]any)
+				if !ok || body["event"] != "invoice.paid" {
+					t.Fatalf("Expected request body payload, got %#v", request["body"])
+				}
+			},
+			ExpectedStatus: 204,
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
 func TestAutomationRunsList(t *testing.T) {
 	t.Parallel()
 
@@ -382,6 +577,20 @@ func createAutomationFixture(t testing.TB, app *tests.TestApp, id string, name s
 	return automation
 }
 
+func createWebhookAutomationFixture(t testing.TB, app *tests.TestApp, id string, name string) *core.Automation {
+	t.Helper()
+
+	automation := createAutomationFixture(t, app, id, name)
+	automation.SetTriggerType(core.AutomationTriggerWebhook)
+	automation.SetSteps(mustAutomationJSONRaw(t, `[{"type":"condition","path":"request.headers.x_automation_event","op":"eq","value":"invoice.paid"}]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatalf("Failed to create webhook automation fixture: %v", err)
+	}
+
+	return automation
+}
+
 func mustAutomationJSONRaw(t testing.TB, raw string) types.JSONRaw {
 	t.Helper()
 
@@ -411,4 +620,15 @@ func waitForAutomationRunsAPI(t testing.TB, app *tests.TestApp, automation *core
 
 	t.Fatalf("Expected at least %d automation runs for %s", expected, automation.Id)
 	return nil
+}
+
+func decodeAutomationRunInputAPI(t testing.TB, run *core.AutomationRun) map[string]any {
+	t.Helper()
+
+	result := map[string]any{}
+	if err := json.Unmarshal([]byte(run.Input().String()), &result); err != nil {
+		t.Fatalf("Failed to decode automation run input: %v", err)
+	}
+
+	return result
 }

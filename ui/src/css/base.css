@@ -361,6 +361,10 @@ hr {
     flex: 1 1 auto !important;
 }
 
+.flex-start {
+    align-items: flex-start !important;
+}
+
 .wrapper {
     width: var(--wrapperWidth);
     max-width: 100%;

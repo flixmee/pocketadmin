@@ -2,6 +2,11 @@ const conditionOpOptions = [
     { value: "exists", label: "Exists" },
     { value: "eq", label: "Equals" },
     { value: "neq", label: "Does not equal" },
+    { value: "startsWith", label: "Starts with" },
+    { value: "endsWith", label: "Ends with" },
+    { value: "notStartsWith", label: "Does not start with" },
+    { value: "notEndsWith", label: "Does not end with" },
+    { value: "contains", label: "Contains" },
     { value: "in", label: "In list" },
 ];
 
@@ -15,7 +20,7 @@ export function conditionStepForm(propsArg = {}) {
 
     return t.div(
         {
-            className: "grid automation-condition-step-form",
+            className: "grid automation-condition-step-form flex-start",
             onunmount: () => {
                 watchers.forEach((w) => w?.unwatch());
             },

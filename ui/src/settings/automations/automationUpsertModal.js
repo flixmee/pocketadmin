@@ -3,6 +3,7 @@ import { buildAutomationStepsPayload, normalizeAutomationEditorSteps, stepEditor
 
 const automationTriggerOptions = [
     { value: "manual", label: "Manual" },
+    { value: "webhook", label: "Webhook" },
     { value: "schedule.cron", label: "Scheduled cron" },
     { value: "record.create", label: "Record create" },
     { value: "record.update", label: "Record update" },
@@ -46,6 +47,9 @@ function automationUpsertModal(automation, settings) {
         },
         get isCronTrigger() {
             return data.form.triggerType === "schedule.cron";
+        },
+        get isWebhookTrigger() {
+            return data.form.triggerType === "webhook";
         },
         get canSave() {
             return !data.isSaving && !!data.form.name.trim() && data.form.steps.length > 0 && data.hasChanges;
@@ -234,6 +238,42 @@ function automationUpsertModal(automation, settings) {
                     () => fieldError(app.store.errors?.cronExpr),
                 ),
                 t.div(
+                    {
+                        className: "col-lg-12",
+                        hidden: () => !data.isWebhookTrigger,
+                    },
+                    t.div(
+                        { className: "field" },
+                        t.label(null, "Webhook endpoint"),
+                        () => {
+                            if (!automation?.id) {
+                                return t.div(
+                                    { className: "txt-sm txt-hint" },
+                                    "Save the automation first to generate its stable webhook endpoint.",
+                                );
+                            }
+
+                            return t.div(
+                                { className: "flex gap-10 flex-wrap" },
+                                t.code(null, webhookURL(automation.id)),
+                                app.components.copyButton(() => webhookURL(automation.id)),
+                            );
+                        },
+                    ),
+                    t.div(
+                        { className: "field-help" },
+                        "Send a POST request to this endpoint. Templates can read incoming values from ",
+                        t.code(null, "{{request.method}}"),
+                        ", ",
+                        t.code(null, "{{request.headers.*}}"),
+                        ", ",
+                        t.code(null, "{{request.query.*}}"),
+                        ", and ",
+                        t.code(null, "{{request.body.*}}"),
+                        ".",
+                    ),
+                ),
+                t.div(
                     { className: "col-lg-12" },
                     t.div(
                         { className: "field" },
@@ -258,6 +298,8 @@ function automationUpsertModal(automation, settings) {
                             { className: "txt-sm txt-hint" },
                             "Templates support ",
                             t.code(null, "{{trigger.*}}"),
+                            ", ",
+                            t.code(null, "{{request.*}}"),
                             ", ",
                             t.code(null, "{{record.*}}"),
                             ", ",
@@ -356,6 +398,10 @@ function buildAutomationPayload(form) {
         notes: form.notes.trim(),
         steps: buildAutomationStepsPayload(form.steps),
     };
+}
+
+function webhookURL(automationId) {
+    return `${app.utils.getApiExampleURL()}/api/automation-webhooks/${automationId}`;
 }
 
 function isRecordAutomationTrigger(triggerType) {

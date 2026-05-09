@@ -2,13 +2,17 @@ package apis
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/inflector"
 	"github.com/pocketbase/pocketbase/tools/router"
 	"github.com/pocketbase/pocketbase/tools/routine"
 	"github.com/pocketbase/pocketbase/tools/types"
@@ -26,6 +30,8 @@ var automationAllowedFields = []string{
 
 // bindAutomationApi registers the automation api endpoints.
 func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
+	rg.POST("/automation-webhooks/{id}", automationWebhook).Bind(SkipSuccessActivityLog())
+
 	subGroup := rg.Group("/automations").Bind(RequireSuperuserAuth())
 	subGroup.GET("", automationsList)
 	subGroup.POST("", automationCreate)
@@ -33,6 +39,7 @@ func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 	subGroup.PATCH("/{id}", automationUpdate)
 	subGroup.DELETE("/{id}", automationDelete)
 	subGroup.POST("/{id}/run", automationRun)
+	subGroup.POST("/{id}/runs/{runId}/rerun", automationRunRerun)
 	subGroup.GET("/{id}/runs", automationRunsList)
 }
 
@@ -140,6 +147,58 @@ func automationRun(e *core.RequestEvent) error {
 	return e.NoContent(http.StatusNoContent)
 }
 
+func automationRunRerun(e *core.RequestEvent) error {
+	automation, err := findAutomationForAPI(e.App, e.Request.PathValue("id"))
+	if err != nil {
+		return automationAPIError(e, "rerun", err)
+	}
+
+	run, err := findAutomationRunForAPI(e.App, e.Request.PathValue("runId"))
+	if err != nil {
+		return automationRunAPIError(e, "rerun", err)
+	}
+	if run.AutomationRef() != automation.Id {
+		return e.NotFoundError("Missing or invalid automation run.", sql.ErrNoRows)
+	}
+
+	routine.FireAndForget(func() {
+		if err := e.App.RunAutomationFromRun(run.Id); err != nil {
+			e.App.Logger().Warn(
+				"Failed to rerun automation run",
+				"automationId", automation.Id,
+				"runId", run.Id,
+				"error", err,
+			)
+		}
+	})
+
+	return e.NoContent(http.StatusNoContent)
+}
+
+func automationWebhook(e *core.RequestEvent) error {
+	automation, err := findAutomationForAPI(e.App, e.Request.PathValue("id"))
+	if err != nil || automation == nil || !automation.Active() || automation.TriggerType() != core.AutomationTriggerWebhook {
+		return e.NotFoundError("Missing or invalid automation webhook.", err)
+	}
+
+	request, err := automationWebhookRequest(e)
+	if err != nil {
+		return e.BadRequestError("Failed to load webhook request.", err)
+	}
+
+	routine.FireAndForget(func() {
+		if err := e.App.RunAutomationWebhook(automation.Id, request); err != nil {
+			e.App.Logger().Warn(
+				"Failed to execute automation webhook run",
+				"automationId", automation.Id,
+				"error", err,
+			)
+		}
+	})
+
+	return e.NoContent(http.StatusNoContent)
+}
+
 func automationRunsList(e *core.RequestEvent) error {
 	automation, err := findAutomationForAPI(e.App, e.Request.PathValue("id"))
 	if err != nil {
@@ -198,10 +257,157 @@ func automationRunsQueryParams(e *core.RequestEvent) (int, int, error) {
 	return limit, offset, nil
 }
 
+func automationWebhookRequest(e *core.RequestEvent) (*core.AutomationWebhookRequest, error) {
+	body, err := automationWebhookBody(e)
+	if err != nil {
+		return nil, err
+	}
+
+	return &core.AutomationWebhookRequest{
+		Method:   e.Request.Method,
+		Path:     e.Request.URL.Path,
+		Query:    automationWebhookQuery(e.Request.URL.Query()),
+		Headers:  automationWebhookHeaders(e.Request.Header),
+		Body:     body,
+		RemoteIP: e.RealIP(),
+	}, nil
+}
+
+func automationWebhookBody(e *core.RequestEvent) (any, error) {
+	if e.Request.Body == nil {
+		return nil, nil
+	}
+
+	contentType := e.Request.Header.Get("Content-Type")
+
+	switch {
+	case strings.HasPrefix(contentType, "application/json"):
+		raw, err := io.ReadAll(e.Request.Body)
+		if err != nil {
+			return nil, err
+		}
+		if len(raw) == 0 {
+			return nil, nil
+		}
+
+		var body any
+		if err := json.Unmarshal(raw, &body); err != nil {
+			return nil, err
+		}
+
+		return body, nil
+	case strings.HasPrefix(contentType, "application/x-www-form-urlencoded"):
+		if err := e.Request.ParseForm(); err != nil {
+			return nil, err
+		}
+
+		return normalizeAutomationWebhookValues(e.Request.PostForm), nil
+	case strings.HasPrefix(contentType, "multipart/form-data"):
+		if err := e.Request.ParseMultipartForm(router.DefaultMaxMemory); err != nil {
+			return nil, err
+		}
+		if e.Request.MultipartForm == nil {
+			return nil, nil
+		}
+
+		return normalizeAutomationWebhookValues(e.Request.MultipartForm.Value), nil
+	default:
+		raw, err := io.ReadAll(e.Request.Body)
+		if err != nil {
+			return nil, err
+		}
+		if len(raw) == 0 {
+			return nil, nil
+		}
+
+		return string(raw), nil
+	}
+}
+
+func automationWebhookQuery(values map[string][]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	result := make(map[string]string, len(values))
+	for key, entries := range values {
+		if len(entries) > 0 {
+			result[key] = entries[0]
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+
+	return result
+}
+
+func automationWebhookHeaders(headers http.Header) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	result := make(map[string]string, len(headers))
+	for key, entries := range headers {
+		if len(entries) > 0 {
+			result[inflector.Snakecase(key)] = entries[0]
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+
+	return result
+}
+
+func normalizeAutomationWebhookValues(values map[string][]string) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+
+	result := make(map[string]any, len(values))
+	for key, entries := range values {
+		switch len(entries) {
+		case 0:
+			continue
+		case 1:
+			result[key] = entries[0]
+		default:
+			items := make([]any, len(entries))
+			for i, entry := range entries {
+				items[i] = entry
+			}
+			result[key] = items
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+
+	return result
+}
+
 func findAutomationForAPI(app core.App, id string) (*core.Automation, error) {
 	result := &core.Automation{}
 
 	err := app.RecordQuery(core.CollectionNameAutomations).
+		AndWhere(dbx.HashExp{"id": id}).
+		Limit(1).
+		One(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func findAutomationRunForAPI(app core.App, id string) (*core.AutomationRun, error) {
+	result := &core.AutomationRun{}
+
+	err := app.RecordQuery(core.CollectionNameAutomationRuns).
 		AndWhere(dbx.HashExp{"id": id}).
 		Limit(1).
 		One(result)
@@ -249,4 +455,12 @@ func automationSaveError(e *core.RequestEvent, action string, err error) error {
 	}
 
 	return e.BadRequestError("Failed to "+action+" automation. Raw error: \n"+err.Error(), nil)
+}
+
+func automationRunAPIError(e *core.RequestEvent, action string, err error) error {
+	if errors.Is(err, sql.ErrNoRows) {
+		return e.NotFoundError("Missing or invalid automation run.", err)
+	}
+
+	return e.BadRequestError("Failed to "+action+" automation run.", err)
 }

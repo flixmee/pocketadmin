@@ -1025,6 +1025,7 @@ button {
     font-size: var(--fontSize);
     line-height: var(--smLineHeight);
     min-height: var(--checkboxSize);
+    position: relative;
     &::before {
       content: "";
       display: block;

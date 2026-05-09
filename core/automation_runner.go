@@ -1,12 +1,14 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime/debug"
 	"strings"
 
 	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/tools/inflector"
 	"github.com/pocketbase/pocketbase/tools/routine"
 	"github.com/pocketbase/pocketbase/tools/types"
 )
@@ -15,10 +17,21 @@ type automationTriggerPayload struct {
 	TriggerType    string         `json:"triggerType"`
 	CollectionId   string         `json:"collectionId,omitempty"`
 	CollectionName string         `json:"collectionName,omitempty"`
+	Request        map[string]any `json:"request,omitempty"`
 	Record         map[string]any `json:"record,omitempty"`
 	RecordOriginal map[string]any `json:"recordOriginal,omitempty"`
 	triggerRecord  *Record        `json:"-"`
 	originalRecord *Record        `json:"-"`
+}
+
+// AutomationWebhookRequest defines the normalized inbound webhook request payload.
+type AutomationWebhookRequest struct {
+	Method   string            `json:"method"`
+	Path     string            `json:"path,omitempty"`
+	Query    map[string]string `json:"query,omitempty"`
+	Headers  map[string]string `json:"headers,omitempty"`
+	Body     any               `json:"body,omitempty"`
+	RemoteIP string            `json:"remoteIP,omitempty"`
 }
 
 type automationStepResult struct {
@@ -100,6 +113,44 @@ func (app *BaseApp) RunAutomationManually(automationID string) error {
 
 	return runAutomation(app, automation, automationTriggerPayload{
 		TriggerType: AutomationTriggerManual,
+	})
+}
+
+// RunAutomationFromRun reruns the specified stored automation run using its saved trigger payload.
+func (app *BaseApp) RunAutomationFromRun(runID string) error {
+	run, err := app.FindAutomationRunById(runID)
+	if err != nil {
+		return err
+	}
+
+	automation, err := app.FindAutomationById(run.AutomationRef())
+	if err != nil {
+		return err
+	}
+
+	payload, err := decodeAutomationRunPayload(run)
+	if err != nil {
+		return err
+	}
+
+	return runAutomation(app, automation, payload)
+}
+
+// RunAutomationWebhook runs the specified active automation using the webhook trigger type.
+func (app *BaseApp) RunAutomationWebhook(automationID string, request *AutomationWebhookRequest) error {
+	registry, err := getAutomationRegistry(app)
+	if err != nil {
+		return err
+	}
+
+	automation := registry.ByID[automationID]
+	if automation == nil || automation.TriggerType() != AutomationTriggerWebhook {
+		return fmt.Errorf("missing active webhook automation %q", automationID)
+	}
+
+	return runAutomation(app, automation, automationTriggerPayload{
+		TriggerType: AutomationTriggerWebhook,
+		Request:     automationWebhookRequestData(request),
 	})
 }
 
@@ -286,8 +337,80 @@ func newAutomationTriggerPayload(triggerType string, record *Record, original *R
 	return payload
 }
 
+func decodeAutomationRunPayload(run *AutomationRun) (automationTriggerPayload, error) {
+	if run == nil {
+		return automationTriggerPayload{}, errors.New("missing automation run")
+	}
+
+	raw := strings.TrimSpace(run.Input().String())
+	if raw == "" {
+		return automationTriggerPayload{}, fmt.Errorf("automation run %q is missing input payload", run.Id)
+	}
+
+	payload := automationTriggerPayload{}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return automationTriggerPayload{}, fmt.Errorf("failed to decode automation run %q payload: %w", run.Id, err)
+	}
+
+	if strings.TrimSpace(payload.TriggerType) == "" {
+		payload.TriggerType = run.TriggerType()
+	}
+
+	return payload, nil
+}
+
 func shouldSkipAutomationTriggerCollection(collectionName string) bool {
 	return collectionName == CollectionNameAutomations || collectionName == CollectionNameAutomationRuns
+}
+
+func automationWebhookRequestData(request *AutomationWebhookRequest) map[string]any {
+	if request == nil {
+		return nil
+	}
+
+	data := map[string]any{}
+
+	if method := strings.TrimSpace(request.Method); method != "" {
+		data["method"] = method
+	}
+	if path := strings.TrimSpace(request.Path); path != "" {
+		data["path"] = path
+	}
+	if remoteIP := strings.TrimSpace(request.RemoteIP); remoteIP != "" {
+		data["remoteIP"] = remoteIP
+	}
+	if len(request.Query) > 0 {
+		data["query"] = stringMapToAnyMap(request.Query)
+	}
+	if len(request.Headers) > 0 {
+		headers := make(map[string]any, len(request.Headers))
+		for key, value := range request.Headers {
+			headers[inflector.Snakecase(key)] = value
+		}
+		data["headers"] = headers
+	}
+	if request.Body != nil {
+		data["body"] = request.Body
+	}
+
+	if len(data) == 0 {
+		return nil
+	}
+
+	return data
+}
+
+func stringMapToAnyMap(values map[string]string) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+
+	result := make(map[string]any, len(values))
+	for key, value := range values {
+		result[key] = value
+	}
+
+	return result
 }
 
 func toJSONRaw(value any) (types.JSONRaw, error) {

@@ -37,7 +37,7 @@ export function pageAutomationsSettings() {
                 ),
                 t.p(
                     { className: "txt-sm txt-hint m-b-sm" },
-                    "Manage superuser automations, toggle them on or off, and manually trigger runs. ",
+                    "Manage superuser automations, toggle them on or off, trigger manual runs, and expose webhook endpoints. ",
                     "The editor now uses structured step forms for supported triggers and actions.",
                 ),
                 automationsList({

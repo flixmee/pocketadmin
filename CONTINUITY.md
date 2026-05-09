@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Extend automations with a `mail.send` step.
-- Success: superusers can configure a send-mail step in the automation editor, the runner can send mail through the existing app mailer, and record-triggered automations can attach files from the source record.
+- Add a per-run replay action to recent automation runs so superusers can rerun a specific saved trigger item, not just start a generic manual run.
+- Success: each recent run row exposes a replay control, the backend reruns from the saved run input payload, the replay preserves the original trigger context (for example webhook request data), and the recent-runs list refreshes after success.
 
 Constraints/Assumptions:
 
@@ -19,6 +19,7 @@ Key decisions:
 - Phase 3 HTTP execution uses a guarded outbound client by default, with an app-store override seam for deterministic tests.
 - Phase 4 should use a dedicated superuser-only `/api/automations` subgroup rather than overloading the generic records API for system collections.
 - Manual runs should be allowed from the API even for inactive automations, so the API uses a direct core manual-run seam rather than the active-only registry lookup.
+- Per-run replay should execute the current automation definition against the saved run input payload, rather than forcing the trigger type to `manual`.
 - Phase 5 should improve observability without introducing a separate job system or changing the linear execution model.
 - Phase 5 stores per-step timing in `stepResults`, records a failed-step index on terminal failures, logs runner panics through `app.Logger()`, and keeps the MVP failure policy as stop-on-first-error with manual rerun only.
 - Phase 6 should live under `ui/src/settings/*`, reuse the existing settings sidebar/page shell, and avoid jumping straight to a full workflow builder.
@@ -31,9 +32,19 @@ Key decisions:
 - The mail step should reuse `App.NewMailClient()` and the existing mail settings sender metadata instead of introducing separate SMTP configuration under automations.
 - Record-backed mail attachments should resolve from file fields on the trigger record and stay within the existing record/filesystem model.
 - Mail-step attachments are intentionally stored as trigger-record file field names, not arbitrary file templates, so validation can confirm the selected fields exist and are file fields.
+- New condition string operators should follow the existing stop-on-no-match behavior rather than introducing a separate boolean result model.
+- Webhook support should be a real trigger, not a UI-only enum, so it needs a dedicated inbound API endpoint plus runtime/template wiring.
+- Webhook request data should be exposed to templates under `request.*` while preserving the existing `trigger.*`, `record.*`, `recordOriginal.*`, `automation.*`, and `run.*` roots.
 
 State:
   - Done:
+    - Confirmed the original footer-level `Run again` button was the wrong behavior for the clarified request because it only triggered a generic manual run.
+    - Confirmed `AutomationRun.input` stores enough exported trigger payload data to support replaying a specific saved run.
+    - Added a core replay seam and API route for rerunning a specific automation run from its stored payload.
+    - Reworked the recent-runs UI toward row-level replay controls instead of a modal-level generic rerun action.
+    - Verified the replay path with `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationRunReplayUsesStoredWebhookPayload'`.
+    - Verified the API route with `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomationRunRerun'`.
+    - Verified the UI with `cd ui && npm run build`; `dprint` still reported the existing cache write warning outside the workspace, but Vite completed successfully.
     - Read the previous ledger, `AUTOMATION_PLAN.md`, and relevant backend/UI files.
     - Confirmed available seams: record hooks, app cron scheduler, settings pages, collection persistence, transaction completion callbacks.
     - Confirmed there is no existing workflow-builder UI infrastructure or graph library in `ui/package.json`.
@@ -95,10 +106,22 @@ State:
     - `cd ui && npm run build` passed after the `renderStepForm` scope fix; `dprint` still reported the same sandbox cache write warning outside the workspace, but formatting and the Vite build completed successfully.
     - Updated `AUTOMATION_PLAN.md` to reflect shipped automation work instead of only the original proposal state.
     - The plan doc now includes a current-status snapshot, marks Phases 1 through 8 as done, adds `mail.send` to scope/phase details/testing, and moves remaining work into follow-up decisions.
+    - Added new condition operators in the backend: `startsWith`, `endsWith`, `notStartsWith`, `notEndsWith`, and `contains`.
+    - Extended condition validation to accept the new operators and updated the condition-step UI selector labels accordingly.
+    - Added targeted automation runner tests covering successful string matches and stop-on-mismatch behavior for the new operators.
+    - `go test ./core -run 'Automation|BaseApp'` passed after the condition-operator changes.
+    - `cd ui && npm run build` passed after the condition-step UI update; `dprint` still reported the same sandbox cache write warning outside the workspace, but the Vite build completed successfully.
+    - Added the `webhook` automation trigger constant, validation support, and a new core `RunAutomationWebhook()` seam that records normalized inbound request data in automation run inputs.
+    - Added a public `POST /api/automation-webhooks/{id}` endpoint for active webhook automations and passed request method/path/query/headers/body into the `request.*` template root.
+    - Updated the automation UI to expose the `Webhook` trigger type, show/copy the generated webhook endpoint, and label webhook runs correctly in the list and preview modals.
+    - Added focused webhook coverage in `core/automation_runner_test.go`, `core/automation_model_test.go`, and `apis/automation_test.go`.
+    - `go test ./core -run 'Automation|BaseApp'` passed after the webhook trigger changes.
+    - `go test ./apis -run 'Automation'` passed after moving the public webhook endpoint to `/api/automation-webhooks/{id}` to avoid router conflicts.
+    - `cd ui && npm run build` passed after the webhook UI changes; `dprint` still reported the same sandbox cache write warning outside the workspace, but the Vite build completed successfully.
   - Now:
-    - The automation plan document is aligned with the implementation state in the repo.
+    - This request is implemented and verified.
   - Next:
-    - Decide whether follow-up mail features are needed, such as custom headers, sender overrides, inline attachments, or richer attachment sourcing rules.
+    - No additional follow-up is required for this request.
 
 Open questions (UNCONFIRMED if needed):
 
@@ -148,7 +171,10 @@ Working set (files/ids/commands):
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/recordStepForm.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunsList.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunPreviewModal.js`
+- `POST /api/automations/{id}/runs/{runId}/rerun`
+- `cd ui && npm run build`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_mail.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/mailStepForm.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/conditionStepForm.js`
 - `go test ./core -run 'Automation|BaseApp'`
 - `cd ui && npm run build`

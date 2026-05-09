@@ -122,7 +122,7 @@ func validateAutomationTemplateRoots(value any) error {
 		}
 
 		switch root {
-		case "trigger", "record", "recordOriginal", "automation", "run":
+		case "trigger", "request", "record", "recordOriginal", "automation", "run":
 			continue
 		default:
 			return fmt.Errorf("unsupported automation template root %q", root)
@@ -187,4 +187,39 @@ func automationValueIn(actual any, expected any) bool {
 	}
 
 	return false
+}
+
+func automationValueStartsWith(actual any, expected any) bool {
+	left, right, ok := automationComparableStrings(actual, expected)
+	if !ok {
+		return false
+	}
+
+	return strings.HasPrefix(left, right)
+}
+
+func automationValueEndsWith(actual any, expected any) bool {
+	left, right, ok := automationComparableStrings(actual, expected)
+	if !ok {
+		return false
+	}
+
+	return strings.HasSuffix(left, right)
+}
+
+func automationValueContains(actual any, expected any) bool {
+	left, right, ok := automationComparableStrings(actual, expected)
+	if !ok {
+		return false
+	}
+
+	return strings.Contains(left, right)
+}
+
+func automationComparableStrings(actual any, expected any) (string, string, bool) {
+	if actual == nil || expected == nil {
+		return "", "", false
+	}
+
+	return fmt.Sprint(actual), fmt.Sprint(expected), true
 }

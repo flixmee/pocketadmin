@@ -582,6 +582,12 @@ type App interface {
 	// RunAutomationManually runs the specified automation using the manual trigger type.
 	RunAutomationManually(automationID string) error
 
+	// RunAutomationFromRun reruns the specified stored automation run using its saved trigger payload.
+	RunAutomationFromRun(runID string) error
+
+	// RunAutomationWebhook runs the specified active webhook automation.
+	RunAutomationWebhook(automationID string, request *AutomationWebhookRequest) error
+
 	// ---------------------------------------------------------------
 
 	// RecordQuery returns a new Record select query from a collection model, id or name.

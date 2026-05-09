@@ -3,6 +3,7 @@ import { openAutomationUpsertModal } from "./automationUpsertModal";
 
 const triggerLabels = {
     "manual": "Manual",
+    "webhook": "Webhook",
     "schedule.cron": "Scheduled cron",
     "record.create": "Record create",
     "record.update": "Record update",
@@ -164,7 +165,7 @@ export function automationsList(propsArg = {}) {
                 },
                 t.div(
                     { className: "content block txt-hint" },
-                    "No automations defined yet. Create one to start wiring record, cron, or manual workflows.",
+                    "No automations defined yet. Create one to start wiring record, webhook, cron, or manual workflows.",
                 ),
             ),
             () => {
@@ -346,6 +347,10 @@ export function automationsList(propsArg = {}) {
 function describeAutomationScope(automation) {
     if (automation.triggerType === "schedule.cron") {
         return automation.cronExpr || "Missing cron";
+    }
+
+    if (automation.triggerType === "webhook") {
+        return automation.id ? `POST /api/automation-webhooks/${automation.id}` : "Missing webhook endpoint";
     }
 
     if (

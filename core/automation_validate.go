@@ -17,6 +17,7 @@ var (
 		AutomationTriggerRecordUpdate,
 		AutomationTriggerRecordDelete,
 		AutomationTriggerScheduleCron,
+		AutomationTriggerWebhook,
 		AutomationTriggerManual,
 	}
 	automationStepTypes = []string{
@@ -277,6 +278,11 @@ func validateAutomationConditionStep(step map[string]any) error {
 		automationConditionOpNeq,
 		automationConditionOpIn,
 		automationConditionOpExists,
+		automationConditionOpStartsWith,
+		automationConditionOpEndsWith,
+		automationConditionOpNotStartsWith,
+		automationConditionOpNotEndsWith,
+		automationConditionOpContains,
 	)); err != nil {
 		return err
 	}

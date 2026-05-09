@@ -29,6 +29,7 @@ function automationRunsModal(automation, settings) {
         isLoading: false,
         isLoadingMore: false,
         isRefreshing: false,
+        isReplaying: {},
         hasLoaded: false,
         runs: [],
         offset: 0,
@@ -77,6 +78,37 @@ function automationRunsModal(automation, settings) {
         data.isRefreshing = false;
     }
 
+    async function rerunAutomationRun(run) {
+        if (!automation?.id || !run?.id || data.isReplaying[run.id]) {
+            return;
+        }
+
+        data.isReplaying[run.id] = true;
+
+        try {
+            await app.pb.send(`/api/automations/${automation.id}/runs/${run.id}/rerun`, {
+                method: "POST",
+            });
+
+            app.toasts.success(`Queued replay for run "${run.id}".`);
+            await loadRuns(true);
+        } catch (err) {
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+            }
+        }
+
+        delete data.isReplaying[run.id];
+    }
+
+    function hasReplayInFlight() {
+        return Object.keys(data.isReplaying || {}).length > 0;
+    }
+
+    function isRunBusy(run) {
+        return data.isLoading || data.isLoadingMore || !!data.isReplaying[run?.id];
+    }
+
     modal = t.div(
         {
             pbEvent: "automationRunsModal",
@@ -103,7 +135,7 @@ function automationRunsModal(automation, settings) {
                 {
                     type: "button",
                     className: () => `btn sm circle transparent m-l-auto ${data.isRefreshing ? "loading" : ""}`,
-                    disabled: () => data.isLoading || data.isLoadingMore,
+                    disabled: () => data.isLoading || data.isLoadingMore || hasReplayInFlight(),
                     ariaLabel: app.attrs.tooltip("Refresh"),
                     onclick: () => loadRuns(true),
                 },
@@ -186,7 +218,21 @@ function automationRunsModal(automation, settings) {
                                 t.button(
                                     {
                                         type: "button",
+                                        className: () =>
+                                            `btn sm circle secondary transparent ${
+                                                data.isReplaying[run.id] ? "loading" : ""
+                                            }`,
+                                        disabled: () => isRunBusy(run),
+                                        ariaLabel: app.attrs.tooltip("Run this trigger again"),
+                                        onclick: () => rerunAutomationRun(run),
+                                    },
+                                    t.i({ className: "ri-repeat-line", ariaHidden: true }),
+                                ),
+                                t.button(
+                                    {
+                                        type: "button",
                                         className: "btn sm circle secondary transparent",
+                                        disabled: () => isRunBusy(run),
                                         ariaLabel: app.attrs.tooltip("View run details"),
                                         onclick: () => openAutomationRunPreviewModal(run),
                                     },
@@ -212,7 +258,7 @@ function automationRunsModal(automation, settings) {
                     type: "button",
                     className: () => `btn secondary ${data.isLoadingMore ? "loading" : ""}`,
                     hidden: () => !data.hasMore,
-                    disabled: () => data.isLoading || data.isLoadingMore,
+                    disabled: () => data.isLoading || data.isLoadingMore || hasReplayInFlight(),
                     onclick: () => loadRuns(false),
                 },
                 t.span({ className: "txt" }, "Load more"),
@@ -227,6 +273,8 @@ function formatTriggerType(triggerType) {
     switch (triggerType) {
         case "manual":
             return "Manual";
+        case "webhook":
+            return "Webhook";
         case "schedule.cron":
             return "Scheduled cron";
         case "record.create":
