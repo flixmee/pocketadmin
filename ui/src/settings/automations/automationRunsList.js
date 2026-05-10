@@ -29,6 +29,7 @@ function automationRunsModal(automation, settings) {
         isLoading: false,
         isLoadingMore: false,
         isRefreshing: false,
+        isClearing: false,
         isReplaying: {},
         hasLoaded: false,
         runs: [],
@@ -101,12 +102,51 @@ function automationRunsModal(automation, settings) {
         delete data.isReplaying[run.id];
     }
 
+    async function clearAutomationRuns() {
+        if (!automation?.id || data.isClearing || data.runs.length === 0) {
+            return;
+        }
+
+        data.isClearing = true;
+
+        try {
+            await app.pb.send(`/api/automations/${automation.id}/runs`, {
+                method: "DELETE",
+            });
+
+            app.toasts.success(`Cleared runs for "${automation.name || "Automation"}".`);
+            data.runs = [];
+            data.offset = 0;
+            data.hasMore = false;
+            data.hasLoaded = true;
+        } catch (err) {
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+            }
+        }
+
+        data.isClearing = false;
+    }
+
+    function confirmClearAutomationRuns() {
+        app.modals.confirm(
+            `Do you really want to clear all recorded runs for "${automation.name || "Automation"}"?`,
+            () => clearAutomationRuns(),
+            null,
+            { yesButton: "Clear", noButton: "Cancel" },
+        );
+    }
+
     function hasReplayInFlight() {
         return Object.keys(data.isReplaying || {}).length > 0;
     }
 
+    function hasBusyAction() {
+        return data.isLoading || data.isLoadingMore || data.isClearing || hasReplayInFlight();
+    }
+
     function isRunBusy(run) {
-        return data.isLoading || data.isLoadingMore || !!data.isReplaying[run?.id];
+        return data.isLoading || data.isLoadingMore || data.isClearing || !!data.isReplaying[run?.id];
     }
 
     modal = t.div(
@@ -135,7 +175,7 @@ function automationRunsModal(automation, settings) {
                 {
                     type: "button",
                     className: () => `btn sm circle transparent m-l-auto ${data.isRefreshing ? "loading" : ""}`,
-                    disabled: () => data.isLoading || data.isLoadingMore || hasReplayInFlight(),
+                    disabled: () => hasBusyAction(),
                     ariaLabel: app.attrs.tooltip("Refresh"),
                     onclick: () => loadRuns(true),
                 },
@@ -249,6 +289,7 @@ function automationRunsModal(automation, settings) {
                 {
                     type: "button",
                     className: "btn transparent m-r-auto",
+                    disabled: () => data.isClearing,
                     onclick: () => app.modals.close(modal),
                 },
                 t.span({ className: "txt" }, "Close"),
@@ -256,9 +297,20 @@ function automationRunsModal(automation, settings) {
             t.button(
                 {
                     type: "button",
+                    className: () => `btn danger ${data.isClearing ? "loading" : ""}`,
+                    hidden: () => !data.hasLoaded || data.runs.length === 0,
+                    disabled: () => hasBusyAction(),
+                    onclick: () => confirmClearAutomationRuns(),
+                },
+                t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                t.span({ className: "txt" }, "Clear"),
+            ),
+            t.button(
+                {
+                    type: "button",
                     className: () => `btn secondary ${data.isLoadingMore ? "loading" : ""}`,
                     hidden: () => !data.hasMore,
-                    disabled: () => data.isLoading || data.isLoadingMore || hasReplayInFlight(),
+                    disabled: () => hasBusyAction(),
                     onclick: () => loadRuns(false),
                 },
                 t.span({ className: "txt" }, "Load more"),

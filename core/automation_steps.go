@@ -25,13 +25,14 @@ const (
 )
 
 type automationExecutionContext struct {
-	App            App
-	Automation     *Automation
-	Run            *AutomationRun
-	Payload        automationTriggerPayload
-	TriggerRecord  *Record
-	OriginalRecord *Record
-	TemplateData   map[string]any
+	App             App
+	Automation      *Automation
+	Run             *AutomationRun
+	Payload         automationTriggerPayload
+	TriggerRecord   *Record
+	OriginalRecord  *Record
+	TemplateData    map[string]any
+	WebhookResponse *AutomationWebhookResponse
 }
 
 func newAutomationExecutionContext(app App, automation *Automation, run *AutomationRun, payload automationTriggerPayload) *automationExecutionContext {
@@ -54,50 +55,91 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 			"recordOriginal": payload.RecordOriginal,
 			"automation":     automationTemplateRecordData(automation.Record),
 			"run":            automationTemplateRecordData(run.Record),
+			"steps":          []any{},
 		},
 	}
 }
 
-func executeAutomationStep(ctx *automationExecutionContext, step map[string]any) (string, error) {
+func (ctx *automationExecutionContext) appendStepTemplateResult(result automationStepResult) {
+	entry := map[string]any{
+		"index":      result.Index,
+		"type":       result.Type,
+		"status":     result.Status,
+		"started":    result.Started,
+		"finished":   result.Finished,
+		"durationMs": result.DurationMs,
+	}
+	if result.Output != nil {
+		entry["output"] = result.Output
+	}
+	if result.Error != "" {
+		entry["error"] = result.Error
+	}
+
+	steps, _ := ctx.TemplateData["steps"].([]any)
+	steps = append(steps, entry)
+	ctx.TemplateData["steps"] = steps
+	ctx.TemplateData["prevStep"] = entry
+}
+
+func executeAutomationStep(ctx *automationExecutionContext, step map[string]any) (string, any, error) {
 	stepType := strings.TrimSpace(toString(step["type"]))
 
 	switch stepType {
 	case AutomationStepCondition:
 		return executeAutomationConditionStep(ctx, step)
 	case AutomationStepHTTP:
-		return automationStepStatusSuccess, executeAutomationHTTPStep(ctx, step)
+		output, err := executeAutomationHTTPStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	case AutomationStepMailSend:
-		return automationStepStatusSuccess, executeAutomationMailStep(ctx, step)
+		output, err := executeAutomationMailStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	case AutomationStepRecordCreate:
-		return automationStepStatusSuccess, executeAutomationRecordCreateStep(ctx, step)
+		output, err := executeAutomationRecordCreateStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	case AutomationStepRecordUpdate:
-		return automationStepStatusSuccess, executeAutomationRecordUpdateStep(ctx, step)
+		output, err := executeAutomationRecordUpdateStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	case AutomationStepRecordDelete:
-		return automationStepStatusSuccess, executeAutomationRecordDeleteStep(ctx, step)
+		output, err := executeAutomationRecordDeleteStep(ctx, step)
+		return automationStepStatusSuccess, output, err
+	case AutomationStepResponse:
+		output, err := executeAutomationResponseStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	default:
-		return automationStepStatusFailed, fmt.Errorf("unsupported automation step type %q", stepType)
+		return automationStepStatusFailed, nil, fmt.Errorf("unsupported automation step type %q", stepType)
 	}
 }
 
-func executeAutomationConditionStep(ctx *automationExecutionContext, step map[string]any) (string, error) {
+func executeAutomationConditionStep(ctx *automationExecutionContext, step map[string]any) (string, any, error) {
 	path := strings.TrimSpace(toString(step["path"]))
 	if path == "" {
 		path = strings.TrimSpace(toString(step["field"]))
 	}
 	if path == "" {
-		return automationStepStatusFailed, fmt.Errorf("condition step is missing path")
+		return automationStepStatusFailed, nil, fmt.Errorf("condition step is missing path")
 	}
 
 	op := strings.TrimSpace(toString(step["op"]))
 	actual, found := resolveAutomationTemplatePath(ctx.TemplateData, path)
+	output := map[string]any{
+		"path":  path,
+		"op":    op,
+		"found": found,
+	}
+	if found {
+		output["actual"] = actual
+	}
 
 	switch op {
 	case automationConditionOpExists:
 		if found && !isNilAutomationValue(actual) {
-			return automationStepStatusSuccess, nil
+			output["matched"] = true
+			return automationStepStatusSuccess, output, nil
 		}
 
-		return automationStepStatusStopped, nil
+		output["matched"] = false
+		return automationStepStatusStopped, output, nil
 	case automationConditionOpEq,
 		automationConditionOpNeq,
 		automationConditionOpIn,
@@ -107,13 +149,15 @@ func executeAutomationConditionStep(ctx *automationExecutionContext, step map[st
 		automationConditionOpNotEndsWith,
 		automationConditionOpContains:
 		if !found {
-			return automationStepStatusStopped, nil
+			output["matched"] = false
+			return automationStepStatusStopped, output, nil
 		}
 
 		expected, err := renderAutomationTemplateValue(step["value"], ctx.TemplateData)
 		if err != nil {
-			return automationStepStatusFailed, err
+			return automationStepStatusFailed, output, err
 		}
+		output["expected"] = expected
 
 		matched := false
 		switch op {
@@ -134,14 +178,15 @@ func executeAutomationConditionStep(ctx *automationExecutionContext, step map[st
 		case automationConditionOpContains:
 			matched = automationValueContains(actual, expected)
 		}
+		output["matched"] = matched
 
 		if matched {
-			return automationStepStatusSuccess, nil
+			return automationStepStatusSuccess, output, nil
 		}
 
-		return automationStepStatusStopped, nil
+		return automationStepStatusStopped, output, nil
 	default:
-		return automationStepStatusFailed, fmt.Errorf("unsupported condition operator %q", op)
+		return automationStepStatusFailed, output, fmt.Errorf("unsupported condition operator %q", op)
 	}
 }
 

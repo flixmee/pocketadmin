@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"runtime/debug"
 	"strings"
 
@@ -34,10 +35,18 @@ type AutomationWebhookRequest struct {
 	RemoteIP string            `json:"remoteIP,omitempty"`
 }
 
+// AutomationWebhookResponse defines the response returned to the webhook caller.
+type AutomationWebhookResponse struct {
+	StatusCode int               `json:"statusCode"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	Body       any               `json:"body,omitempty"`
+}
+
 type automationStepResult struct {
 	Index      int            `json:"index"`
 	Type       string         `json:"type"`
 	Status     string         `json:"status"`
+	Output     any            `json:"output,omitempty"`
 	Error      string         `json:"error,omitempty"`
 	Started    types.DateTime `json:"started"`
 	Finished   types.DateTime `json:"finished"`
@@ -137,26 +146,39 @@ func (app *BaseApp) RunAutomationFromRun(runID string) error {
 }
 
 // RunAutomationWebhook runs the specified active automation using the webhook trigger type.
-func (app *BaseApp) RunAutomationWebhook(automationID string, request *AutomationWebhookRequest) error {
+func (app *BaseApp) RunAutomationWebhook(automationID string, request *AutomationWebhookRequest) (*AutomationWebhookResponse, error) {
 	registry, err := getAutomationRegistry(app)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	automation := registry.ByID[automationID]
 	if automation == nil || automation.TriggerType() != AutomationTriggerWebhook {
-		return fmt.Errorf("missing active webhook automation %q", automationID)
+		return nil, fmt.Errorf("missing active webhook automation %q", automationID)
 	}
 
-	return runAutomation(app, automation, automationTriggerPayload{
+	ctx, err := runAutomationWithContext(app, automation, automationTriggerPayload{
 		TriggerType: AutomationTriggerWebhook,
 		Request:     automationWebhookRequestData(request),
 	})
+	if err != nil {
+		return nil, err
+	}
+	if ctx != nil && ctx.WebhookResponse != nil {
+		return ctx.WebhookResponse, nil
+	}
+
+	return &AutomationWebhookResponse{StatusCode: http.StatusNoContent}, nil
 }
 
 func runAutomation(app App, automation *Automation, payload automationTriggerPayload) (err error) {
+	_, err = runAutomationWithContext(app, automation, payload)
+	return err
+}
+
+func runAutomationWithContext(app App, automation *Automation, payload automationTriggerPayload) (ctx *automationExecutionContext, err error) {
 	if automation == nil {
-		return errors.New("missing automation")
+		return nil, errors.New("missing automation")
 	}
 
 	var run *AutomationRun
@@ -189,7 +211,7 @@ func runAutomation(app App, automation *Automation, payload automationTriggerPay
 
 	inputRaw, err := toJSONRaw(payload)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	run = NewAutomationRun(app)
@@ -200,20 +222,21 @@ func runAutomation(app App, automation *Automation, payload automationTriggerPay
 	run.ClearErrorStepIndex()
 
 	if err := app.Save(run); err != nil {
-		return err
+		return nil, err
 	}
 
 	run.SetStatus(AutomationRunStatusRunning)
 	if err := app.Save(run); err != nil {
-		return err
+		return nil, err
 	}
 
-	stepResults, err = executeAutomationSteps(newAutomationExecutionContext(app, automation, run, payload))
+	ctx = newAutomationExecutionContext(app, automation, run, payload)
+	stepResults, err = executeAutomationSteps(ctx)
 	if finishErr := finalizeAutomationRun(app, automation, run, stepResults, err); finishErr != nil {
-		return finishErr
+		return ctx, finishErr
 	}
 
-	return err
+	return ctx, err
 }
 
 func finalizeAutomationRun(app App, automation *Automation, run *AutomationRun, stepResults []automationStepResult, execErr error) error {
@@ -277,12 +300,13 @@ func executeAutomationSteps(ctx *automationExecutionContext) ([]automationStepRe
 	for i, step := range steps {
 		stepType := strings.TrimSpace(toString(step["type"]))
 		started := types.NowDateTime()
-		status, err := executeAutomationStep(ctx, step)
+		status, output, err := executeAutomationStep(ctx, step)
 		finished := types.NowDateTime()
 		result := automationStepResult{
 			Index:      i,
 			Type:       stepType,
 			Status:     status,
+			Output:     output,
 			Started:    started,
 			Finished:   finished,
 			DurationMs: finished.Sub(started).Milliseconds(),
@@ -296,6 +320,11 @@ func executeAutomationSteps(ctx *automationExecutionContext) ([]automationStepRe
 		}
 
 		results = append(results, result)
+		ctx.appendStepTemplateResult(result)
+
+		if stepType == AutomationStepResponse {
+			return results, nil
+		}
 
 		if status == automationStepStatusStopped {
 			return results, nil

@@ -254,7 +254,7 @@ function automationUpsertModal(automation, settings) {
                             }
 
                             return t.div(
-                                { className: "flex gap-10 flex-wrap" },
+                                { className: "flex gap-10 flex-wrap p-10" },
                                 t.code(null, webhookURL(automation.id)),
                                 app.components.copyButton(() => webhookURL(automation.id)),
                             );
@@ -270,7 +270,7 @@ function automationUpsertModal(automation, settings) {
                         t.code(null, "{{request.query.*}}"),
                         ", and ",
                         t.code(null, "{{request.body.*}}"),
-                        ".",
+                        ". Add a webhook response step to return custom status, headers, or body.",
                     ),
                 ),
                 t.div(
@@ -292,7 +292,7 @@ function automationUpsertModal(automation, settings) {
                 t.div(
                     { className: "col-lg-12" },
                     t.div(
-                        { className: "flex gap-10 m-b-sm" },
+                        { className: "m-b-sm" },
                         t.div({ className: "txt-bold" }, "Workflow steps"),
                         t.div(
                             { className: "txt-sm txt-hint" },
@@ -306,8 +306,12 @@ function automationUpsertModal(automation, settings) {
                             t.code(null, "{{recordOriginal.*}}"),
                             ", ",
                             t.code(null, "{{automation.*}}"),
-                            ", and ",
+                            ", ",
                             t.code(null, "{{run.*}}"),
+                            ", ",
+                            t.code(null, "{{steps[0].output.*}}"),
+                            ", and ",
+                            t.code(null, "{{prevStep.output.*}}"),
                             ".",
                         ),
                     ),

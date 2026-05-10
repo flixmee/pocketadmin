@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +13,8 @@ import (
 	"syscall"
 	"time"
 )
+
+const automationHTTPOutputBodyLimit = 64 * 1024
 
 type automationHTTPDoer interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -64,30 +67,30 @@ func newSafeAutomationHTTPClient() *http.Client {
 	}
 }
 
-func executeAutomationHTTPStep(ctx *automationExecutionContext, step map[string]any) error {
+func executeAutomationHTTPStep(ctx *automationExecutionContext, step map[string]any) (map[string]any, error) {
 	method := stringsToUpperDefault(toString(step["method"]), http.MethodGet)
 
 	renderedURL, err := renderAutomationTemplateString(toString(step["url"]), ctx.TemplateData)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	url, ok := renderedURL.(string)
 	if !ok || url == "" {
-		return fmt.Errorf("http step is missing a valid url")
+		return nil, fmt.Errorf("http step is missing a valid url")
 	}
 
 	parsedURL, err := neturl.Parse(url)
 	if err != nil {
-		return fmt.Errorf("invalid http step url: %w", err)
+		return nil, fmt.Errorf("invalid http step url: %w", err)
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return fmt.Errorf("http step url must use http or https")
+		return nil, fmt.Errorf("http step url must use http or https")
 	}
 
 	body, contentType, err := buildAutomationHTTPBody(ctx, step["body"])
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	reqCtx := context.Background()
@@ -100,13 +103,13 @@ func executeAutomationHTTPStep(ctx *automationExecutionContext, step map[string]
 
 	req, err := http.NewRequestWithContext(reqCtx, method, url, body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if headers, ok := step["headers"].(map[string]any); ok {
 		renderedHeaders, err := renderAutomationTemplateValue(headers, ctx.TemplateData)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		for key, value := range renderedHeaders.(map[string]any) {
@@ -120,22 +123,26 @@ func executeAutomationHTTPStep(ctx *automationExecutionContext, step map[string]
 
 	res, err := getAutomationHTTPDoer(ctx.App).Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer res.Body.Close()
 
+	responseBody, _ := io.ReadAll(io.LimitReader(res.Body, automationHTTPOutputBodyLimit))
 	if res.StatusCode < 200 || res.StatusCode > 399 {
-		body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
-		if len(body) > 0 {
-			return fmt.Errorf("http step request failed with status %d: %s", res.StatusCode, string(body))
+		if len(responseBody) > 0 {
+			return nil, fmt.Errorf("http step request failed with status %d: %s", res.StatusCode, string(responseBody))
 		}
 
-		return fmt.Errorf("http step request failed with status %d", res.StatusCode)
+		return nil, fmt.Errorf("http step request failed with status %d", res.StatusCode)
 	}
 
-	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
-
-	return nil
+	return map[string]any{
+		"status":     res.Status,
+		"statusCode": res.StatusCode,
+		"headers":    automationHTTPHeaderData(res.Header),
+		"body":       automationHTTPResponseBodyData(responseBody),
+		"bodyText":   string(responseBody),
+	}, nil
 }
 
 func buildAutomationHTTPBody(ctx *automationExecutionContext, raw any) (io.Reader, string, error) {
@@ -193,4 +200,38 @@ func stringsToUpperDefault(value string, fallback string) string {
 	}
 
 	return strings.ToUpper(value)
+}
+
+func automationHTTPHeaderData(headers http.Header) map[string]any {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	result := make(map[string]any, len(headers))
+	for key, values := range headers {
+		if len(values) == 1 {
+			result[key] = values[0]
+		} else {
+			items := make([]any, len(values))
+			for i, value := range values {
+				items[i] = value
+			}
+			result[key] = items
+		}
+	}
+
+	return result
+}
+
+func automationHTTPResponseBodyData(raw []byte) any {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err == nil {
+		return decoded
+	}
+
+	return string(raw)
 }

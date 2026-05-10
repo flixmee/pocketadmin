@@ -396,7 +396,7 @@ func TestAutomationWebhookRunExposesRequestTemplateData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := app.RunAutomationWebhook(automation.Id, &core.AutomationWebhookRequest{
+	_, err := app.RunAutomationWebhook(automation.Id, &core.AutomationWebhookRequest{
 		Method:   http.MethodPost,
 		Path:     "/api/automation-webhooks/" + automation.Id,
 		Query:    map[string]string{"tenant": "acme"},
@@ -476,7 +476,7 @@ func TestAutomationRunReplayUsesStoredWebhookPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := app.RunAutomationWebhook(automation.Id, &core.AutomationWebhookRequest{
+	if _, err := app.RunAutomationWebhook(automation.Id, &core.AutomationWebhookRequest{
 		Method:   http.MethodPost,
 		Path:     "/api/automation-webhooks/" + automation.Id,
 		Query:    map[string]string{"tenant": "acme"},
@@ -797,6 +797,116 @@ func TestAutomationRecordCreateStepUsesTriggerTemplates(t *testing.T) {
 	}
 	if createdRecord.GetString("text") != "copied_phase3_create_template" {
 		t.Fatalf("Expected created record text to match template, got %q", createdRecord.GetString("text"))
+	}
+}
+
+func TestAutomationTemplatesEvaluateJavaScriptExpressions(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	sourceCollection, err := app.FindCollectionByNameOrId("demo2")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerRecordCreate)
+	automation.SetCollectionRef(sourceCollection.Id)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"record.create",
+			"collection":"demo1",
+			"data":{"text":"prefix_{{ record.title.replace(\"a\", \"\") }}"}
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	sourceRecord := core.NewRecord(sourceCollection)
+	sourceRecord.Set("title", "banana")
+	if err := app.Save(sourceRecord); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q", runs[0].Status())
+	}
+
+	createdRecord, err := app.FindFirstRecordByData("demo1", "text", "prefix_bnana")
+	if err != nil {
+		t.Fatalf("Expected record.create step to persist JS template result: %v", err)
+	}
+	if createdRecord.GetString("text") != "prefix_bnana" {
+		t.Fatalf("Expected interpolated JS template result, got %q", createdRecord.GetString("text"))
+	}
+}
+
+func TestAutomationStepsExposePreviousOutputsToTemplates(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	sourceCollection, err := app.FindCollectionByNameOrId("demo2")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerRecordCreate)
+	automation.SetCollectionRef(sourceCollection.Id)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"record.create",
+			"collection":"demo1",
+			"data":{"text":"first_{{record.title}}"}
+		},
+		{
+			"type":"record.create",
+			"collection":"demo1",
+			"data":{"text":"second_{{steps[0].output.text}}_{{prevStep.output.id.length > 0}}"}
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	sourceRecord := core.NewRecord(sourceCollection)
+	sourceRecord.Set("title", "previous_output")
+	if err := app.Save(sourceRecord); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q", runs[0].Status())
+	}
+
+	createdRecord, err := app.FindFirstRecordByData("demo1", "text", "second_first_previous_output_true")
+	if err != nil {
+		t.Fatalf("Expected second record.create step to use previous step output: %v", err)
+	}
+	if createdRecord.GetString("text") != "second_first_previous_output_true" {
+		t.Fatalf("Expected chained template result, got %q", createdRecord.GetString("text"))
+	}
+
+	results := decodeStepResults(t, runs[0])
+	if len(results) != 2 {
+		t.Fatalf("Expected 2 step results, got %d", len(results))
+	}
+	output, ok := results[0]["output"].(map[string]any)
+	if !ok || output["text"] != "first_previous_output" {
+		t.Fatalf("Expected first step output to be recorded, got %v", results[0]["output"])
 	}
 }
 

@@ -5,50 +5,65 @@ import (
 	"strings"
 )
 
-func executeAutomationRecordCreateStep(ctx *automationExecutionContext, step map[string]any) error {
+func executeAutomationRecordCreateStep(ctx *automationExecutionContext, step map[string]any) (map[string]any, error) {
 	collection, err := automationStepCollection(ctx, step)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	record := NewRecord(collection)
 	data, err := renderAutomationStepData(ctx, step["data"])
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for key, value := range data {
 		record.Set(key, value)
 	}
 
-	return ctx.App.Save(record)
+	if err := ctx.App.Save(record); err != nil {
+		return nil, err
+	}
+
+	return automationTemplateRecordData(record), nil
 }
 
-func executeAutomationRecordUpdateStep(ctx *automationExecutionContext, step map[string]any) error {
+func executeAutomationRecordUpdateStep(ctx *automationExecutionContext, step map[string]any) (map[string]any, error) {
 	record, err := automationStepTargetRecord(ctx, step)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	data, err := renderAutomationStepData(ctx, step["data"])
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for key, value := range data {
 		record.Set(key, value)
 	}
 
-	return ctx.App.Save(record)
-}
-
-func executeAutomationRecordDeleteStep(ctx *automationExecutionContext, step map[string]any) error {
-	record, err := automationStepTargetRecord(ctx, step)
-	if err != nil {
-		return err
+	if err := ctx.App.Save(record); err != nil {
+		return nil, err
 	}
 
-	return ctx.App.Delete(record)
+	return automationTemplateRecordData(record), nil
+}
+
+func executeAutomationRecordDeleteStep(ctx *automationExecutionContext, step map[string]any) (map[string]any, error) {
+	record, err := automationStepTargetRecord(ctx, step)
+	if err != nil {
+		return nil, err
+	}
+
+	output := automationTemplateRecordData(record)
+	output["deleted"] = true
+
+	if err := ctx.App.Delete(record); err != nil {
+		return nil, err
+	}
+
+	return output, nil
 }
 
 func automationStepCollection(ctx *automationExecutionContext, step map[string]any) (*Collection, error) {

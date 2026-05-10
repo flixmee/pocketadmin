@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Update `sync_remote.sh` so syncing from the upstream PocketBase repo uses a normal Git merge instead of rebase.
-- Success: the script fetches `upstream`, switches to `develop` if needed, then merges `upstream/develop`.
+- Add a step response capability for webhook-triggered automations.
+- Success: webhook automations can include a response step that returns rendered status/headers/body to the caller, earlier step outputs can be used in that response, non-webhook behavior remains unchanged, and targeted backend/UI verification passes.
 
 Constraints/Assumptions:
 
@@ -38,6 +38,7 @@ Key decisions:
 
 State:
   - Done:
+    - Read the continuity ledger at the start of the turn and updated it for the JavaScript-template request.
     - Read the prior continuity ledger and inspected `sync_remote.sh`.
     - Updated `sync_remote.sh` to merge `upstream/develop` instead of rebasing onto it.
     - Verified shell syntax with `bash -n sync_remote.sh`.
@@ -121,8 +122,28 @@ State:
     - `go test ./core -run 'Automation|BaseApp'` passed after the webhook trigger changes.
     - `go test ./apis -run 'Automation'` passed after moving the public webhook endpoint to `/api/automation-webhooks/{id}` to avoid router conflicts.
     - `cd ui && npm run build` passed after the webhook UI changes; `dprint` still reported the same sandbox cache write warning outside the workspace, but the Vite build completed successfully.
+    - Updated `core/automation_templates.go` so automation `{{ }}` placeholders evaluate as goja JavaScript expressions.
+    - Preserved whole-template native value behavior and string interpolation behavior while reporting undefined/invalid expressions as template evaluation errors.
+    - Added a per-expression goja interrupt timeout so malformed templates cannot hang automation execution indefinitely.
+    - Added `TestAutomationTemplatesEvaluateJavaScriptExpressions` covering `record.title.replace("a", "")` in a record-create automation.
+    - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'Automation|BaseApp'` passed after the goja template change.
+    - Added previous-step output chaining for automation templates through `steps` and `prevStep` template roots.
+    - Persisted step `output` in automation run `stepResults` for record, HTTP, mail, and condition steps.
+    - Record step outputs expose the affected record data; HTTP step outputs expose status, headers, parsed JSON/text body; mail step outputs expose sent metadata; condition step outputs expose matched/actual/expected context.
+    - Updated automation UI helper text to mention `{{steps[0].output.*}}` and `{{prevStep.output.*}}`.
+    - Added `TestAutomationStepsExposePreviousOutputsToTemplates` covering a record-create step using the previous record-create output.
+    - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'Automation|BaseApp'` passed after previous-step output chaining.
+    - `cd ui && npm run build` passed after the UI helper update; `dprint` still reported the existing cache write warning outside the workspace, but Vite completed successfully.
+    - Added a webhook-only `response` automation step that renders status code, headers, and body from template data including prior step output.
+    - Changed public webhook execution to run synchronously and return the configured response step output; webhooks without a response step still return `204`.
+    - Added `AutomationWebhookResponse` to the core webhook runner contract and persisted response step output in run `stepResults`.
+    - Updated the automation editor with a `Webhook response` step form available for webhook triggers.
+    - Added API coverage for a webhook response step returning rendered status/header/body.
+    - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'Automation|BaseApp'` passed after the response-step changes.
+    - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'Automation'` passed after the response-step changes.
+    - `cd ui && npm run build` passed after the response-step UI; `dprint` still reported the existing cache write warning outside the workspace, but Vite completed successfully.
   - Now:
-    - This request is implemented and verified.
+    - Webhook response step is implemented and targeted backend/API/UI verification is complete.
   - Next:
     - No additional follow-up is required for this request.
 
@@ -134,6 +155,7 @@ Open questions (UNCONFIRMED if needed):
 
 Working set (files/ids/commands):
 
+- `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/sync_remote.sh`
 - `bash -n sync_remote.sh`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/AUTOMATION_PLAN.md`
@@ -151,6 +173,8 @@ Working set (files/ids/commands):
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_http.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_records.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_templates.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner_test.go`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'Automation|BaseApp'`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/app.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/base.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/events.go`
@@ -178,6 +202,10 @@ Working set (files/ids/commands):
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunPreviewModal.js`
 - `POST /api/automations/{id}/runs/{runId}/rerun`
 - `cd ui && npm run build`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunsList.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/automation.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/automation_test.go`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'Automation'`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_mail.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/mailStepForm.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/conditionStepForm.js`

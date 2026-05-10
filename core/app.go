@@ -586,7 +586,7 @@ type App interface {
 	RunAutomationFromRun(runID string) error
 
 	// RunAutomationWebhook runs the specified active webhook automation.
-	RunAutomationWebhook(automationID string, request *AutomationWebhookRequest) error
+	RunAutomationWebhook(automationID string, request *AutomationWebhookRequest) (*AutomationWebhookResponse, error)
 
 	// ---------------------------------------------------------------
 

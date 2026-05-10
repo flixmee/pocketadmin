@@ -10,51 +10,51 @@ import (
 	"github.com/pocketbase/pocketbase/tools/mailer"
 )
 
-func executeAutomationMailStep(ctx *automationExecutionContext, step map[string]any) error {
+func executeAutomationMailStep(ctx *automationExecutionContext, step map[string]any) (map[string]any, error) {
 	to, err := renderAutomationMailAddresses(ctx, step["to"], "to")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(to) == 0 {
-		return fmt.Errorf("mail step requires at least one recipient")
+		return nil, fmt.Errorf("mail step requires at least one recipient")
 	}
 
 	cc, err := renderAutomationMailAddresses(ctx, step["cc"], "cc")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	bcc, err := renderAutomationMailAddresses(ctx, step["bcc"], "bcc")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	subject, err := renderAutomationMailString(ctx, step["subject"])
 	if err != nil {
-		return err
+		return nil, err
 	}
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		return fmt.Errorf("mail step requires a subject")
+		return nil, fmt.Errorf("mail step requires a subject")
 	}
 
 	text, err := renderAutomationMailString(ctx, step["text"])
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	html, err := renderAutomationMailString(ctx, step["html"])
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if strings.TrimSpace(text) == "" && strings.TrimSpace(html) == "" {
-		return fmt.Errorf("mail step requires text or html content")
+		return nil, fmt.Errorf("mail step requires text or html content")
 	}
 
 	attachments, err := resolveAutomationMailAttachments(ctx, step["attachments"])
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	message := &mailer.Message{
@@ -71,7 +71,18 @@ func executeAutomationMailStep(ctx *automationExecutionContext, step map[string]
 		Attachments: attachments,
 	}
 
-	return ctx.App.NewMailClient().Send(message)
+	if err := ctx.App.NewMailClient().Send(message); err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"sent":            true,
+		"to":              automationMailAddressStrings(to),
+		"cc":              automationMailAddressStrings(cc),
+		"bcc":             automationMailAddressStrings(bcc),
+		"subject":         subject,
+		"attachmentCount": len(attachments),
+	}, nil
 }
 
 func renderAutomationMailAddresses(ctx *automationExecutionContext, raw any, fieldName string) ([]mail.Address, error) {
@@ -237,6 +248,19 @@ func splitAutomationStringValues(raw string) []string {
 		if field != "" {
 			result = append(result, field)
 		}
+	}
+
+	return result
+}
+
+func automationMailAddressStrings(addresses []mail.Address) []any {
+	if len(addresses) == 0 {
+		return nil
+	}
+
+	result := make([]any, len(addresses))
+	for i, address := range addresses {
+		result[i] = address.String()
 	}
 
 	return result

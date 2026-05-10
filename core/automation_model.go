@@ -23,6 +23,7 @@ const (
 	AutomationStepRecordCreate = "record.create"
 	AutomationStepRecordUpdate = "record.update"
 	AutomationStepRecordDelete = "record.delete"
+	AutomationStepResponse     = "response"
 )
 
 var (

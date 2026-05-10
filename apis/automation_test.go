@@ -463,6 +463,37 @@ func TestAutomationWebhook(t *testing.T) {
 			},
 			ExpectedStatus: 204,
 		},
+		{
+			Name:   "webhook response step",
+			Method: http.MethodPost,
+			URL:    "/api/automation-webhooks/autoapi00000055?tenant=acme",
+			Body:   strings.NewReader(`{"event":"invoice.paid"}`),
+			Headers: map[string]string{
+				"Content-Type":       "application/json",
+				"X-Automation-Event": "invoice.paid",
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				automation := createWebhookAutomationFixture(t, app, "autoapi00000055", "API webhook response automation")
+				automation.SetSteps(mustAutomationJSONRaw(t, `[
+					{"type":"condition","path":"request.headers.x_automation_event","op":"eq","value":"invoice.paid"},
+					{"type":"response","statusCode":202,"headers":{"X-Automation-Tenant":"{{request.query.tenant}}"},"body":{"ok":true,"event":"{{request.body.event}}","matched":"{{prevStep.output.matched}}"}}
+				]`))
+				if err := app.Save(automation); err != nil {
+					t.Fatalf("Failed to update webhook automation fixture: %v", err)
+				}
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				if res.Header.Get("X-Automation-Tenant") != "acme" {
+					t.Fatalf("Expected rendered response header, got %q", res.Header.Get("X-Automation-Tenant"))
+				}
+			},
+			ExpectedStatus: 202,
+			ExpectedContent: []string{
+				`"ok":true`,
+				`"event":"invoice.paid"`,
+				`"matched":true`,
+			},
+		},
 	}
 
 	for _, scenario := range scenarios {
@@ -552,6 +583,93 @@ func TestAutomationRunsList(t *testing.T) {
 			},
 			ExpectedStatus:  404,
 			ExpectedContent: []string{`"data":{}`},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
+func TestAutomationRunsClear(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:   "authorized as superuser",
+			Method: http.MethodDelete,
+			URL:    "/api/automations/autoapi00000009/runs",
+			Headers: map[string]string{
+				"Authorization": testSuperuserAuthHeader,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				automation := createAutomationFixture(t, app, "autoapi00000009", "API clear runs automation")
+				otherAutomation := createAutomationFixture(t, app, "autoapi00000010", "API keep runs automation")
+
+				if err := app.RunAutomationManually(automation.Id); err != nil {
+					t.Fatalf("Failed to create automation run fixture: %v", err)
+				}
+				if err := app.RunAutomationManually(otherAutomation.Id); err != nil {
+					t.Fatalf("Failed to create other automation run fixture: %v", err)
+				}
+				waitForAutomationRunsAPI(t, app, automation, 1)
+				waitForAutomationRunsAPI(t, app, otherAutomation, 1)
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				automation, err := app.FindAutomationById("autoapi00000009")
+				if err != nil {
+					t.Fatalf("Failed to reload automation fixture: %v", err)
+				}
+				runs, err := app.FindAllAutomationRunsByAutomation(automation)
+				if err != nil {
+					t.Fatalf("Failed to load automation runs: %v", err)
+				}
+				if len(runs) != 0 {
+					t.Fatalf("Expected cleared automation runs, got %d", len(runs))
+				}
+
+				otherAutomation, err := app.FindAutomationById("autoapi00000010")
+				if err != nil {
+					t.Fatalf("Failed to reload other automation fixture: %v", err)
+				}
+				otherRuns, err := app.FindAllAutomationRunsByAutomation(otherAutomation)
+				if err != nil {
+					t.Fatalf("Failed to load other automation runs: %v", err)
+				}
+				if len(otherRuns) != 1 {
+					t.Fatalf("Expected other automation runs to remain, got %d", len(otherRuns))
+				}
+			},
+			ExpectedStatus: 204,
+			ExpectedEvents: map[string]int{
+				"*":                          0,
+				"OnModelDelete":              1,
+				"OnModelDeleteExecute":       1,
+				"OnModelAfterDeleteSuccess":  1,
+				"OnRecordDelete":             1,
+				"OnRecordDeleteExecute":      1,
+				"OnRecordAfterDeleteSuccess": 1,
+			},
+		},
+		{
+			Name:   "missing automation",
+			Method: http.MethodDelete,
+			URL:    "/api/automations/missing/runs",
+			Headers: map[string]string{
+				"Authorization": testSuperuserAuthHeader,
+			},
+			ExpectedStatus:  404,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:           "unauthorized",
+			Method:         http.MethodDelete,
+			URL:            "/api/automations/autoapi00000009/runs",
+			ExpectedStatus: 401,
+			ExpectedContent: []string{
+				`"message":"The request requires valid record authorization token."`,
+			},
+			ExpectedEvents: map[string]int{"*": 0},
 		},
 	}
 

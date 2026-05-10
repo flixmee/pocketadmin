@@ -2,6 +2,7 @@ import { conditionStepForm } from "./conditionStepForm";
 import { httpStepForm } from "./httpStepForm";
 import { mailStepForm } from "./mailStepForm";
 import { recordStepForm } from "./recordStepForm";
+import { responseStepForm } from "./responseStepForm";
 
 const stepTypeOptions = [
     { value: "condition", label: "Condition" },
@@ -10,6 +11,7 @@ const stepTypeOptions = [
     { value: "record.create", label: "Create record" },
     { value: "record.update", label: "Update record" },
     { value: "record.delete", label: "Delete record" },
+    { value: "response", label: "Webhook response", triggerTypes: ["webhook"] },
 ];
 
 export function stepEditor(propsArg = {}) {
@@ -145,7 +147,7 @@ export function stepEditor(propsArg = {}) {
                                     app.components.select({
                                         id: `${step.__id}_type`,
                                         value: () => step.type,
-                                        options: stepTypeOptions,
+                                        options: () => stepTypeSelectOptions(props.triggerType, step.type),
                                         onchange: (selected) => {
                                             const nextType = selected?.[0]?.value || "condition";
                                             if (nextType !== step.type) {
@@ -187,7 +189,7 @@ export function stepEditor(propsArg = {}) {
                     t.div(
                         { className: "flex gap-5 flex-wrap" },
                         () =>
-                            stepTypeOptions.map((option) => {
+                            stepTypeAddOptions(props.triggerType).map((option) => {
                                 return t.button(
                                     {
                                         rid: option.value,
@@ -243,9 +245,25 @@ function renderStepForm(step, error, context = {}) {
         case "record.update":
         case "record.delete":
             return recordStepForm({ step, error });
+        case "response":
+            return responseStepForm({ step, error });
         default:
             return t.div({ className: "txt-sm txt-danger" }, `Unsupported step type "${step.type}".`);
     }
+}
+
+function stepTypeAddOptions(triggerType) {
+    return stepTypeOptions.filter((option) => !option.triggerTypes || option.triggerTypes.includes(triggerType));
+}
+
+function stepTypeSelectOptions(triggerType, selectedType) {
+    const options = stepTypeAddOptions(triggerType);
+    if (options.find((option) => option.value === selectedType)) {
+        return options;
+    }
+
+    const selected = stepTypeOptions.find((option) => option.value === selectedType);
+    return selected ? [selected, ...options] : options;
 }
 
 function createEditorStep(type, rawStep = {}) {
@@ -303,6 +321,15 @@ function createEditorStep(type, rawStep = {}) {
                 id: toString(rawStep.id),
                 filter: toString(rawStep.filter),
             };
+        case "response":
+            return {
+                ...base,
+                statusCodeText: rawStep.statusCode === undefined || rawStep.statusCode === null
+                    ? "200"
+                    : String(rawStep.statusCode),
+                headersText: stringifyJSONObject(rawStep.headers, "{}"),
+                bodyText: stringifyLooseValue(rawStep.body),
+            };
         default:
             return createEditorStep("condition", { __id: base.__id });
     }
@@ -322,6 +349,8 @@ function buildStepPayload(step, index) {
             return buildRecordUpdatePayload(step, index);
         case "record.delete":
             return buildRecordDeletePayload(step, index);
+        case "response":
+            return buildResponsePayload(step, index);
         default:
             throw new Error(`Step ${index + 1}: unsupported step type "${step.type}".`);
     }
@@ -501,6 +530,34 @@ function buildRecordDeletePayload(step, index) {
     return payload;
 }
 
+function buildResponsePayload(step, index) {
+    const payload = {
+        type: "response",
+    };
+
+    const statusCodeText = step.statusCodeText.trim();
+    if (statusCodeText) {
+        const statusCode = Number(statusCodeText);
+        if (!Number.isInteger(statusCode) || statusCode < 100 || statusCode > 599) {
+            throw new Error(`Step ${index + 1}: response status code must be an integer between 100 and 599.`);
+        }
+
+        payload.statusCode = statusCode;
+    }
+
+    const headersText = step.headersText.trim();
+    if (headersText) {
+        payload.headers = parseJSONObject(headersText, `Step ${index + 1}: response headers`);
+    }
+
+    const bodyText = step.bodyText.trim();
+    if (bodyText) {
+        payload.body = parseLooseValue(bodyText);
+    }
+
+    return payload;
+}
+
 function summarizeStep(step) {
     switch (step.type) {
         case "condition":
@@ -515,6 +572,8 @@ function summarizeStep(step) {
             return `Update record in ${step.collection || "collection"}`;
         case "record.delete":
             return `Delete record in ${step.collection || "collection"}`;
+        case "response":
+            return `Return webhook response ${step.statusCodeText || "200"}`;
         default:
             return step.type || "Step";
     }

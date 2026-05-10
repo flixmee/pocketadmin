@@ -41,6 +41,7 @@ func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 	subGroup.POST("/{id}/run", automationRun)
 	subGroup.POST("/{id}/runs/{runId}/rerun", automationRunRerun)
 	subGroup.GET("/{id}/runs", automationRunsList)
+	subGroup.DELETE("/{id}/runs", automationRunsClear)
 }
 
 func automationsList(e *core.RequestEvent) error {
@@ -186,17 +187,41 @@ func automationWebhook(e *core.RequestEvent) error {
 		return e.BadRequestError("Failed to load webhook request.", err)
 	}
 
-	routine.FireAndForget(func() {
-		if err := e.App.RunAutomationWebhook(automation.Id, request); err != nil {
-			e.App.Logger().Warn(
-				"Failed to execute automation webhook run",
-				"automationId", automation.Id,
-				"error", err,
-			)
-		}
-	})
+	response, err := e.App.RunAutomationWebhook(automation.Id, request)
+	if err != nil {
+		e.App.Logger().Warn(
+			"Failed to execute automation webhook run",
+			"automationId", automation.Id,
+			"error", err,
+		)
+		return e.BadRequestError("Failed to execute automation webhook.", err)
+	}
 
-	return e.NoContent(http.StatusNoContent)
+	return automationWebhookResponse(e, response)
+}
+
+func automationWebhookResponse(e *core.RequestEvent, response *core.AutomationWebhookResponse) error {
+	if response == nil {
+		return e.NoContent(http.StatusNoContent)
+	}
+
+	for key, value := range response.Headers {
+		e.Response.Header().Set(key, value)
+	}
+
+	statusCode := response.StatusCode
+	if statusCode == 0 {
+		statusCode = http.StatusNoContent
+	}
+	if response.Body == nil {
+		return e.NoContent(statusCode)
+	}
+
+	if text, ok := response.Body.(string); ok {
+		return e.String(statusCode, text)
+	}
+
+	return e.JSON(statusCode, response.Body)
 }
 
 func automationRunsList(e *core.RequestEvent) error {
@@ -229,6 +254,31 @@ func automationRunsList(e *core.RequestEvent) error {
 
 	return execAfterSuccessTx(true, e.App, func() error {
 		return e.JSON(http.StatusOK, runs)
+	})
+}
+
+func automationRunsClear(e *core.RequestEvent) error {
+	automation, err := findAutomationForAPI(e.App, e.Request.PathValue("id"))
+	if err != nil {
+		return automationAPIError(e, "clear runs", err)
+	}
+
+	runs := []*core.AutomationRun{}
+	err = e.App.RecordQuery(core.CollectionNameAutomationRuns).
+		AndWhere(dbx.HashExp{"automationRef": automation.Id}).
+		All(&runs)
+	if err != nil {
+		return e.BadRequestError("Failed to load automation runs.", err)
+	}
+
+	for _, run := range runs {
+		if err := e.App.Delete(run); err != nil {
+			return e.BadRequestError("Failed to clear automation runs.", err)
+		}
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.NoContent(http.StatusNoContent)
 	})
 }
 

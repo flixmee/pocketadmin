@@ -6,12 +6,18 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/dop251/goja"
 )
 
 var (
-	automationTemplatePattern      = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}`)
-	automationWholeTemplatePattern = regexp.MustCompile(`^\s*\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}\s*$`)
+	automationTemplatePattern      = regexp.MustCompile(`\{\{\s*(.*?)\s*\}\}`)
+	automationWholeTemplatePattern = regexp.MustCompile(`^\s*\{\{\s*(.*?)\s*\}\}\s*$`)
+	automationTemplateRootPattern  = regexp.MustCompile(`^[a-zA-Z_$][a-zA-Z0-9_$]*`)
 )
+
+const automationTemplateExpressionTimeout = 500 * time.Millisecond
 
 func renderAutomationTemplateValue(value any, ctx map[string]any) (any, error) {
 	switch v := value.(type) {
@@ -44,9 +50,9 @@ func renderAutomationTemplateValue(value any, ctx map[string]any) (any, error) {
 
 func renderAutomationTemplateString(value string, ctx map[string]any) (any, error) {
 	if matches := automationWholeTemplatePattern.FindStringSubmatch(value); len(matches) == 2 {
-		resolved, ok := resolveAutomationTemplatePath(ctx, matches[1])
-		if !ok {
-			return nil, fmt.Errorf("unknown automation template path %q", matches[1])
+		resolved, err := evalAutomationTemplateExpression(matches[1], ctx)
+		if err != nil {
+			return nil, err
 		}
 
 		return resolved, nil
@@ -63,9 +69,9 @@ func renderAutomationTemplateString(value string, ctx map[string]any) (any, erro
 			return match
 		}
 
-		resolved, ok := resolveAutomationTemplatePath(ctx, matches[1])
-		if !ok {
-			renderErr = fmt.Errorf("unknown automation template path %q", matches[1])
+		resolved, err := evalAutomationTemplateExpression(matches[1], ctx)
+		if err != nil {
+			renderErr = err
 			return ""
 		}
 
@@ -80,6 +86,35 @@ func renderAutomationTemplateString(value string, ctx map[string]any) (any, erro
 	}
 
 	return result, nil
+}
+
+func evalAutomationTemplateExpression(expression string, ctx map[string]any) (any, error) {
+	expression = strings.TrimSpace(expression)
+	if expression == "" {
+		return nil, fmt.Errorf("empty automation template expression")
+	}
+
+	vm := goja.New()
+	for key, value := range ctx {
+		if err := vm.Set(key, value); err != nil {
+			return nil, fmt.Errorf("failed to initialize automation template root %q: %w", key, err)
+		}
+	}
+
+	timeout := time.AfterFunc(automationTemplateExpressionTimeout, func() {
+		vm.Interrupt("automation template expression timed out")
+	})
+	defer timeout.Stop()
+
+	result, err := vm.RunString(expression)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate automation template expression %q: %w", expression, err)
+	}
+	if goja.IsUndefined(result) {
+		return nil, fmt.Errorf("automation template expression %q resolved to undefined", expression)
+	}
+
+	return result.Export(), nil
 }
 
 func resolveAutomationTemplatePath(ctx map[string]any, path string) (any, bool) {
@@ -116,13 +151,12 @@ func resolveAutomationTemplatePath(ctx map[string]any, path string) (any, bool) 
 func validateAutomationTemplateRoots(value any) error {
 	placeholders := collectAutomationTemplatePlaceholders(value)
 	for _, placeholder := range placeholders {
-		root := placeholder
-		if idx := strings.Index(root, "."); idx >= 0 {
-			root = root[:idx]
-		}
+		root := automationTemplateRootPattern.FindString(strings.TrimSpace(placeholder))
 
 		switch root {
-		case "trigger", "request", "record", "recordOriginal", "automation", "run":
+		case "trigger", "request", "record", "recordOriginal", "automation", "run", "steps", "prevStep":
+			continue
+		case "", "Array", "Boolean", "Date", "JSON", "Math", "Number", "Object", "RegExp", "String", "parseFloat", "parseInt":
 			continue
 		default:
 			return fmt.Errorf("unsupported automation template root %q", root)

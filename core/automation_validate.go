@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -27,6 +28,7 @@ var (
 		AutomationStepRecordCreate,
 		AutomationStepRecordUpdate,
 		AutomationStepRecordDelete,
+		AutomationStepResponse,
 	}
 	automationRunStatuses = []string{
 		AutomationRunStatusQueued,
@@ -258,6 +260,8 @@ func validateAutomationStepDefinition(app App, automationRecord *Record, step ma
 		return validateAutomationRecordUpdateStep(step)
 	case AutomationStepRecordDelete:
 		return validateAutomationRecordDeleteStep(step)
+	case AutomationStepResponse:
+		return validateAutomationResponseStep(automationRecord, step)
 	default:
 		return nil
 	}
@@ -413,6 +417,24 @@ func validateAutomationRecordDeleteStep(step map[string]any) error {
 
 	if strings.TrimSpace(toString(step["id"])) == "" && strings.TrimSpace(toString(step["filter"])) == "" {
 		return validation.NewError("validation_invalid_automation_record", "Record delete step requires either id or filter.")
+	}
+
+	return nil
+}
+
+func validateAutomationResponseStep(automationRecord *Record, step map[string]any) error {
+	if strings.TrimSpace(automationRecord.GetString("triggerType")) != AutomationTriggerWebhook {
+		return validation.NewError("validation_invalid_automation_response", "Response steps require a webhook trigger.")
+	}
+
+	if _, err := automationResponseStatusCode(step["statusCode"], http.StatusOK); err != nil {
+		return validation.NewError("validation_invalid_automation_response", err.Error())
+	}
+
+	if headers, ok := step["headers"]; ok {
+		if _, valid := headers.(map[string]any); !valid {
+			return validation.NewError("validation_invalid_automation_response", "Response step headers must be a JSON object.")
+		}
 	}
 
 	return nil
