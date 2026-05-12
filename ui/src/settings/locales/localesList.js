@@ -1,4 +1,4 @@
-const TWEMOJI_BASE_URL = "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/svg/";
+const TWEMOJI_BASE_URL = "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.0/svg/";
 
 const LANGUAGE_OPTIONS = [
     { code: "en", name: "English", country: "us" },

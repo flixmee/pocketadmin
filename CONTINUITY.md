@@ -28,6 +28,8 @@ State:
     - Added a searchable language picker backed by `app.components.select`, with common language presets and editable display name/code fields.
     - Added `ui/src/css/locales.css` and imported it from `_main.css`.
     - Ran `cd ui && npm run build`; build passed. dprint still emitted the existing cache write warning outside the workspace but formatted 1 file and Vite completed successfully.
+    - User asked to fix flag URLs to `https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.0/svg/`.
+    - Updated `TWEMOJI_BASE_URL` and rebuilt UI. Build passed; dprint still emitted the existing cache write warning outside the workspace.
   - Now:
     - Preparing final summary.
   - Next:
@@ -47,6 +49,6 @@ Working set (files/ids/commands):
 - `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/css/_main.css`
 - `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/css/locales.css`
 - `/Users/suytbily/dev/gits/harry/pocketadmin/ui/dist/index.html`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/dist/assets/index-B2ikKN29.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/dist/assets/index-CZrJxHf1.js`
 - `/Users/suytbily/dev/gits/harry/pocketadmin/ui/dist/assets/index-DIyOGyNl.css`
 - `cd ui && npm run build`
