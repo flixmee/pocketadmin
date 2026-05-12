@@ -367,13 +367,13 @@ type baseCollection struct {
 	// with the collection type specific option before save.
 	RawOptions types.JSONRaw `db:"options" json:"-" xml:"-" form:"-"`
 
-	Name    string                  `db:"name" json:"name" form:"name"`
-	CollectionGroup string         `db:"collectionGroup" json:"collectionGroup" form:"collectionGroup"`
-	Type    string                  `db:"type" json:"type" form:"type"`
-	Fields  FieldsList              `db:"fields" json:"fields" form:"fields"`
-	Indexes types.JSONArray[string] `db:"indexes" json:"indexes" form:"indexes"`
-	Created types.DateTime          `db:"created" json:"created"`
-	Updated types.DateTime          `db:"updated" json:"updated"`
+	Name            string                  `db:"name" json:"name" form:"name"`
+	CollectionGroup string                  `db:"collectionGroup" json:"collectionGroup" form:"collectionGroup"`
+	Type            string                  `db:"type" json:"type" form:"type"`
+	Fields          FieldsList              `db:"fields" json:"fields" form:"fields"`
+	Indexes         types.JSONArray[string] `db:"indexes" json:"indexes" form:"indexes"`
+	Created         types.DateTime          `db:"created" json:"created"`
+	Updated         types.DateTime          `db:"updated" json:"updated"`
 
 	// System prevents the collection rename, deletion and rules change.
 	// It is used primarily for internal purposes for collections like "_superusers", "_externalAuths", etc.
@@ -383,6 +383,7 @@ type baseCollection struct {
 // Collection defines the table, fields and various options related to a set of records.
 type Collection struct {
 	baseCollection
+	collectionBaseOptions
 	collectionAuthOptions
 	collectionViewOptions
 }
@@ -514,9 +515,9 @@ func (m *Collection) unmarshalRawOptions() error {
 		return json.Unmarshal(raw, &m.collectionViewOptions)
 	case CollectionTypeAuth:
 		return json.Unmarshal(raw, &m.collectionAuthOptions)
+	default:
+		return json.Unmarshal(raw, &m.collectionBaseOptions)
 	}
-
-	return nil
 }
 
 // UnmarshalJSON implements the [json.Unmarshaler] interface.
@@ -586,7 +587,10 @@ func (m Collection) MarshalJSON() ([]byte, error) {
 
 		return json.Marshal(alias)
 	default:
-		return json.Marshal(m.baseCollection)
+		return json.Marshal(struct {
+			baseCollection
+			collectionBaseOptions
+		}{m.baseCollection, m.collectionBaseOptions})
 	}
 }
 
@@ -625,6 +629,15 @@ func (m *Collection) DBExport(app App) (map[string]any, error) {
 		}
 	case CollectionTypeAuth:
 		if raw, err := types.ParseJSONRaw(m.collectionAuthOptions); err == nil {
+			result["options"] = raw
+		} else {
+			return nil, err
+		}
+	default:
+		if !m.I18n.Enabled {
+			break
+		}
+		if raw, err := types.ParseJSONRaw(m.collectionBaseOptions); err == nil {
 			result["options"] = raw
 		} else {
 			return nil, err
@@ -924,6 +937,7 @@ func (c *Collection) initDefaultFields() {
 	switch c.Type {
 	case CollectionTypeBase:
 		c.initIdField()
+		c.initI18nFields()
 	case CollectionTypeAuth:
 		c.initIdField()
 		c.initPasswordField()

@@ -27,6 +27,8 @@ import (
 func bindRecordCrudApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
 	subGroup := rg.Group("/collections/{collection}/records").Unbind(DefaultRateLimitMiddlewareId)
 	subGroup.GET("", recordsList)
+	subGroup.GET("/{id}/translations", recordTranslations)
+	subGroup.POST("/{id}/translations", recordTranslationCreate).Bind(dynamicCollectionBodyLimit(""))
 	subGroup.GET("/{id}", recordView)
 	subGroup.POST("", recordCreate(true, nil)).Bind(dynamicCollectionBodyLimit(""))
 	subGroup.PATCH("/{id}", recordUpdate(true, nil)).Bind(dynamicCollectionBodyLimit(""))
@@ -85,7 +87,12 @@ func recordsList(e *core.RequestEvent) error {
 	}
 
 	records := []*core.Record{}
-	result, err := searchProvider.ParseAndExec(e.Request.URL.Query().Encode(), &records)
+	listParams, err := applyI18nListQuery(e.App, collection, query, e.Request.URL.Query())
+	if err != nil {
+		return e.BadRequestError("Invalid locale query params.", err)
+	}
+
+	result, err := searchProvider.ParseAndExec(listParams.Encode(), &records)
 	if err != nil {
 		return firstApiError(err, e.BadRequestError("", err))
 	}

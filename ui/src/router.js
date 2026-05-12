@@ -6,6 +6,7 @@ import { pageApplicationSettings } from "@/settings/application/pageApplicationS
 import { pageAutomationsSettings } from "@/settings/automations/pageAutomationsSettings";
 import { pageBackupsSettings } from "@/settings/backups/pageBackupsSettings";
 import { pageCronsSettings } from "@/settings/crons/pageCronsSettings";
+import { pageLocalesSettings } from "@/settings/locales/pageLocalesSettings";
 import { pageMailSettings } from "@/settings/mail/pageMailSettings";
 import { pageStorageSettings } from "@/settings/storage/pageStorageSettings";
 import { pageExportCollections } from "@/settings/sync/pageExportCollections";
@@ -172,5 +173,6 @@ app.routes.superuserOnly("#/settings/storage", pageStorageSettings);
 app.routes.superuserOnly("#/settings/backups", pageBackupsSettings);
 app.routes.superuserOnly("#/settings/crons", pageCronsSettings);
 app.routes.superuserOnly("#/settings/automations", pageAutomationsSettings);
+app.routes.superuserOnly("#/settings/locales", pageLocalesSettings);
 app.routes.superuserOnly("#/settings/export-collections", pageExportCollections);
 app.routes.superuserOnly("#/settings/import-collections", pageImportCollections);

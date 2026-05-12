@@ -112,6 +112,11 @@ window.app.store = store({
                 icon: "ri-git-branch-line",
                 label: "Automations",
             },
+            {
+                href: "#/settings/locales",
+                icon: "ri-translate-2",
+                label: "Locales",
+            },
         ],
         Sync: [
             {

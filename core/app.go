@@ -590,6 +590,38 @@ type App interface {
 
 	// ---------------------------------------------------------------
 
+	// FindLocaleByCode returns a single locale by code.
+	FindLocaleByCode(code string) (*Locale, error)
+
+	// FindAllLocales returns all configured locales.
+	FindAllLocales() ([]*Locale, error)
+
+	// FindEnabledLocales returns all enabled locales.
+	FindEnabledLocales() ([]*Locale, error)
+
+	// DefaultLocaleCode returns the configured default locale code.
+	DefaultLocaleCode() string
+
+	// FindI18nGroupById returns a single i18n group by id.
+	FindI18nGroupById(id string) (*I18nGroup, error)
+
+	// PrepareI18nRecord initializes i18n system fields for a new localized record.
+	PrepareI18nRecord(record *Record) error
+
+	// ValidateI18nRecord validates i18n system field consistency.
+	ValidateI18nRecord(record *Record) error
+
+	// CleanupI18nGroup removes empty i18n groups after translation deletion.
+	CleanupI18nGroup(record *Record) error
+
+	// EnsureDefaultLocale creates a default locale if none exists.
+	EnsureDefaultLocale() error
+
+	// BackfillI18nCollectionRecords initializes i18n fields for existing rows when localization is enabled.
+	BackfillI18nCollectionRecords(newCollection *Collection, oldCollection *Collection) error
+
+	// ---------------------------------------------------------------
+
 	// RecordQuery returns a new Record select query from a collection model, id or name.
 	//
 	// In case a collection id or name is provided and that collection doesn't

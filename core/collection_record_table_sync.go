@@ -132,6 +132,10 @@ func (app *BaseApp) SyncRecordTableSchema(newCollection *Collection, oldCollecti
 			return err
 		}
 
+		if err := txApp.BackfillI18nCollectionRecords(newCollection, oldCollection); err != nil {
+			return err
+		}
+
 		if needIndexesUpdate {
 			return createCollectionIndexes(txApp, newCollection)
 		}

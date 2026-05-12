@@ -66,6 +66,10 @@ function recordUpsertModal(collection, rawRecord, modalSettings) {
         originalRecord: {},
         record: {},
         initialDraft: null,
+        locales: [],
+        translations: [],
+        isLoadingTranslations: false,
+        isCreatingTranslation: false,
         activeTab: TAB_MAIN,
         get isNew() {
             return app.utils.isEmpty(data.originalRecord?.id);
@@ -84,6 +88,9 @@ function recordUpsertModal(collection, rawRecord, modalSettings) {
 
             if (data.isAuthCollection) {
                 result.push("email", "emailVisibility", "verified", "password", "tokenKey");
+            }
+            if (collection.i18n?.enabled) {
+                result.push("i18n_group_id", "locale", "is_source");
             }
 
             return result;
@@ -260,6 +267,8 @@ function recordUpsertModal(collection, rawRecord, modalSettings) {
             setTimeout(() => {
                 initDraftWatcher();
             }, 0);
+
+            loadTranslations();
         } catch (err) {
             if (!err?.isAbort) {
                 app.checkApiError(err);
@@ -408,6 +417,138 @@ function recordUpsertModal(collection, rawRecord, modalSettings) {
         modalSettings.onduplicate?.(clone);
 
         initRecord(clone);
+    }
+
+    async function loadTranslations() {
+        if (!collection.i18n?.enabled || !data.originalRecord?.id) {
+            data.locales = [];
+            data.translations = [];
+            return;
+        }
+
+        data.isLoadingTranslations = true;
+
+        try {
+            const [locales, translations] = await Promise.all([
+                app.pb.send("/api/locales", {
+                    requestKey: "record_locales_" + collection.id,
+                }),
+                app.pb.send(`/api/collections/${collection.name}/records/${data.originalRecord.id}/translations`, {
+                    requestKey: "record_translations_" + data.originalRecord.id,
+                }),
+            ]);
+            data.locales = locales;
+            data.translations = translations;
+        } catch (err) {
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+            }
+        }
+
+        data.isLoadingTranslations = false;
+    }
+
+    function translationForLocale(localeCode) {
+        return (data.translations || []).find((item) => item.locale == localeCode);
+    }
+
+    async function switchLocale(localeCode) {
+        if (!localeCode || data.isLoading || data.isSaving || data.isCreatingTranslation) {
+            return;
+        }
+        if (localeCode == data.record.locale) {
+            return;
+        }
+        if (data.hasChanges) {
+            app.modals.confirm(
+                "You have unsaved changes. Do you really want to discard them?",
+                () => switchLocaleAfterConfirm(localeCode),
+                null,
+                { yesButton: "Yes, discard" },
+            );
+            return;
+        }
+
+        return switchLocaleAfterConfirm(localeCode);
+    }
+
+    async function switchLocaleAfterConfirm(localeCode) {
+        const translation = translationForLocale(localeCode);
+        if (translation?.id) {
+            deleteDraft();
+            await initRecord({ id: translation.id });
+            return;
+        }
+
+        await createTranslation(localeCode);
+    }
+
+    async function createTranslation(localeCode) {
+        if (!data.originalRecord?.id || data.isCreatingTranslation) {
+            return;
+        }
+
+        data.isCreatingTranslation = true;
+
+        try {
+            const record = await app.pb.send(
+                `/api/collections/${collection.name}/records/${data.originalRecord.id}/translations`,
+                {
+                    method: "POST",
+                    body: { locale: localeCode },
+                },
+            );
+            app.toasts.success(`Created ${localeCode} translation.`);
+            deleteDraft();
+            await initRecord(record);
+        } catch (err) {
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+                app.toasts.error(err.message || "Failed to create translation.");
+            }
+        }
+
+        data.isCreatingTranslation = false;
+    }
+
+    function localeSwitcher() {
+        if (!collection.i18n?.enabled || data.isNew) {
+            return;
+        }
+
+        return t.div(
+            { className: "col-12" },
+            t.nav(
+                { className: "tabs-header" },
+                () => {
+                    return (data.locales || []).filter((locale) => locale.enabled).map((locale) => {
+                        const translation = translationForLocale(locale.code);
+                        const active = locale.code == data.record.locale;
+
+                        return t.button(
+                            {
+                                type: "button",
+                                disabled: () => data.isLoadingTranslations || data.isCreatingTranslation,
+                                className: () =>
+                                    `tab-item ${active ? "active" : ""} ${translation?.is_missing ? "txt-hint" : ""}`,
+                                onclick: () => switchLocale(locale.code),
+                            },
+                            t.span({ className: "txt" }, locale.code.toUpperCase()),
+                            () => {
+                                if (!translation?.is_missing) {
+                                    return;
+                                }
+
+                                return t.i({
+                                    className: "ri-add-line m-l-5",
+                                    ariaDescription: app.attrs.tooltip("Missing translation. Click to create."),
+                                });
+                            },
+                        );
+                    });
+                },
+            ),
+        );
     }
 
     function mainTab() {
@@ -805,6 +946,12 @@ function recordUpsertModal(collection, rawRecord, modalSettings) {
                         ];
                     },
                 ),
+                () => {
+                    const switcher = localeSwitcher();
+                    if (switcher) {
+                        return switcher;
+                    }
+                },
                 () => {
                     if (!data.showTabs) {
                         return;

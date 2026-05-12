@@ -1,213 +1,82 @@
 Goal (incl. success criteria):
 
-- Add a step response capability for webhook-triggered automations.
-- Success: webhook automations can include a response step that returns rendered status/headers/body to the caller, earlier step outputs can be used in that response, non-webhook behavior remains unchanged, and targeted backend/UI verification passes.
+- Fix localized collection enablement/update failing with `UNIQUE constraint failed: posts.i18n_group_id, posts.locale` when existing records receive blank i18n system fields before the unique index is created.
+- Success: enabling i18n on a collection with existing records backfills each existing record with its own i18n group/default locale/source marker before the unique `(i18n_group_id, locale)` index is created, and targeted regression tests pass.
 
 Constraints/Assumptions:
 
-- Use the existing PocketBase app/hooks/cron architecture rather than introducing a separate workflow runtime.
-- Prefer a backend-first MVP with a form/list editor; no drag-and-drop graph editor in the first delivery phase.
-- Keep the plan aligned with current admin UI conventions under `ui/src/settings/*`.
-- Keep outbound HTTP execution guarded; do not use an unrestricted default HTTP client for automation requests.
+- Use separate localized records linked by an i18n group, matching the architecture already drafted in `LOCALES_PLAN.md`.
+- Keep Go/backend and admin UI work isolated by phase unless a phase explicitly spans both.
+- Follow existing PocketBase collection metadata/index/migration patterns instead of introducing an external workflow/runtime.
+- UI work must follow admin UI conventions from `AGENTS.md`; no native HTML `<select>` elements.
+- `go.mod` declares Go 1.25.0.
 
 Key decisions:
 
-- The original draft is too generic for this repo and assumes unsafe trigger execution from inside DB hooks.
-- Automation triggers should be dispatched only after successful transaction completion, using transaction completion callbacks rather than raw goroutines from inside hook bodies.
-- Workflow definitions should be persisted in dedicated internal storage and edited through a superuser settings page.
-- Phase 3 should keep the existing in-process runner and extend it with linear step executors rather than introducing a new workflow runtime abstraction.
-- Phase 3 HTTP execution uses a guarded outbound client by default, with an app-store override seam for deterministic tests.
-- Phase 4 should use a dedicated superuser-only `/api/automations` subgroup rather than overloading the generic records API for system collections.
-- Manual runs should be allowed from the API even for inactive automations, so the API uses a direct core manual-run seam rather than the active-only registry lookup.
-- Per-run replay should execute the current automation definition against the saved run input payload, rather than forcing the trigger type to `manual`.
-- Phase 5 should improve observability without introducing a separate job system or changing the linear execution model.
-- Phase 5 stores per-step timing in `stepResults`, records a failed-step index on terminal failures, logs runner panics through `app.Logger()`, and keeps the MVP failure policy as stop-on-first-error with manual rerun only.
-- Phase 6 should live under `ui/src/settings/*`, reuse the existing settings sidebar/page shell, and avoid jumping straight to a full workflow builder.
-- Phase 6 create/edit can use a minimal JSON-based modal for `steps`; the richer form/step builder remains Phase 7.
-- The Phase 6 list includes create/edit, enable/disable, run-now, and delete actions; recent runs remain a later dedicated UI slice.
-- Phase 7 should replace the raw steps JSON editor with structured forms for `condition`, `http`, and `record.*` steps while keeping step-row UI state local to the modal/editor layer.
-- Phase 7 uses editor-local step objects plus save-time payload conversion so structural edits replace the step array only on add/remove/reorder, while field edits mutate the local step rows in place.
-- Phase 8 should reuse the existing `/api/automations/{id}/runs` endpoint, add navigation from both the automations list and editor, and use read-only UI primitives for payload/result inspection.
-- Phase 8 uses modal-based recent-runs and run-preview views instead of a new route, keeping runs inspection within the existing settings workflow.
-- The mail step should reuse `App.NewMailClient()` and the existing mail settings sender metadata instead of introducing separate SMTP configuration under automations.
-- Record-backed mail attachments should resolve from file fields on the trigger record and stay within the existing record/filesystem model.
-- Mail-step attachments are intentionally stored as trigger-record file field names, not arbitrary file templates, so validation can confirm the selected fields exist and are file fields.
-- New condition string operators should follow the existing stop-on-no-match behavior rather than introducing a separate boolean result model.
-- Webhook support should be a real trigger, not a UI-only enum, so it needs a dedicated inbound API endpoint plus runtime/template wiring.
-- Webhook request data should be exposed to templates under `request.*` while preserving the existing `trigger.*`, `record.*`, `recordOriginal.*`, `automation.*`, and `run.*` roots.
+- Treat AI translation, bulk translation, advanced SEO/domain routing, and enterprise workflow features as post-MVP follow-ups.
+- Plan an internal backend foundation before adding admin UI controls so record/query behavior is testable independently.
+- Locale-aware record querying should start as explicit query/API behavior and only later be surfaced through SDK helpers.
 
 State:
   - Done:
-    - Read the continuity ledger at the start of the turn and updated it for the JavaScript-template request.
-    - Read the prior continuity ledger and inspected `sync_remote.sh`.
-    - Updated `sync_remote.sh` to merge `upstream/develop` instead of rebasing onto it.
-    - Verified shell syntax with `bash -n sync_remote.sh`.
-    - Confirmed the original footer-level `Run again` button was the wrong behavior for the clarified request because it only triggered a generic manual run.
-    - Confirmed `AutomationRun.input` stores enough exported trigger payload data to support replaying a specific saved run.
-    - Added a core replay seam and API route for rerunning a specific automation run from its stored payload.
-    - Reworked the recent-runs UI toward row-level replay controls instead of a modal-level generic rerun action.
-    - Verified the replay path with `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationRunReplayUsesStoredWebhookPayload'`.
-    - Verified the API route with `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomationRunRerun'`.
-    - Verified the UI with `cd ui && npm run build`; `dprint` still reported the existing cache write warning outside the workspace, but Vite completed successfully.
-    - Read the previous ledger, `AUTOMATION_PLAN.md`, and relevant backend/UI files.
-    - Confirmed available seams: record hooks, app cron scheduler, settings pages, collection persistence, transaction completion callbacks.
-    - Confirmed there is no existing workflow-builder UI infrastructure or graph library in `ui/package.json`.
-    - Rewrote `AUTOMATION_PLAN.md` into a phased implementation plan with explicit MVP scope, storage model, backend phases, UI phases, testing, and risks.
-    - Added system migration `1775000000_automations.go` for `_automations` and `_automationRuns`.
-    - Added `core/automation_model.go`, `core/automation_run_model.go`, and `core/automation_validate.go`.
-    - Wired automation validation hooks into `core/base.go`.
-    - Added focused tests in `core/automation_model_test.go`.
-    - `go test ./core -run 'Automation|BaseApp'` passed.
-    - Added `core/automation_query.go`, `core/automation_registry.go`, `core/automation_runner.go`, and `core/automation_runner_test.go`.
-    - Bootstrapped and cached active automation registry in app store; synced scheduled automations into app cron jobs.
-    - Bound record create/update/delete success hooks to enqueue matching automation runs asynchronously.
-    - Implemented run logging into `_automationRuns` and automation `lastRunAt` / `lastRunStatus` updates.
-    - Added Phase 3 backend execution files: `core/automation_steps.go`, `core/automation_templates.go`, `core/automation_http.go`, and `core/automation_records.go`.
-    - Replaced placeholder step execution with real handlers for `condition`, `http`, `record.create`, `record.update`, and `record.delete`.
-    - Added recursive template rendering for supported roots: `trigger`, `record`, `recordOriginal`, `automation`, and `run`.
-    - Expanded automation validation with per-step schema checks and unsupported-template-root detection.
-    - Extended targeted tests to cover stopped conditions, HTTP execution, templated record creation, record update/delete actions, and the stricter validation cases.
-    - `go test ./core -run 'Automation|BaseApp'` passed after Phase 3 backend changes.
-    - Added `apis/automation.go` and registered the superuser-only `/api/automations` routes in `apis/base.go`.
-    - Added Phase 4 endpoints for list/create/view/update/delete/manual-run/run-history.
-    - Added `RunAutomationManually` to the `core.App` interface and implemented it on `BaseApp` so manual API runs can execute inactive automations too.
-    - Added `apis/automation_test.go` covering authorization, CRUD, manual run dispatch, and run history.
-    - `go test ./apis -run 'Automation'` passed.
-    - `go test ./core -run 'Automation|BaseApp'` passed after the Phase 4 API changes.
-    - Added `_automationRuns.errorStepIndex` via `1775000001_automation_run_observability.go` and included it in the base automation migration for fresh installs.
-    - Extended `AutomationRun` with failed-step helpers and settled on an internal unset sentinel for `errorStepIndex` because numeric fields cannot persist `nil`.
-    - Extended the runner to capture per-step `started` / `finished` / `durationMs`, persist failed-step index on terminal failures, and recover/log panics with stack traces through `app.Logger()`.
-    - Added recent-run query support in `core/automation_query.go` and `limit` / `offset` support for `GET /api/automations/{id}/runs`.
-    - Expanded core/API automation tests for failed-step observability and recent-run API querying.
-    - `go test ./core -run 'Automation|BaseApp'` passed after the Phase 5 observability changes.
-    - `go test ./apis -run 'Automation'` passed after the Phase 5 observability changes.
-    - Added the `#/settings/automations` route and settings sidebar navigation entry.
-    - Added `ui/src/settings/automations/pageAutomationsSettings.js` and `automationsList.js` for the new automations settings page and management list.
-    - Added `ui/src/settings/automations/automationUpsertModal.js` with a minimal trigger-aware create/edit modal and raw `steps` JSON editor.
-    - `cd ui && npm run build` passed; `dprint` reported a sandbox cache write warning outside the workspace but formatting and the Vite build still completed successfully.
-    - Replaced the raw `steps` JSON editor in `automationUpsertModal.js` with a structured step editor.
-    - Added `ui/src/settings/automations/stepEditor.js`, `conditionStepForm.js`, `httpStepForm.js`, and `recordStepForm.js`.
-    - Added save-time conversion from editor step objects back into API payloads with local validation for JSON objects, record targeting, and HTTP timeout/value parsing.
-    - Updated the Automations settings page copy to reflect the structured editor.
-    - `cd ui && npm run build` passed after the Phase 7 editor changes; `dprint` still reported the same sandbox cache write warning outside the workspace, but formatting and the Vite build completed successfully.
-    - Fixed a Phase 7 regression where `addStep` in `stepEditor` appeared broken because `automationUpsertModal` passed `steps` as a static array instead of a reactive getter; the modal now passes `steps: () => data.form.steps`.
-    - `cd ui && npm run build` passed after the `addStep` reactive-prop fix.
-    - Updated `recordStepForm.js` so record create/update steps prefill `Data JSON` from the selected collection fields when the data block is still empty or auto-generated.
-    - The record-step default JSON builder skips hidden, primary-key, and `autodate` fields and uses the existing field-type `dummyData` conventions for example values.
-    - `cd ui && npm run build` passed after the collection-based record-step default data change.
-    - Added `ui/src/settings/automations/automationRunsList.js` for recent runs loading, refresh, pagination, and run-summary rows backed by `/api/automations/{id}/runs`.
-    - Added/imported `ui/src/settings/automations/automationRunPreviewModal.js` as an explicit module export and used it for read-only run inspection with payload JSON, step-result summaries, and raw step-result JSON.
-    - Wired recent-runs entry points from both `automationsList.js` and `automationUpsertModal.js`.
-    - `cd ui && npm run build` passed after the Phase 8 runs/history UI changes; `dprint` still reported the same sandbox cache write warning outside the workspace, but formatting and the Vite build completed successfully.
-    - Added the backend `mail.send` automation step in `core/automation_mail.go`, wired it into step execution, and added validation for recipients, subject/body, and record-file attachments.
-    - Extended automation step types with `mail.send` and added targeted core tests for validation plus successful mail delivery with trigger-record attachments.
-    - Added `ui/src/settings/automations/mailStepForm.js` and wired it into `stepEditor.js` and `automationUpsertModal.js`.
-    - The structured editor now supports send-mail configuration with default-sender display, recipient fields, text/HTML body fields, and attachment checkboxes sourced from file fields on the selected trigger collection.
-    - `go test ./core -run 'Automation|BaseApp'` passed after the mail-step changes when rerun with access to the system Go build cache.
-    - `cd ui && npm run build` passed after the mail-step UI changes; `dprint` still reported the same sandbox cache write warning outside the workspace, but the Vite build completed successfully.
-    - Fixed a UI regression in `ui/src/settings/automations/stepEditor.js` where file-scoped `renderStepForm()` referenced `props` from `stepEditor()`, causing the new mail-step branch to crash because `props` was undefined.
-    - `renderStepForm()` now receives explicit trigger context from `stepEditor()` instead of closing over out-of-scope state.
-    - `cd ui && npm run build` passed after the `renderStepForm` scope fix; `dprint` still reported the same sandbox cache write warning outside the workspace, but formatting and the Vite build completed successfully.
-    - Updated `AUTOMATION_PLAN.md` to reflect shipped automation work instead of only the original proposal state.
-    - The plan doc now includes a current-status snapshot, marks Phases 1 through 8 as done, adds `mail.send` to scope/phase details/testing, and moves remaining work into follow-up decisions.
-    - Added new condition operators in the backend: `startsWith`, `endsWith`, `notStartsWith`, `notEndsWith`, and `contains`.
-    - Extended condition validation to accept the new operators and updated the condition-step UI selector labels accordingly.
-    - Added targeted automation runner tests covering successful string matches and stop-on-mismatch behavior for the new operators.
-    - `go test ./core -run 'Automation|BaseApp'` passed after the condition-operator changes.
-    - `cd ui && npm run build` passed after the condition-step UI update; `dprint` still reported the same sandbox cache write warning outside the workspace, but the Vite build completed successfully.
-    - Added the `webhook` automation trigger constant, validation support, and a new core `RunAutomationWebhook()` seam that records normalized inbound request data in automation run inputs.
-    - Added a public `POST /api/automation-webhooks/{id}` endpoint for active webhook automations and passed request method/path/query/headers/body into the `request.*` template root.
-    - Updated the automation UI to expose the `Webhook` trigger type, show/copy the generated webhook endpoint, and label webhook runs correctly in the list and preview modals.
-    - Added focused webhook coverage in `core/automation_runner_test.go`, `core/automation_model_test.go`, and `apis/automation_test.go`.
-    - `go test ./core -run 'Automation|BaseApp'` passed after the webhook trigger changes.
-    - `go test ./apis -run 'Automation'` passed after moving the public webhook endpoint to `/api/automation-webhooks/{id}` to avoid router conflicts.
-    - `cd ui && npm run build` passed after the webhook UI changes; `dprint` still reported the same sandbox cache write warning outside the workspace, but the Vite build completed successfully.
-    - Updated `core/automation_templates.go` so automation `{{ }}` placeholders evaluate as goja JavaScript expressions.
-    - Preserved whole-template native value behavior and string interpolation behavior while reporting undefined/invalid expressions as template evaluation errors.
-    - Added a per-expression goja interrupt timeout so malformed templates cannot hang automation execution indefinitely.
-    - Added `TestAutomationTemplatesEvaluateJavaScriptExpressions` covering `record.title.replace("a", "")` in a record-create automation.
-    - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'Automation|BaseApp'` passed after the goja template change.
-    - Added previous-step output chaining for automation templates through `steps` and `prevStep` template roots.
-    - Persisted step `output` in automation run `stepResults` for record, HTTP, mail, and condition steps.
-    - Record step outputs expose the affected record data; HTTP step outputs expose status, headers, parsed JSON/text body; mail step outputs expose sent metadata; condition step outputs expose matched/actual/expected context.
-    - Updated automation UI helper text to mention `{{steps[0].output.*}}` and `{{prevStep.output.*}}`.
-    - Added `TestAutomationStepsExposePreviousOutputsToTemplates` covering a record-create step using the previous record-create output.
-    - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'Automation|BaseApp'` passed after previous-step output chaining.
-    - `cd ui && npm run build` passed after the UI helper update; `dprint` still reported the existing cache write warning outside the workspace, but Vite completed successfully.
-    - Added a webhook-only `response` automation step that renders status code, headers, and body from template data including prior step output.
-    - Changed public webhook execution to run synchronously and return the configured response step output; webhooks without a response step still return `204`.
-    - Added `AutomationWebhookResponse` to the core webhook runner contract and persisted response step output in run `stepResults`.
-    - Updated the automation editor with a `Webhook response` step form available for webhook triggers.
-    - Added API coverage for a webhook response step returning rendered status/header/body.
-    - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'Automation|BaseApp'` passed after the response-step changes.
-    - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'Automation'` passed after the response-step changes.
-    - `cd ui && npm run build` passed after the response-step UI; `dprint` still reported the existing cache write warning outside the workspace, but Vite completed successfully.
+    - Read `CONTINUITY.md` at the start of the turn.
+    - Read `LOCALES_PLAN.md`.
+    - Scanned relevant repo areas for collection options, indexes, record query, API, and admin UI patterns.
+    - Replaced the broad MVP scope in `LOCALES_PLAN.md` with an implementation roadmap covering MVP success criteria and Phases 0-9.
+    - Checked the resulting diff and confirmed the new section starts at `LOCALES_PLAN.md:451`.
+    - User requested implementation of Phases 1-7.
+    - Added i18n system collections `_locales` and `_i18nGroups` with system migration `1776000000_i18n.go`.
+    - Added core locale/i18n proxy models, locale helpers, collection i18n options, system fields/indexes, record lifecycle hooks, duplicate translation validation, and empty-group cleanup.
+    - Added superuser locale APIs under `/api/locales`.
+    - Added localized record list filtering/fallback via `locale` and `fallback` query params.
+    - Added record translation metadata and create-translation endpoints under `/api/collections/{collection}/records/{id}/translations`.
+    - Added admin UI locale settings page, collection i18n options tab, and record modal locale/translation controls.
+    - Added targeted core/API tests for locale lifecycle, collection metadata, list filtering, fallback, and translations metadata.
+    - Verification passed:
+      - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestI18n|TestCollectionMarshalJSON|TestCollectionUnmarshalJSON|TestCollectionDBExport'`
+      - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestLocalesList|TestI18nRecordLocaleListFallbackAndTranslations'`
+      - `cd ui && npm run build` (Vite passed; dprint still reported the existing cache write warning outside the workspace).
+    - User reported collection update error while enabling i18n: unique index creation failed because existing records share empty `i18n_group_id` and `locale`.
+    - Fixed i18n enablement by backfilling existing records with one `_i18nGroups` row per record, default locale, and `is_source=true` before creating i18n indexes.
+    - Added `TestI18nEnableCollectionBackfillsExistingRecordsBeforeUniqueIndex` regression coverage.
+    - Verification passed:
+      - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestI18n|TestCollectionMarshalJSON|TestCollectionUnmarshalJSON|TestCollectionDBExport'`
+      - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestLocalesList|TestI18nRecordLocaleListFallbackAndTranslations'`
+      - `cd ui && npm run build` (Vite passed; dprint still reported the existing cache write warning outside the workspace).
   - Now:
-    - Webhook response step is implemented and targeted backend/API/UI verification is complete.
+    - Preparing final summary for the fix.
   - Next:
-    - No additional follow-up is required for this request.
+    - User can retry `PATCH /api/collections/pbc_1125843985`.
 
 Open questions (UNCONFIRMED if needed):
 
-- UNCONFIRMED: whether automation definitions should live in one system collection or split into definition/run-log collections from day one.
-- UNCONFIRMED: whether the first action set should include email in MVP or defer it until HTTP and record actions are stable.
-- UNCONFIRMED: whether v1 should block automation-triggered writes from recursively triggering other automations, or leave that as an operator responsibility for MVP.
+- UNCONFIRMED: exact internal collection/table naming should be `pb_locales`/`pb_i18n_groups` or use PocketBase-style system collections.
+- Resolved: MVP uses PocketBase-style system collections `_locales` and `_i18nGroups`.
+- Resolved: per-collection default locale is supported through `collection.i18n.defaultLocale`, falling back to the global default.
+- Resolved for MVP: localized fields are stored as collection metadata and used by the UI/configuration layer; backend localization applies to the whole separate localized record.
+- UNCONFIRMED: whether translation create/list endpoints should fully mirror public collection rules or stay superuser/editor oriented.
 
 Working set (files/ids/commands):
 
 - `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/sync_remote.sh`
-- `bash -n sync_remote.sh`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/AUTOMATION_PLAN.md`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1775000000_automations.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_model.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_run_model.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_validate.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_model_test.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_query.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_registry.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner_test.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_steps.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_http.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_records.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_templates.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner_test.go`
-- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'Automation|BaseApp'`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/app.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/base.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/events.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/cron.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/collection.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/automation.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/automation_test.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/base.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1775000001_automation_run_observability.go`
-- `go test ./core -run 'Automation|BaseApp'`
-- `go test ./apis -run 'Automation'`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/record_auth_with_oauth2.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/router.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/store.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/crons/pageCronsSettings.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/settingsSidebar.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/pageAutomationsSettings.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationsList.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationUpsertModal.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/stepEditor.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/conditionStepForm.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/httpStepForm.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/recordStepForm.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunsList.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunPreviewModal.js`
-- `POST /api/automations/{id}/runs/{runId}/rerun`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/LOCALES_PLAN.md`
+- `sed -n '1,260p' LOCALES_PLAN.md`
+- `sed -n '261,520p' LOCALES_PLAN.md`
+- `sed -n '520,760p' LOCALES_PLAN.md`
+- `sed -n '1,120p' go.mod`
+- `rg "options|i18n|locale|collection.*options|Indexes" core apis ui/src -g '*.go' -g '*.js'`
+- `git diff -- LOCALES_PLAN.md CONTINUITY.md`
+- `rg -n "Implementation Plan|Phase 0|Phase 1|Phase 9|MVP Success" LOCALES_PLAN.md`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/i18n_model.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/i18n_model_test.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/i18n.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/i18n_test.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1776000000_i18n.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/locales/pageLocalesSettings.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/locales/localesList.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/collections/collectionI18nOptionsTab.js`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestI18n|TestCollectionMarshalJSON|TestCollectionUnmarshalJSON|TestCollectionDBExport'`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestLocalesList|TestI18nRecordLocaleListFallbackAndTranslations'`
 - `cd ui && npm run build`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunsList.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/automation.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/automation_test.go`
-- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'Automation'`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_mail.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/mailStepForm.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/conditionStepForm.js`
-- `go test ./core -run 'Automation|BaseApp'`
-- `cd ui && npm run build`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/collection_record_table_sync.go`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestI18n'`

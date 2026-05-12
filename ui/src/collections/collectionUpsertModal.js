@@ -2,6 +2,7 @@ import { toDeleteProp } from "@/base/fieldSettings";
 import { cloneCollectionWithJsonSchemaState } from "@/fields/json/schemaState";
 import { collectionAuthOptionsTab } from "./collectionAuthOptionsTab";
 import { collectionFieldsTab } from "./collectionFieldsTab";
+import { collectionI18nOptionsTab } from "./collectionI18nOptionsTab";
 import { collectionRulesTab } from "./collectionRulesTab";
 import { collectionViewQueryTab } from "./collectionViewQueryTab";
 
@@ -35,6 +36,7 @@ window.app.collectionTypes = {
         "tabs": {
             "Fields": collectionFieldsTab,
             "API rules": collectionRulesTab,
+            "Options": collectionI18nOptionsTab,
         },
     },
     "view": {
