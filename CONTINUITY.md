@@ -1,82 +1,52 @@
 Goal (incl. success criteria):
 
-- Fix localized collection enablement/update failing with `UNIQUE constraint failed: posts.i18n_group_id, posts.locale` when existing records receive blank i18n system fields before the unique index is created.
-- Success: enabling i18n on a collection with existing records backfills each existing record with its own i18n group/default locale/source marker before the unique `(i18n_group_id, locale)` index is created, and targeted regression tests pass.
+- Improve the admin UI for Locales Settings using the provided reference image.
+- Success: the locales settings page has a clearer language table, an add-language flow with searchable language choices and Twemoji flags, follows existing admin UI patterns, avoids native HTML `<select>`, and the UI build passes.
 
 Constraints/Assumptions:
 
-- Use separate localized records linked by an i18n group, matching the architecture already drafted in `LOCALES_PLAN.md`.
-- Keep Go/backend and admin UI work isolated by phase unless a phase explicitly spans both.
-- Follow existing PocketBase collection metadata/index/migration patterns instead of introducing an external workflow/runtime.
-- UI work must follow admin UI conventions from `AGENTS.md`; no native HTML `<select>` elements.
-- `go.mod` declares Go 1.25.0.
+- Use the existing i18n backend/API shape already implemented in this workspace.
+- Keep the change focused to the admin UI unless a UI issue exposes a backend mismatch.
+- Follow `UI_DOCS.md` and AGENTS admin UI notes.
+- Do not store ephemeral presentation-only state on reactive `field`/`collection` objects.
+- In admin UI, use `app.components.select`; do not introduce native HTML `<select>`.
 
 Key decisions:
 
-- Treat AI translation, bulk translation, advanced SEO/domain routing, and enterprise workflow features as post-MVP follow-ups.
-- Plan an internal backend foundation before adding admin UI controls so record/query behavior is testable independently.
-- Locale-aware record querying should start as explicit query/API behavior and only later be surfaced through SDK helpers.
+- Use `app.components.select` for language picking and represent flags with Twemoji SVG image assets.
+- Keep backend locale payload unchanged: `code`, `name`, `enabled`, and `is_default`.
 
 State:
   - Done:
     - Read `CONTINUITY.md` at the start of the turn.
-    - Read `LOCALES_PLAN.md`.
-    - Scanned relevant repo areas for collection options, indexes, record query, API, and admin UI patterns.
-    - Replaced the broad MVP scope in `LOCALES_PLAN.md` with an implementation roadmap covering MVP success criteria and Phases 0-9.
-    - Checked the resulting diff and confirmed the new section starts at `LOCALES_PLAN.md:451`.
-    - User requested implementation of Phases 1-7.
-    - Added i18n system collections `_locales` and `_i18nGroups` with system migration `1776000000_i18n.go`.
-    - Added core locale/i18n proxy models, locale helpers, collection i18n options, system fields/indexes, record lifecycle hooks, duplicate translation validation, and empty-group cleanup.
-    - Added superuser locale APIs under `/api/locales`.
-    - Added localized record list filtering/fallback via `locale` and `fallback` query params.
-    - Added record translation metadata and create-translation endpoints under `/api/collections/{collection}/records/{id}/translations`.
-    - Added admin UI locale settings page, collection i18n options tab, and record modal locale/translation controls.
-    - Added targeted core/API tests for locale lifecycle, collection metadata, list filtering, fallback, and translations metadata.
-    - Verification passed:
-      - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestI18n|TestCollectionMarshalJSON|TestCollectionUnmarshalJSON|TestCollectionDBExport'`
-      - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestLocalesList|TestI18nRecordLocaleListFallbackAndTranslations'`
-      - `cd ui && npm run build` (Vite passed; dprint still reported the existing cache write warning outside the workspace).
-    - User reported collection update error while enabling i18n: unique index creation failed because existing records share empty `i18n_group_id` and `locale`.
-    - Fixed i18n enablement by backfilling existing records with one `_i18nGroups` row per record, default locale, and `is_source=true` before creating i18n indexes.
-    - Added `TestI18nEnableCollectionBackfillsExistingRecordsBeforeUniqueIndex` regression coverage.
-    - Verification passed:
-      - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestI18n|TestCollectionMarshalJSON|TestCollectionUnmarshalJSON|TestCollectionDBExport'`
-      - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestLocalesList|TestI18nRecordLocaleListFallbackAndTranslations'`
-      - `cd ui && npm run build` (Vite passed; dprint still reported the existing cache write warning outside the workspace).
+    - User requested: "Please help me improve Collection Option i18n UI".
+    - Inspected `collectionI18nOptionsTab.js`, nearby collection option tabs, `UI_DOCS.md`, and shared select/list/form CSS patterns.
+    - Improved the collection i18n options tab with a section heading, switch-style enable control, clearer help text, enabled-locale-aware default locale select labels, selected-field count, and Select all/Clear field actions.
+    - Ran `cd ui && npm run build`; build passed. dprint still emitted the existing cache write warning outside the workspace but formatted 1 file and Vite completed successfully.
+    - User requested Locales Settings UI improvements based on a reference image and Twemoji flags.
+    - Reworked Locales Settings with a table-style locale list, Twemoji flag images, default check buttons, enable/disable and delete row actions, and a collapsible add-language panel.
+    - Added a searchable language picker backed by `app.components.select`, with common language presets and editable display name/code fields.
+    - Added `ui/src/css/locales.css` and imported it from `_main.css`.
+    - Ran `cd ui && npm run build`; build passed. dprint still emitted the existing cache write warning outside the workspace but formatted 1 file and Vite completed successfully.
   - Now:
-    - Preparing final summary for the fix.
+    - Preparing final summary.
   - Next:
-    - User can retry `PATCH /api/collections/pbc_1125843985`.
+    - User can review the Locales Settings page in the admin UI.
 
 Open questions (UNCONFIRMED if needed):
 
-- UNCONFIRMED: exact internal collection/table naming should be `pb_locales`/`pb_i18n_groups` or use PocketBase-style system collections.
-- Resolved: MVP uses PocketBase-style system collections `_locales` and `_i18nGroups`.
-- Resolved: per-collection default locale is supported through `collection.i18n.defaultLocale`, falling back to the global default.
-- Resolved for MVP: localized fields are stored as collection metadata and used by the UI/configuration layer; backend localization applies to the whole separate localized record.
-- UNCONFIRMED: whether translation create/list endpoints should fully mirror public collection rules or stay superuser/editor oriented.
+- UNCONFIRMED: exact list of built-in language choices desired beyond common locales.
 
 Working set (files/ids/commands):
 
-- `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/LOCALES_PLAN.md`
-- `sed -n '1,260p' LOCALES_PLAN.md`
-- `sed -n '261,520p' LOCALES_PLAN.md`
-- `sed -n '520,760p' LOCALES_PLAN.md`
-- `sed -n '1,120p' go.mod`
-- `rg "options|i18n|locale|collection.*options|Indexes" core apis ui/src -g '*.go' -g '*.js'`
-- `git diff -- LOCALES_PLAN.md CONTINUITY.md`
-- `rg -n "Implementation Plan|Phase 0|Phase 1|Phase 9|MVP Success" LOCALES_PLAN.md`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/i18n_model.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/i18n_model_test.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/i18n.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/i18n_test.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1776000000_i18n.go`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/locales/pageLocalesSettings.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/locales/localesList.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/collections/collectionI18nOptionsTab.js`
-- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestI18n|TestCollectionMarshalJSON|TestCollectionUnmarshalJSON|TestCollectionDBExport'`
-- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestLocalesList|TestI18nRecordLocaleListFallbackAndTranslations'`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/CONTINUITY.md`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/UI_DOCS.md`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/collections/collectionI18nOptionsTab.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/locales/pageLocalesSettings.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/locales/localesList.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/css/_main.css`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/css/locales.css`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/dist/index.html`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/dist/assets/index-B2ikKN29.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/dist/assets/index-DIyOGyNl.css`
 - `cd ui && npm run build`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/core/collection_record_table_sync.go`
-- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestI18n'`

@@ -1,0 +1,109 @@
+.locales-settings-wrapper {
+    max-width: 1100px;
+}
+
+.locales-table {
+    display: block;
+    width: 100%;
+    overflow: auto;
+    border: 1px solid var(--surfaceAlt3Color);
+    border-radius: var(--borderRadius);
+    background: var(--surfaceColor);
+    scrollbar-width: thin;
+}
+
+.locales-table-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.5fr) minmax(80px, 0.7fr) minmax(95px, 0.6fr) minmax(110px, auto);
+    align-items: center;
+    gap: 15px;
+    min-width: 620px;
+    padding: 16px var(--baseSpacing);
+    border-top: 1px solid var(--surfaceAlt3Color);
+    transition: background var(--animationSpeed);
+
+    &:first-child {
+        border-top: 0;
+    }
+}
+
+.locales-table-head {
+    min-height: 58px;
+    color: var(--surfaceTxtHintColor);
+    background: var(--surfaceAlt1Color);
+    font-weight: bold;
+}
+
+.locale-language-cell,
+.locale-option,
+.locale-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.locale-language-cell > div,
+.locale-option .txt {
+    min-width: 0;
+}
+
+.locale-flag {
+    display: inline-block;
+    width: 24px;
+    height: 18px;
+    object-fit: cover;
+    flex-shrink: 0;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--surfaceTxtColor), transparent 88%);
+}
+
+.locale-flag-empty {
+    background: var(--surfaceAlt2Color);
+}
+
+.locale-default-btn {
+    width: 34px;
+    min-height: 32px;
+    padding: 5px;
+}
+
+.locale-row-actions {
+    justify-content: flex-end;
+}
+
+.locale-delete-btn {
+    color: var(--dangerTxtColor);
+}
+
+.locales-add-toggle {
+    min-width: 220px;
+    justify-content: space-between;
+}
+
+.locales-add-panel {
+    margin-top: var(--baseSpacing);
+    padding: var(--baseSpacing);
+    border: 1px solid var(--surfaceAlt3Color);
+    border-radius: var(--borderRadius);
+    background: var(--surfaceAlt1Color);
+
+    .field {
+        background: var(--surfaceColor);
+    }
+
+    .align-end {
+        align-items: flex-end;
+    }
+}
+
+@media (max-width: 640px) {
+    .locales-table-row {
+        min-width: 560px;
+        padding-inline: var(--smSpacing);
+    }
+
+    .locales-add-toggle {
+        width: 100%;
+    }
+}

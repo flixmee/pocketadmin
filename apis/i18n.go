@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/dbutils"
 	"github.com/pocketbase/pocketbase/tools/router"
 )
 
@@ -260,6 +262,7 @@ func recordTranslationCreate(e *core.RequestEvent) error {
 		}
 		record.Set(name, source.Get(name))
 	}
+	prepareUniqueTranslationSlugs(e.App, collection, source, record, locale.Code())
 	record.Set(core.FieldNameI18nGroupId, source.GetString(core.FieldNameI18nGroupId))
 	record.Set(core.FieldNameLocale, locale.Code())
 	record.Set(core.FieldNameIsSource, false)
@@ -271,6 +274,85 @@ func recordTranslationCreate(e *core.RequestEvent) error {
 	return execAfterSuccessTx(true, e.App, func() error {
 		return e.JSON(http.StatusOK, record)
 	})
+}
+
+func prepareUniqueTranslationSlugs(app core.App, collection *core.Collection, source *core.Record, record *core.Record, locale string) {
+	for _, field := range collection.Fields {
+		slugField, ok := field.(*core.SlugField)
+		if !ok {
+			continue
+		}
+
+		if _, ok := dbutils.FindSingleColumnUniqueIndex(collection.Indexes, slugField.Name); !ok {
+			continue
+		}
+
+		slug := uniqueTranslationSlug(app, collection, slugField, source.GetString(slugField.Name), locale)
+		if slug != "" {
+			record.Set(slugField.Name, slug)
+		}
+	}
+}
+
+func uniqueTranslationSlug(app core.App, collection *core.Collection, field *core.SlugField, sourceSlug string, locale string) string {
+	if sourceSlug == "" {
+		return ""
+	}
+
+	suffix := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(locale), "_", "-"))
+	if suffix == "" {
+		return sourceSlug
+	}
+
+	for i := 0; i < 10; i++ {
+		candidateSuffix := suffix
+		if i > 0 {
+			candidateSuffix = fmt.Sprintf("%s-%d", suffix, i+1)
+		}
+
+		candidate := translationSlugCandidate(sourceSlug, candidateSuffix, field.Max)
+		_, err := app.FindFirstRecordByFilter(collection.Id, field.Name+"={:slug}", dbx.Params{"slug": candidate})
+		if err == sql.ErrNoRows {
+			return candidate
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	return translationSlugCandidate(sourceSlug, suffix, field.Max)
+}
+
+func translationSlugCandidate(base string, suffix string, max int) string {
+	if suffix == "" {
+		return base
+	}
+
+	if max == 0 {
+		max = 5000
+	}
+
+	tail := "-" + suffix
+	baseRunes := []rune(base)
+	tailRunes := []rune(tail)
+	if max > 0 && len(baseRunes)+len(tailRunes) > max {
+		limit := max - len(tailRunes)
+		if limit <= 0 {
+			suffixRunes := []rune(strings.Trim(suffix, "-"))
+			if len(suffixRunes) > max {
+				return strings.Trim(string(suffixRunes[:max]), "-")
+			}
+			return string(suffixRunes)
+		}
+
+		base = strings.Trim(string(baseRunes[:limit]), "-")
+	}
+
+	if base == "" {
+		return strings.Trim(suffix, "-")
+	}
+
+	return base + tail
 }
 
 type i18nTranslationInfo struct {

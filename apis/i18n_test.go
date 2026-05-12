@@ -2,6 +2,7 @@ package apis_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -128,6 +129,62 @@ func TestI18nRecordLocaleListFallbackAndTranslations(t *testing.T) {
 		}
 		scenario.Test(t)
 	}
+}
+
+func TestI18nRecordTranslationCreateWithUniqueSlug(t *testing.T) {
+	t.Parallel()
+
+	sourceId := ""
+
+	setup := func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+		createTestLocale(t, app, "vi", "Vietnamese")
+
+		collection := core.NewBaseCollection("i18n_api_slug_posts")
+		collection.Fields.Add(&core.TextField{Name: "title"})
+		collection.Fields.Add(&core.SlugField{Name: "slug", AttachedField: "title", Required: true})
+		collection.AddIndex("idx_i18n_api_slug_posts_slug", true, "`slug`", "")
+		collection.ListRule = ptr("")
+		collection.ViewRule = ptr("")
+		collection.I18n.Enabled = true
+		collection.I18n.DefaultLocale = core.DefaultLocaleCode
+		collection.I18n.LocalizedFields = []string{"title", "slug"}
+		if err := app.Save(collection); err != nil {
+			t.Fatalf("Failed to create localized collection: %v", err)
+		}
+
+		source := core.NewRecord(collection)
+		source.Set("title", "Hello World")
+		if err := app.Save(source); err != nil {
+			t.Fatalf("Failed to create source record: %v", err)
+		}
+		sourceId = source.Id
+	}
+
+	scenario := tests.ApiScenario{
+		Name:           "create translation with unique slug",
+		Method:         http.MethodPost,
+		URL:            "/api/collections/i18n_api_slug_posts/records/source/translations",
+		Body:           strings.NewReader(`{"locale":"vi"}`),
+		BeforeTestFunc: setup,
+		Headers: map[string]string{
+			"Authorization": testSuperuserAuthHeader,
+		},
+		ExpectedStatus: 200,
+		ExpectedContent: []string{
+			`"slug":"hello-world-vi"`,
+		},
+		NotExpectedContent: []string{
+			`"code":"validation_not_unique"`,
+		},
+	}
+
+	baseSetup := scenario.BeforeTestFunc
+	scenario.BeforeTestFunc = func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+		baseSetup(t, app, e)
+		scenario.URL = "/api/collections/i18n_api_slug_posts/records/" + sourceId + "/translations"
+	}
+
+	scenario.Test(t)
 }
 
 func createTestLocale(t testing.TB, app *tests.TestApp, code string, name string) {

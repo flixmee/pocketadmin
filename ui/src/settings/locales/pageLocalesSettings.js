@@ -26,18 +26,19 @@ export function pageLocalesSettings() {
                 ),
             ),
             t.div(
-                { className: "wrapper m-b-base" },
+                { className: "wrapper m-b-base locales-settings-wrapper" },
                 t.div(
-                    { className: "flex gap-10 m-b-sm" },
-                    t.div({ className: "txt-lg" }, "Content locales"),
+                    { className: "flex gap-10 m-b-sm flex-wrap" },
+                    t.div({ className: "txt-lg" }, "Languages and translations"),
+                    t.div({ className: "flex-fill" }),
                     app.components.refreshButton({
                         className: "btn sm transparent secondary circle",
                         onclick: resetLocalesList,
                     }),
                 ),
                 t.p(
-                    { className: "txt-sm txt-hint m-b-sm" },
-                    "Configure the enabled locales used by localized collections and translation records.",
+                    { className: "txt-sm m-b-base" },
+                    "Manage the languages and translations for your site.",
                 ),
                 localesList({
                     reset: () => data.resetList,
