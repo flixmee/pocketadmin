@@ -46,6 +46,7 @@ func TestI18nRecordLocaleListFallbackAndTranslations(t *testing.T) {
 	t.Parallel()
 
 	sourceId := ""
+	translationId := ""
 
 	setup := func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 		createTestLocale(t, app, "vi", "Vietnamese")
@@ -63,6 +64,7 @@ func TestI18nRecordLocaleListFallbackAndTranslations(t *testing.T) {
 		}
 
 		source := core.NewRecord(collection)
+		source.Set(core.FieldNameId, "i18nsource00001")
 		source.Set("title", "Hello")
 		if err := app.Save(source); err != nil {
 			t.Fatalf("Failed to create source record: %v", err)
@@ -70,12 +72,14 @@ func TestI18nRecordLocaleListFallbackAndTranslations(t *testing.T) {
 		sourceId = source.Id
 
 		translation := core.NewRecord(collection)
+		translation.Set(core.FieldNameId, "i18ntrans000001")
 		translation.Set("title", "Xin chao")
 		translation.Set(core.FieldNameI18nGroupId, source.GetString(core.FieldNameI18nGroupId))
 		translation.Set(core.FieldNameLocale, "vi")
 		if err := app.Save(translation); err != nil {
 			t.Fatalf("Failed to create translation record: %v", err)
 		}
+		translationId = translation.Id
 	}
 
 	scenarios := []tests.ApiScenario{
@@ -117,6 +121,23 @@ func TestI18nRecordLocaleListFallbackAndTranslations(t *testing.T) {
 				_ = sourceId
 			},
 		},
+		{
+			Name:           "record view locale metadata",
+			Method:         http.MethodGet,
+			URL:            "/api/collections/i18n_api_posts/records/source",
+			BeforeTestFunc: setup,
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"locale":"vi"`,
+				`"localeLinks":[`,
+				`"id":"i18nsource00001","locale":"en"`,
+				`"id":"i18ntrans000001","locale":"vi"`,
+			},
+			NotExpectedContent: []string{
+				`"i18n_group_id"`,
+				`"is_source"`,
+			},
+		},
 	}
 
 	for _, scenario := range scenarios {
@@ -125,6 +146,13 @@ func TestI18nRecordLocaleListFallbackAndTranslations(t *testing.T) {
 			scenario.BeforeTestFunc = func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 				baseSetup(t, app, e)
 				scenario.URL = "/api/collections/i18n_api_posts/records/" + sourceId + "/translations"
+			}
+		}
+		if scenario.Name == "record view locale metadata" {
+			baseSetup := scenario.BeforeTestFunc
+			scenario.BeforeTestFunc = func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				baseSetup(t, app, e)
+				scenario.URL = "/api/collections/i18n_api_posts/records/" + translationId
 			}
 		}
 		scenario.Test(t)

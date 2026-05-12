@@ -1291,6 +1291,15 @@ func (record *Record) PublicExport() map[string]any {
 		}
 	}
 
+	if record.collection.I18nEnabled() {
+		isVisible, hasCustomVisibility = customVisibility[FieldNameLocaleLinks]
+		if (!hasCustomVisibility || isVisible) && record.data != nil {
+			if v, ok := record.data.GetOk(FieldNameLocaleLinks); ok {
+				export[FieldNameLocaleLinks] = v
+			}
+		}
+	}
+
 	if record.Collection().IsAuth() {
 		// always hide the password and tokenKey fields
 		delete(export, FieldNamePassword)

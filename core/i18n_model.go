@@ -20,6 +20,7 @@ const (
 
 	FieldNameI18nGroupId = "i18n_group_id"
 	FieldNameLocale      = "locale"
+	FieldNameLocaleLinks = "localeLinks"
 	FieldNameIsSource    = "is_source"
 )
 

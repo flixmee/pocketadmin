@@ -1,20 +1,19 @@
 Goal (incl. success criteria):
 
-- Improve the admin UI for Locales Settings using the provided reference image.
-- Success: the locales settings page has a clearer language table, an add-language flow with searchable language choices and Twemoji flags, follows existing admin UI patterns, avoids native HTML `<select>`, and the UI build passes.
+- When viewing a record in a locale-enabled collection, include `locale` and `localeLinks` fields on the record payload.
+- Success: `locale` identifies the record locale, and `localeLinks` is an array of related record IDs plus their locales.
 
 Constraints/Assumptions:
 
-- Use the existing i18n backend/API shape already implemented in this workspace.
-- Keep the change focused to the admin UI unless a UI issue exposes a backend mismatch.
-- Follow `UI_DOCS.md` and AGENTS admin UI notes.
-- Do not store ephemeral presentation-only state on reactive `field`/`collection` objects.
-- In admin UI, use `app.components.select`; do not introduce native HTML `<select>`.
+- Keep the change focused on record read/view behavior unless tests reveal a required supporting change.
+- Preserve existing API compatibility for non-locale collections.
+- Use existing locale/i18n model conventions already present in the repo.
+- `localeLinks` shape implemented as `[{ "id": "...", "locale": "..." }]`, including all records in the same i18n group, ordered by locale.
 
 Key decisions:
 
-- Use `app.components.select` for language picking and represent flags with Twemoji SVG image assets.
-- Keep backend locale payload unchanged: `code`, `name`, `enabled`, and `is_default`.
+- Expose `locale` by unhiding the existing hidden i18n field only during record view enrichment.
+- Export `localeLinks` as a dedicated i18n metadata field without enabling broad custom-data export.
 
 State:
   - Done:
@@ -30,25 +29,26 @@ State:
     - Ran `cd ui && npm run build`; build passed. dprint still emitted the existing cache write warning outside the workspace but formatted 1 file and Vite completed successfully.
     - User asked to fix flag URLs to `https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.0/svg/`.
     - Updated `TWEMOJI_BASE_URL` and rebuilt UI. Build passed; dprint still emitted the existing cache write warning outside the workspace.
+    - Added record-view enrichment for localized records to include `locale` and `localeLinks`.
+    - Added focused API test coverage for localized record view metadata.
+    - Ran `go test ./apis -run TestI18nRecordLocaleListFallbackAndTranslations`; passed.
+    - Ran `go test ./core ./apis`; failed on existing fixture-count/watcher expectations unrelated to this change (`TestFindAllCollections`, `TestNotifyWatcher_SettingsUpdate`, `TestCollectionsList`, `TestCollectionsImport`).
   - Now:
     - Preparing final summary.
   - Next:
-    - User can review the Locales Settings page in the admin UI.
+    - User can review localized record view payloads.
 
 Open questions (UNCONFIRMED if needed):
 
-- UNCONFIRMED: exact list of built-in language choices desired beyond common locales.
+- None.
 
 Working set (files/ids/commands):
 
 - `/Users/suytbily/dev/gits/harry/pocketadmin/CONTINUITY.md`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/UI_DOCS.md`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/collections/collectionI18nOptionsTab.js`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/locales/pageLocalesSettings.js`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/locales/localesList.js`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/css/_main.css`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/css/locales.css`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/dist/index.html`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/dist/assets/index-CZrJxHf1.js`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/dist/assets/index-DIyOGyNl.css`
-- `cd ui && npm run build`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/apis/i18n.go`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/apis/i18n_test.go`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/apis/record_crud.go`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/core/i18n_model.go`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/core/record_model.go`
+- `go test ./apis -run TestI18nRecordLocaleListFallbackAndTranslations`
+- `go test ./core ./apis`

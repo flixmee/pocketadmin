@@ -362,6 +362,39 @@ type i18nTranslationInfo struct {
 	IsMissing bool   `json:"is_missing"`
 }
 
+type i18nLocaleLink struct {
+	Id     string `db:"id" json:"id"`
+	Locale string `db:"locale" json:"locale"`
+}
+
+func enrichRecordLocaleLinks(app core.App, record *core.Record) error {
+	if record == nil || record.Collection() == nil || !record.Collection().I18nEnabled() {
+		return nil
+	}
+
+	record.Unhide(core.FieldNameLocale)
+
+	groupId := record.GetString(core.FieldNameI18nGroupId)
+	if groupId == "" {
+		record.Set(core.FieldNameLocaleLinks, []i18nLocaleLink{})
+		return nil
+	}
+
+	links := []i18nLocaleLink{}
+	err := app.RecordQuery(record.Collection()).
+		Select(core.FieldNameId, core.FieldNameLocale).
+		AndWhere(dbx.HashExp{core.FieldNameI18nGroupId: groupId}).
+		OrderBy(core.FieldNameLocale + " ASC").
+		All(&links)
+	if err != nil {
+		return err
+	}
+
+	record.Set(core.FieldNameLocaleLinks, links)
+
+	return nil
+}
+
 func loadRecordTranslations(app core.App, collection *core.Collection, record *core.Record) ([]i18nTranslationInfo, error) {
 	groupId := record.GetString(core.FieldNameI18nGroupId)
 	if groupId == "" {

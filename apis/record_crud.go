@@ -206,6 +206,9 @@ func recordView(e *core.RequestEvent) error {
 		if err := EnrichRecord(e.RequestEvent, e.Record); err != nil {
 			return firstApiError(err, e.InternalServerError("Failed to enrich record", err))
 		}
+		if err := enrichRecordLocaleLinks(e.App, e.Record); err != nil {
+			return firstApiError(err, e.InternalServerError("Failed to load record locale links", err))
+		}
 
 		return execAfterSuccessTx(true, e.App, func() error {
 			return e.JSON(http.StatusOK, e.Record)
