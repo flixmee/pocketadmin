@@ -139,3 +139,75 @@ func TestI18nEnableCollectionBackfillsExistingRecordsBeforeUniqueIndex(t *testin
 		t.Fatalf("Expected i18n unique index after backfill")
 	}
 }
+
+func TestI18nMigrationHelperDryRunAndApply(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection := core.NewBaseCollection("i18n_migrate_posts")
+	collection.Fields.Add(&core.TextField{Name: "title"})
+	collection.Fields.Add(&core.TextField{Name: "body"})
+	if err := app.Save(collection); err != nil {
+		t.Fatalf("Failed to create collection: %v", err)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("title", "Hello")
+	record.Set("body", "Body")
+	if err := app.Save(record); err != nil {
+		t.Fatalf("Failed to create record: %v", err)
+	}
+
+	report, err := app.MigrateCollectionI18n(core.I18nMigrationOptions{
+		CollectionNameOrId: collection.Name,
+		LocalizedFields:    []string{"title"},
+		DryRun:             true,
+	})
+	if err != nil {
+		t.Fatalf("Dry run failed: %v", err)
+	}
+	if report.Applied {
+		t.Fatalf("Expected dry run report to not be applied")
+	}
+	if report.RecordsTotal != 1 || report.GroupsToCreate != 1 {
+		t.Fatalf("Unexpected dry run report: %+v", report)
+	}
+
+	collection, err = app.FindCollectionByNameOrId(collection.Name)
+	if err != nil {
+		t.Fatalf("Failed to reload collection: %v", err)
+	}
+	if collection.I18nEnabled() {
+		t.Fatalf("Dry run should not enable i18n")
+	}
+
+	report, err = app.MigrateCollectionI18n(core.I18nMigrationOptions{
+		CollectionNameOrId: collection.Name,
+		LocalizedFields:    []string{"title"},
+	})
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+	if !report.Applied {
+		t.Fatalf("Expected migration report to be applied")
+	}
+
+	collection, err = app.FindCollectionByNameOrId(collection.Name)
+	if err != nil {
+		t.Fatalf("Failed to reload migrated collection: %v", err)
+	}
+	if !collection.I18nEnabled() {
+		t.Fatalf("Expected i18n to be enabled")
+	}
+	if len(collection.I18n.LocalizedFields) != 1 || collection.I18n.LocalizedFields[0] != "title" {
+		t.Fatalf("Unexpected localized fields: %v", collection.I18n.LocalizedFields)
+	}
+
+	record, err = app.FindRecordById(collection, record.Id)
+	if err != nil {
+		t.Fatalf("Failed to reload migrated record: %v", err)
+	}
+	if record.GetString(core.FieldNameI18nGroupId) == "" || record.GetString(core.FieldNameLocale) != core.DefaultLocaleCode {
+		t.Fatalf("Expected migrated record i18n fields, got group=%q locale=%q", record.GetString(core.FieldNameI18nGroupId), record.GetString(core.FieldNameLocale))
+	}
+}

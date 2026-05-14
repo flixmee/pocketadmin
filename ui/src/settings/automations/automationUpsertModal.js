@@ -8,6 +8,10 @@ const automationTriggerOptions = [
     { value: "record.create", label: "Record create" },
     { value: "record.update", label: "Record update" },
     { value: "record.delete", label: "Record delete" },
+    { value: "i18n.translation_missing", label: "Translation missing" },
+    { value: "i18n.locale_published", label: "Locale published" },
+    { value: "i18n.translation_updated", label: "Translation updated" },
+    { value: "i18n.ai_translation_finished", label: "AI translation finished" },
 ];
 
 export function openAutomationUpsertModal(automation = null, settings = {
@@ -45,6 +49,9 @@ function automationUpsertModal(automation, settings) {
         get isRecordTrigger() {
             return isRecordAutomationTrigger(data.form.triggerType);
         },
+        get isI18nTrigger() {
+            return isI18nAutomationTrigger(data.form.triggerType);
+        },
         get isCronTrigger() {
             return data.form.triggerType === "schedule.cron";
         },
@@ -68,7 +75,7 @@ function automationUpsertModal(automation, settings) {
     function setTriggerType(triggerType) {
         data.form.triggerType = triggerType;
 
-        if (!isRecordAutomationTrigger(triggerType)) {
+        if (!isRecordAutomationTrigger(triggerType) && !isI18nAutomationTrigger(triggerType)) {
             data.form.collectionRef = "";
         }
         if (triggerType !== "schedule.cron") {
@@ -199,7 +206,7 @@ function automationUpsertModal(automation, settings) {
                 t.div(
                     {
                         className: "col-md-6",
-                        hidden: () => !data.isRecordTrigger,
+                        hidden: () => !data.isRecordTrigger && !data.isI18nTrigger,
                     },
                     t.div(
                         { className: "field" },
@@ -397,7 +404,9 @@ function buildAutomationPayload(form) {
         name: form.name.trim(),
         active: !!form.active,
         triggerType: form.triggerType,
-        collectionRef: isRecordAutomationTrigger(form.triggerType) ? (form.collectionRef || "") : "",
+        collectionRef: isRecordAutomationTrigger(form.triggerType) || isI18nAutomationTrigger(form.triggerType)
+            ? (form.collectionRef || "")
+            : "",
         cronExpr: form.triggerType === "schedule.cron" ? form.cronExpr.trim() : "",
         notes: form.notes.trim(),
         steps: buildAutomationStepsPayload(form.steps),
@@ -412,6 +421,13 @@ function isRecordAutomationTrigger(triggerType) {
     return triggerType === "record.create"
         || triggerType === "record.update"
         || triggerType === "record.delete";
+}
+
+function isI18nAutomationTrigger(triggerType) {
+    return triggerType === "i18n.translation_missing"
+        || triggerType === "i18n.locale_published"
+        || triggerType === "i18n.translation_updated"
+        || triggerType === "i18n.ai_translation_finished";
 }
 
 function fieldError(errorValue) {

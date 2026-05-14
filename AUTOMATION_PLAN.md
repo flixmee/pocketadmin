@@ -24,8 +24,524 @@ The original phased plan is now mostly implemented.
 - Phase 7 is complete: the structured step editor replaced the raw `steps` JSON editor.
 - Phase 8 is complete: recent runs list and run preview UI exist.
 - Follow-up completed after the original plan: `mail.send` now exists in the runner and structured editor, including attachments from trigger-record file fields.
+- Follow-up completed for localization: i18n automation triggers and translation-job completion triggers exist.
 
 What remains is follow-up product work, not the original MVP foundation.
+
+## Automation Documentation
+
+This section describes the automation system as it exists in the app today. It is intended for implementers and operators who need to configure, debug, or extend automation behavior.
+
+### Core concepts
+
+Automations are stored in the protected `_automations` system collection and each execution is stored in `_automationRuns`.
+
+An automation has:
+
+- `name`: human-readable label.
+- `active`: whether automatic triggers should run it.
+- `triggerType`: event that starts the automation.
+- `collectionRef`: optional or required collection scope, depending on trigger type.
+- `cronExpr`: cron expression for scheduled triggers.
+- `steps`: JSON array of ordered step definitions.
+- `notes`: optional operator notes.
+- `lastRunAt` and `lastRunStatus`: latest run summary.
+
+A run has:
+
+- `automationRef`: automation id.
+- `triggerType`: trigger that started this run.
+- `status`: `queued`, `running`, `success`, or `failed`.
+- `input`: trigger payload.
+- `stepResults`: per-step output, error, timing, and status.
+- `error`: terminal run error, if any.
+- `errorStepIndex`: zero-based step index that failed.
+- `started` and `finished`: execution timestamps.
+
+### Trigger types
+
+Supported triggers:
+
+- `record.create`: runs after a record is created.
+- `record.update`: runs after a record is updated.
+- `record.delete`: runs after a record is deleted.
+- `schedule.cron`: runs on a cron schedule.
+- `webhook`: runs when the public webhook endpoint is called.
+- `manual`: runs from the admin API/UI.
+- `i18n.translation_missing`: runs when an i18n source record is missing enabled locale translations.
+- `i18n.locale_published`: runs when a locale becomes enabled.
+- `i18n.translation_updated`: runs after an i18n record is updated.
+- `i18n.ai_translation_finished`: runs when a translation job transitions to `finished`.
+
+`collectionRef` is required for record triggers and for all i18n triggers except `i18n.locale_published`. `i18n.locale_published` may be global or scoped to a collection.
+
+### Execution model
+
+Record and i18n triggers run from successful record hooks, after the database write succeeds. The runner executes asynchronously in-process and writes a `_automationRuns` record for every run.
+
+Execution is linear:
+
+- steps run in array order
+- the first failed step fails the run
+- a non-matching `condition` step stops the run without treating it as an error
+- no automatic retry is performed
+- operators can rerun from an existing run payload
+
+System collections are skipped as record-trigger sources to avoid self-triggering automation loops. Skipped collections include `_automations`, `_automationRuns`, `_locales`, `_i18nGroups`, and `_translationJobs`.
+
+### API surface
+
+Superuser-only endpoints:
+
+- `GET /api/automations`
+- `POST /api/automations`
+- `GET /api/automations/{id}`
+- `PATCH /api/automations/{id}`
+- `DELETE /api/automations/{id}`
+- `POST /api/automations/{id}/run`
+- `GET /api/automations/{id}/runs?limit=20&offset=0`
+- `POST /api/automations/{id}/runs/{runId}/rerun`
+- `DELETE /api/automations/{id}/runs`
+
+Public webhook endpoint:
+
+- `POST /api/automation-webhooks/{id}`
+
+The webhook endpoint only runs active automations whose `triggerType` is `webhook`. The webhook request body is parsed as JSON, form data, multipart values, or raw text based on `Content-Type`.
+
+### Template data
+
+Steps can use template placeholders such as `{{record.id}}` or `{{trigger.type}}`.
+
+Available roots:
+
+- `trigger`: trigger metadata.
+- `request`: webhook request data.
+- `i18n`: i18n trigger metadata.
+- `record`: current trigger record data.
+- `recordOriginal`: previous record data for update/delete triggers.
+- `automation`: automation record data.
+- `run`: automation run record data.
+- `steps`: previous step results.
+- `prevStep`: most recent step result.
+
+`trigger` includes:
+
+- `type`
+- `collectionId`
+- `collectionName`
+- `request`
+- `i18n`
+
+Record trigger payloads include `record`, and update/delete payloads also include `recordOriginal`.
+
+i18n trigger payloads may include:
+
+- `collectionId`
+- `collectionName`
+- `groupId`
+- `locale`
+- `sourceLocale`
+- `sourceRecordId`
+- `targetLocale`
+- `targetRecordId`
+- `missingLocales`
+- `translationTotal`
+- `translationJobId`
+- `provider`
+- `model`
+
+### i18n automation triggers
+
+These triggers are intended for localization operations around i18n-enabled collections. Use them to notify translators, create translation work items, call an external translation service, or keep downstream systems synchronized when localized content changes.
+
+#### Translation missing
+
+Trigger type: `i18n.translation_missing`
+
+Purpose:
+
+- Detect that a source record does not have translations for all enabled locales.
+- Start human or machine translation workflows from the source record.
+- Notify editors that a record is not fully localized yet.
+
+How to use:
+
+- Create an automation with trigger type `i18n.translation_missing`.
+- Set `collectionRef` to the i18n-enabled collection you want to monitor.
+- Add steps such as `mail.send`, `http`, or `record.create` to notify a team, enqueue a translation job, or create an internal task.
+- Use template values such as `{{record.id}}`, `{{record.title}}`, `{{i18n.sourceLocale}}`, and `{{i18n.missingLocales}}`.
+
+When to use:
+
+- Use it after content creation when every enabled locale must eventually have a translation.
+- Use it to feed AI translation queues or external translation-management systems.
+- Use it when missing translations are actionable and should create follow-up work.
+- Avoid it for collections where partial localization is expected and missing translations should not create noise.
+
+Typical payload fields:
+
+- `i18n.collectionId`
+- `i18n.collectionName`
+- `i18n.groupId`
+- `i18n.sourceLocale`
+- `i18n.sourceRecordId`
+- `i18n.missingLocales`
+- `i18n.translationTotal`
+- `record`
+
+#### Locale published
+
+Trigger type: `i18n.locale_published`
+
+Purpose:
+
+- React when a locale becomes enabled.
+- Backfill or queue translations for the newly published locale.
+- Notify teams that a new language is now active.
+
+How to use:
+
+- Create an automation with trigger type `i18n.locale_published`.
+- Leave `collectionRef` empty for a global automation, or set it to a specific i18n-enabled collection.
+- Use `{{i18n.locale}}` to reference the newly enabled locale code.
+- Use `http` or `record.create` steps to create translation work for the new locale.
+
+When to use:
+
+- Use it when enabling a new locale should trigger translation preparation across localized collections.
+- Use it to notify product, editorial, or support teams that a language is live.
+- Use it to kick off bulk translation jobs for content that existed before the locale was enabled.
+- Avoid it for disabled draft locales; the trigger only runs when the locale is enabled for the first time or transitions from disabled to enabled.
+
+Typical payload fields:
+
+- `i18n.collectionId`
+- `i18n.collectionName`
+- `i18n.locale`
+- `i18n.localeRecordId`
+
+#### Translation updated
+
+Trigger type: `i18n.translation_updated`
+
+Purpose:
+
+- React when an i18n record changes.
+- Synchronize translated content to caches, search indexes, publishing pipelines, or external systems.
+- Notify reviewers that a localized record has been edited.
+
+How to use:
+
+- Create an automation with trigger type `i18n.translation_updated`.
+- Set `collectionRef` to the i18n-enabled collection.
+- Add a `condition` step when only specific locales, statuses, or fields should trigger follow-up actions.
+- Use `{{i18n.locale}}`, `{{i18n.recordId}}`, `{{i18n.groupId}}`, and normal `{{record.*}}` placeholders in steps.
+
+When to use:
+
+- Use it for cache invalidation or downstream publishing after localized content changes.
+- Use it to notify reviewers when translators update copy.
+- Use it to synchronize locale-specific records into search or analytics indexes.
+- Avoid it for expensive external calls unless you add conditions, because any update to a localized record can trigger it.
+
+Typical payload fields:
+
+- `i18n.collectionId`
+- `i18n.collectionName`
+- `i18n.groupId`
+- `i18n.locale`
+- `i18n.recordId`
+- `i18n.isSource`
+- `record`
+
+#### AI translation finished
+
+Trigger type: `i18n.ai_translation_finished`
+
+Purpose:
+
+- React when a translation job is marked `finished`.
+- Continue the workflow after machine translation output is available.
+- Notify reviewers, publish translated drafts, or synchronize generated translations to external services.
+
+How to use:
+
+- Create an automation with trigger type `i18n.ai_translation_finished`.
+- Set `collectionRef` to the collection referenced by the translation job, or leave it empty for a global completion handler.
+- Update a translation job in `_translationJobs` from any non-`finished` status to `finished`.
+- Use `{{i18n.translationJobId}}`, `{{i18n.sourceRecordId}}`, `{{i18n.targetRecordId}}`, `{{i18n.sourceLocale}}`, `{{i18n.targetLocale}}`, `{{i18n.provider}}`, and `{{i18n.model}}` in steps.
+
+When to use:
+
+- Use it when AI output needs human review before publication.
+- Use it to send completion notifications to editors or translators.
+- Use it to update the target record status after a translation job completes.
+- Use it to synchronize completed translations to a search index or external publishing system.
+- Avoid using it as the place to call the AI provider itself; this trigger is for post-completion actions after a job is already finished.
+
+Typical payload fields:
+
+- `i18n.collectionId`
+- `i18n.sourceRecordId`
+- `i18n.targetRecordId`
+- `i18n.sourceLocale`
+- `i18n.targetLocale`
+- `i18n.translationJobId`
+- `i18n.provider`
+- `i18n.model`
+
+Webhook trigger request payloads include:
+
+- `method`
+- `path`
+- `query`
+- `headers`
+- `body`
+- `remoteIP`
+
+### Step schemas
+
+#### `condition`
+
+Stops execution when the condition does not match.
+
+```json
+{
+  "type": "condition",
+  "path": "record.status",
+  "op": "eq",
+  "value": "published"
+}
+```
+
+Supported operators:
+
+- `eq`
+- `neq`
+- `in`
+- `exists`
+- `startsWith`
+- `endsWith`
+- `notStartsWith`
+- `notEndsWith`
+- `contains`
+
+#### `http`
+
+Sends an outbound HTTP request.
+
+```json
+{
+  "type": "http",
+  "method": "POST",
+  "url": "https://example.com/hooks/posts",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "id": "{{record.id}}",
+    "title": "{{record.title}}"
+  },
+  "timeout": 10
+}
+```
+
+`url` is required. `headers` must be an object when provided. `timeout` must be greater than zero when provided.
+
+#### `mail.send`
+
+Sends an email through the app mailer.
+
+```json
+{
+  "type": "mail.send",
+  "to": ["editor@example.com"],
+  "cc": [],
+  "bcc": [],
+  "subject": "Post {{record.title}} was published",
+  "text": "Record id: {{record.id}}",
+  "html": "<p>Record id: {{record.id}}</p>",
+  "attachments": ["cover"]
+}
+```
+
+Rules:
+
+- `to` must contain at least one recipient.
+- `subject` is required.
+- either `text` or `html` is required.
+- `attachments` can only reference file fields on the trigger collection.
+- attachments are only supported for `record.create` and `record.update` triggers.
+
+#### `record.create`
+
+Creates a record in a target collection.
+
+```json
+{
+  "type": "record.create",
+  "collection": "notifications",
+  "data": {
+    "title": "New post: {{record.title}}",
+    "post": "{{record.id}}"
+  }
+}
+```
+
+`collection` and `data` are required.
+
+#### `record.update`
+
+Updates one or more records by explicit id or filter.
+
+```json
+{
+  "type": "record.update",
+  "collection": "posts",
+  "id": "{{record.id}}",
+  "data": {
+    "synced": true
+  }
+}
+```
+
+```json
+{
+  "type": "record.update",
+  "collection": "notifications",
+  "filter": "post = '{{record.id}}'",
+  "data": {
+    "read": false
+  }
+}
+```
+
+`collection`, `data`, and either `id` or `filter` are required.
+
+#### `record.delete`
+
+Deletes one or more records by explicit id or filter.
+
+```json
+{
+  "type": "record.delete",
+  "collection": "notifications",
+  "filter": "post = '{{record.id}}'"
+}
+```
+
+`collection` and either `id` or `filter` are required.
+
+#### `response`
+
+Sets the response for a `webhook` automation.
+
+```json
+{
+  "type": "response",
+  "statusCode": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "ok": true,
+    "recordId": "{{record.id}}"
+  }
+}
+```
+
+Rules:
+
+- only valid for `webhook` triggers
+- `statusCode` must be a valid HTTP status code when provided
+- `headers` must be an object when provided
+
+### Example automations
+
+#### Send mail when a post is published
+
+```json
+{
+  "name": "Notify editors when post is published",
+  "active": true,
+  "triggerType": "record.update",
+  "collectionRef": "posts",
+  "steps": [
+    {
+      "type": "condition",
+      "path": "record.status",
+      "op": "eq",
+      "value": "published"
+    },
+    {
+      "type": "mail.send",
+      "to": ["editors@example.com"],
+      "subject": "Published: {{record.title}}",
+      "text": "Post {{record.id}} was published."
+    }
+  ]
+}
+```
+
+#### Queue work when translations are missing
+
+```json
+{
+  "name": "Notify missing translations",
+  "active": true,
+  "triggerType": "i18n.translation_missing",
+  "collectionRef": "posts",
+  "steps": [
+    {
+      "type": "http",
+      "method": "POST",
+      "url": "https://example.com/i18n/jobs",
+      "body": {
+        "collection": "{{trigger.collectionName}}",
+        "sourceRecordId": "{{i18n.sourceRecordId}}",
+        "sourceLocale": "{{i18n.sourceLocale}}",
+        "missingLocales": "{{i18n.missingLocales}}"
+      }
+    }
+  ]
+}
+```
+
+#### Webhook with custom response
+
+```json
+{
+  "name": "Inbound content webhook",
+  "active": true,
+  "triggerType": "webhook",
+  "steps": [
+    {
+      "type": "record.create",
+      "collection": "inbox",
+      "data": {
+        "source": "{{request.remoteIP}}",
+        "payload": "{{request.body}}"
+      }
+    },
+    {
+      "type": "response",
+      "statusCode": 202,
+      "body": {
+        "accepted": true
+      }
+    }
+  ]
+}
+```
+
+### Operational notes
+
+- Automations execute with app/system privileges, not the request user's record rules.
+- Keep HTTP targets trusted; outbound HTTP remains the main SSRF-sensitive surface.
+- Prefer id-based record updates/deletes when possible. Filters are powerful but easier to over-broaden.
+- Keep steps idempotent when they call external services because manual reruns reuse the original run payload.
+- Use `_automationRuns` for debugging payloads, rendered outputs, timing, and failed step indexes.
 
 ## MVP Scope
 

@@ -1,19 +1,20 @@
 Goal (incl. success criteria):
 
-- When viewing a record in a locale-enabled collection, include `locale` and `localeLinks` fields on the record payload.
-- Success: `locale` identifies the record locale, and `localeLinks` is an array of related record IDs plus their locales.
+- Document the `Translation missing`, `Locale published`, `Translation updated`, and `AI translation finished` automations.
+- Success: `AUTOMATION_PLAN.md` explains each trigger's purpose, how to use it, when to use it, and practical payload/template fields.
 
 Constraints/Assumptions:
 
-- Keep the change focused on record read/view behavior unless tests reveal a required supporting change.
-- Preserve existing API compatibility for non-locale collections.
-- Use existing locale/i18n model conventions already present in the repo.
-- `localeLinks` shape implemented as `[{ "id": "...", "locale": "..." }]`, including all records in the same i18n group, ordered by locale.
+- Preserve existing i18n model/API conventions already present in the repo.
+- Avoid touching unrelated dirty user work; `ui/src/css/vars.css` is currently modified by someone else.
+- Reuse the existing automation runner instead of adding a separate workflow runtime.
+- Keep Phase 9 AI support as job/workflow infrastructure; do not wire a real external AI provider by default.
 
 Key decisions:
 
-- Expose `locale` by unhiding the existing hidden i18n field only during record view enrichment.
-- Export `localeLinks` as a dedicated i18n metadata field without enabling broad custom-data export.
+- Phase 8 will be implemented as a core migration helper plus a built-in CLI command, so app code and tests can call the same path.
+- Phase 9 will add translation job persistence and i18n automation trigger seams using the existing automation registry/runner.
+- Translation creation should generate locale-suffixed slugs when copying a source record would violate an existing single-column unique slug index.
 
 State:
   - Done:
@@ -33,22 +34,49 @@ State:
     - Added focused API test coverage for localized record view metadata.
     - Ran `go test ./apis -run TestI18nRecordLocaleListFallbackAndTranslations`; passed.
     - Ran `go test ./core ./apis`; failed on existing fixture-count/watcher expectations unrelated to this change (`TestFindAllCollections`, `TestNotifyWatcher_SettingsUpdate`, `TestCollectionsList`, `TestCollectionsImport`).
+    - User reported `POST /api/collections/posts/records/{id}/translations` failing with `slug: Value must be unique`.
+    - User requested Phases 8 and 9.
+    - Added locale-suffixed translation slug generation and regression coverage for unique slug fields.
+    - Added Phase 8 core i18n migration helper and `migrate:i18n` CLI command with dry-run reporting.
+    - Added Phase 9 `_translationJobs`, translation job API, i18n automation triggers, trigger payload templating, and admin UI trigger labels.
+    - Updated collection-count fixtures for the added `_translationJobs` system collection.
+    - Targeted Go tests passed for core/API/cmd i18n, automation, and collection list coverage.
+    - `ui` build passed; dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - Broad `go test ./...` was attempted; remaining failures are existing watcher/fixture breadth plus sandboxed `httptest` listener permission failures in packages that open local ports.
+    - User requested automation documentation in `AUTOMATION_PLAN.md`.
+    - Added automation documentation to `AUTOMATION_PLAN.md` covering current capabilities, API routes, trigger payloads, step schemas, examples, and operational notes.
+    - User requested focused documentation for Translation missing, Locale published, Translation updated, and AI translation finished automation.
+    - Added a dedicated `i18n automation triggers` section to `AUTOMATION_PLAN.md` covering purpose, how to use, when to use, and payload fields for all four triggers.
   - Now:
-    - Preparing final summary.
+    - Focused i18n automation trigger documentation update is complete.
   - Next:
-    - User can review localized record view payloads.
+    - Await user review or follow-up edits.
 
 Open questions (UNCONFIRMED if needed):
 
-- None.
+- UNCONFIRMED: exact AI provider integration. For this pass, AI translation is represented as jobs plus automation trigger surfaces, not a provider call.
 
 Working set (files/ids/commands):
 
-- `/Users/suytbily/dev/gits/harry/pocketadmin/CONTINUITY.md`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/apis/i18n.go`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/apis/i18n_test.go`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/apis/record_crud.go`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/core/i18n_model.go`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/core/record_model.go`
-- `go test ./apis -run TestI18nRecordLocaleListFallbackAndTranslations`
-- `go test ./core ./apis`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/AUTOMATION_PLAN.md`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/cmd/i18n.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/i18n.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/i18n_test.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/collection_test.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/i18n_migrate.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/i18n_translation_job.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/i18n_model.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner_test.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/collection_query_test.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1776000001_translation_jobs.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationUpsertModal.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationsList.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunsList.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunPreviewModal.js`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestI18n|TestAutomationI18n|TestAutomation|TestFindAllCollections'`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestI18n|TestLocales|TestTranslation|TestCollectionsList'`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./cmd -run 'TestSuperuser|TestI18n'`
+- `cd ui && npm run build`
+- `sed -n '110,300p' AUTOMATION_PLAN.md`

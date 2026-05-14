@@ -295,6 +295,14 @@ function formatTriggerType(triggerType) {
             return "Record update";
         case "record.delete":
             return "Record delete";
+        case "i18n.translation_missing":
+            return "Translation missing";
+        case "i18n.locale_published":
+            return "Locale published";
+        case "i18n.translation_updated":
+            return "Translation updated";
+        case "i18n.ai_translation_finished":
+            return "AI translation finished";
         default:
             return triggerType || "Unknown trigger";
     }

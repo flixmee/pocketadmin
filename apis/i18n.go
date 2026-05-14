@@ -13,6 +13,8 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/dbutils"
 	"github.com/pocketbase/pocketbase/tools/router"
+	"github.com/pocketbase/pocketbase/tools/security"
+	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 func bindI18nApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
@@ -22,6 +24,12 @@ func bindI18nApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
 	subGroup.GET("/{id}", localeView)
 	subGroup.PATCH("/{id}", localeUpdate)
 	subGroup.DELETE("/{id}", localeDelete)
+
+	jobsGroup := rg.Group("/translation-jobs").Bind(RequireSuperuserAuth())
+	jobsGroup.GET("", translationJobsList)
+	jobsGroup.POST("", translationJobCreate)
+	jobsGroup.GET("/{id}", translationJobView)
+	jobsGroup.PATCH("/{id}", translationJobUpdate)
 }
 
 func localesList(e *core.RequestEvent) error {
@@ -133,6 +141,119 @@ func applyLocaleBody(locale *core.Locale, body map[string]any) {
 	if v, ok := body["is_default"]; ok {
 		locale.SetIsDefault(v == true || fmt.Sprint(v) == "true" || fmt.Sprint(v) == "1")
 	}
+}
+
+func translationJobsList(e *core.RequestEvent) error {
+	jobs := []*core.TranslationJob{}
+
+	query := e.App.RecordQuery(core.CollectionNameTranslationJobs).OrderBy("created DESC")
+	if collection := strings.TrimSpace(e.Request.URL.Query().Get("collection")); collection != "" {
+		query.AndWhere(dbx.HashExp{"collectionRef": collection})
+	}
+	if status := strings.TrimSpace(e.Request.URL.Query().Get("status")); status != "" {
+		query.AndWhere(dbx.HashExp{"status": status})
+	}
+
+	if err := query.All(&jobs); err != nil {
+		return e.BadRequestError("Failed to load translation jobs.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, jobs)
+	})
+}
+
+func translationJobView(e *core.RequestEvent) error {
+	job, err := e.App.FindTranslationJobById(e.Request.PathValue("id"))
+	if err != nil {
+		return e.NotFoundError("Missing or invalid translation job.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, job)
+	})
+}
+
+func translationJobCreate(e *core.RequestEvent) error {
+	body := map[string]any{}
+	if err := e.BindBody(&body); err != nil {
+		return e.BadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+	}
+
+	job := core.NewTranslationJob(e.App)
+	if err := applyTranslationJobBody(job, body); err != nil {
+		return e.BadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+	}
+
+	if err := e.App.Save(job); err != nil {
+		return e.BadRequestError("Failed to create translation job.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, job)
+	})
+}
+
+func translationJobUpdate(e *core.RequestEvent) error {
+	job, err := e.App.FindTranslationJobById(e.Request.PathValue("id"))
+	if err != nil {
+		return e.NotFoundError("Missing or invalid translation job.", err)
+	}
+
+	body := map[string]any{}
+	if err := e.BindBody(&body); err != nil {
+		return e.BadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+	}
+	if err := applyTranslationJobBody(job, body); err != nil {
+		return e.BadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+	}
+
+	if err := e.App.Save(job); err != nil {
+		return e.BadRequestError("Failed to update translation job.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, job)
+	})
+}
+
+func applyTranslationJobBody(job *core.TranslationJob, body map[string]any) error {
+	if v, ok := body["collectionRef"]; ok {
+		job.SetCollectionRef(fmt.Sprint(v))
+	}
+	if v, ok := body["sourceRecordId"]; ok {
+		job.SetSourceRecordId(fmt.Sprint(v))
+	}
+	if v, ok := body["targetRecordId"]; ok {
+		job.SetTargetRecordId(fmt.Sprint(v))
+	}
+	if v, ok := body["sourceLocale"]; ok {
+		job.SetSourceLocale(fmt.Sprint(v))
+	}
+	if v, ok := body["targetLocale"]; ok {
+		job.SetTargetLocale(fmt.Sprint(v))
+	}
+	if v, ok := body["provider"]; ok {
+		job.SetProvider(fmt.Sprint(v))
+	}
+	if v, ok := body["model"]; ok {
+		job.SetModel(fmt.Sprint(v))
+	}
+	if v, ok := body["status"]; ok {
+		job.SetStatus(fmt.Sprint(v))
+	}
+	if v, ok := body["error"]; ok {
+		job.SetError(fmt.Sprint(v))
+	}
+	if v, ok := body["result"]; ok {
+		raw, err := types.ParseJSONRaw(v)
+		if err != nil {
+			return err
+		}
+		job.SetResult(raw)
+	}
+
+	return nil
 }
 
 func applyI18nListQuery(app core.App, collection *core.Collection, query *dbx.SelectQuery, params url.Values) (url.Values, error) {
@@ -304,7 +425,7 @@ func uniqueTranslationSlug(app core.App, collection *core.Collection, field *cor
 		return sourceSlug
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 50; i++ {
 		candidateSuffix := suffix
 		if i > 0 {
 			candidateSuffix = fmt.Sprintf("%s-%d", suffix, i+1)
@@ -320,7 +441,7 @@ func uniqueTranslationSlug(app core.App, collection *core.Collection, field *cor
 		}
 	}
 
-	return translationSlugCandidate(sourceSlug, suffix, field.Max)
+	return translationSlugCandidate(sourceSlug, suffix+"-"+strings.ToLower(security.PseudorandomString(6)), field.Max)
 }
 
 func translationSlugCandidate(base string, suffix string, max int) string {

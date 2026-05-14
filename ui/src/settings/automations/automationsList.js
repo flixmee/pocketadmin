@@ -8,6 +8,10 @@ const triggerLabels = {
     "record.create": "Record create",
     "record.update": "Record update",
     "record.delete": "Record delete",
+    "i18n.translation_missing": "Translation missing",
+    "i18n.locale_published": "Locale published",
+    "i18n.translation_updated": "Translation updated",
+    "i18n.ai_translation_finished": "AI translation finished",
 };
 
 export function automationsList(propsArg = {}) {
@@ -357,6 +361,10 @@ function describeAutomationScope(automation) {
         automation.triggerType === "record.create"
         || automation.triggerType === "record.update"
         || automation.triggerType === "record.delete"
+        || automation.triggerType === "i18n.translation_missing"
+        || automation.triggerType === "i18n.locale_published"
+        || automation.triggerType === "i18n.translation_updated"
+        || automation.triggerType === "i18n.ai_translation_finished"
     ) {
         const collection = (app.store.collections || []).find((item) => item.id === automation.collectionRef);
         return collection?.name || automation.collectionRef || "Missing collection";

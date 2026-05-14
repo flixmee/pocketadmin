@@ -95,9 +95,9 @@ func TestFindAllCollections(t *testing.T) {
 		collectionTypes []string
 		expectTotal     int
 	}{
-		{nil, 17},
-		{[]string{}, 17},
-		{[]string{""}, 17},
+		{nil, 22},
+		{[]string{}, 22},
+		{[]string{""}, 22},
 		{[]string{"unknown"}, 0},
 		{[]string{"unknown", core.CollectionTypeAuth}, 4},
 		{[]string{core.CollectionTypeAuth, core.CollectionTypeView}, 7},

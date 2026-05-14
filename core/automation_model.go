@@ -10,12 +10,16 @@ import (
 const (
 	CollectionNameAutomations = "_automations"
 
-	AutomationTriggerRecordCreate = "record.create"
-	AutomationTriggerRecordUpdate = "record.update"
-	AutomationTriggerRecordDelete = "record.delete"
-	AutomationTriggerScheduleCron = "schedule.cron"
-	AutomationTriggerWebhook      = "webhook"
-	AutomationTriggerManual       = "manual"
+	AutomationTriggerRecordCreate   = "record.create"
+	AutomationTriggerRecordUpdate   = "record.update"
+	AutomationTriggerRecordDelete   = "record.delete"
+	AutomationTriggerScheduleCron   = "schedule.cron"
+	AutomationTriggerWebhook        = "webhook"
+	AutomationTriggerManual         = "manual"
+	AutomationTriggerI18nMissing    = "i18n.translation_missing"
+	AutomationTriggerI18nPublished  = "i18n.locale_published"
+	AutomationTriggerI18nUpdated    = "i18n.translation_updated"
+	AutomationTriggerI18nAIFinished = "i18n.ai_translation_finished"
 
 	AutomationStepCondition    = "condition"
 	AutomationStepHTTP         = "http"

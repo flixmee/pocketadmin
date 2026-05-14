@@ -20,6 +20,10 @@ var (
 		AutomationTriggerScheduleCron,
 		AutomationTriggerWebhook,
 		AutomationTriggerManual,
+		AutomationTriggerI18nMissing,
+		AutomationTriggerI18nPublished,
+		AutomationTriggerI18nUpdated,
+		AutomationTriggerI18nAIFinished,
 	}
 	automationStepTypes = []string{
 		AutomationStepCondition,
@@ -146,12 +150,12 @@ func validateAutomationRecord(app App, record *Record) error {
 		return validation.Errors{"triggerType": err}
 	}
 
-	if isRecordAutomationTrigger(triggerType) {
+	if isRecordAutomationTrigger(triggerType) || isI18nAutomationTrigger(triggerType) {
 		collectionRef := strings.TrimSpace(record.GetString("collectionRef"))
 		if err := validation.Validate(
 			collectionRef,
-			validation.Required,
-			validation.By(validateCollectionId(app, CollectionTypeBase, CollectionTypeAuth)),
+			validation.When(triggerType != AutomationTriggerI18nPublished, validation.Required),
+			validation.When(collectionRef != "", validation.By(validateCollectionId(app, CollectionTypeBase, CollectionTypeAuth))),
 		); err != nil {
 			return validation.Errors{"collectionRef": err}
 		}
@@ -443,6 +447,18 @@ func validateAutomationResponseStep(automationRecord *Record, step map[string]an
 func isRecordAutomationTrigger(triggerType string) bool {
 	switch triggerType {
 	case AutomationTriggerRecordCreate, AutomationTriggerRecordUpdate, AutomationTriggerRecordDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func isI18nAutomationTrigger(triggerType string) bool {
+	switch triggerType {
+	case AutomationTriggerI18nMissing,
+		AutomationTriggerI18nPublished,
+		AutomationTriggerI18nUpdated,
+		AutomationTriggerI18nAIFinished:
 		return true
 	default:
 		return false

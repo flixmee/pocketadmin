@@ -620,6 +620,12 @@ type App interface {
 	// BackfillI18nCollectionRecords initializes i18n fields for existing rows when localization is enabled.
 	BackfillI18nCollectionRecords(newCollection *Collection, oldCollection *Collection) error
 
+	// MigrateCollectionI18n enables i18n on a collection and reports the performed backfill.
+	MigrateCollectionI18n(options I18nMigrationOptions) (*I18nMigrationReport, error)
+
+	// FindTranslationJobById returns a single translation job by id.
+	FindTranslationJobById(id string) (*TranslationJob, error)
+
 	// ---------------------------------------------------------------
 
 	// RecordQuery returns a new Record select query from a collection model, id or name.

@@ -132,6 +132,95 @@ func TestAutomationRecordTriggersCreateRunLogs(t *testing.T) {
 	waitForAutomationRuns(t, app, deleteAutomation, 1)
 }
 
+func TestAutomationI18nTriggersCreateRunLogs(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	locale := core.NewLocale(app)
+	locale.SetCode("vi")
+	locale.SetName("Vietnamese")
+	locale.SetEnabled(true)
+	if err := app.Save(locale); err != nil {
+		t.Fatal(err)
+	}
+
+	collection := core.NewBaseCollection("automation_i18n_posts")
+	collection.Fields.Add(&core.TextField{Name: "title"})
+	collection.I18n.Enabled = true
+	collection.I18n.DefaultLocale = core.DefaultLocaleCode
+	collection.I18n.LocalizedFields = []string{"title"}
+	if err := app.Save(collection); err != nil {
+		t.Fatal(err)
+	}
+
+	missingAutomation := newRecordTriggerAutomation(t, app, collection.Id, core.AutomationTriggerI18nMissing)
+
+	record := core.NewRecord(collection)
+	record.Set("title", "Missing vi")
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, missingAutomation, 1)
+	if runs[0].TriggerType() != core.AutomationTriggerI18nMissing {
+		t.Fatalf("Expected i18n missing trigger, got %q", runs[0].TriggerType())
+	}
+	if !strings.Contains(runs[0].Input().String(), `"missingLocales":["vi"]`) {
+		t.Fatalf("Expected missing locale payload, got %s", runs[0].Input().String())
+	}
+}
+
+func TestAutomationI18nAIFinishedTriggerFromTranslationJob(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	locale := core.NewLocale(app)
+	locale.SetCode("vi")
+	locale.SetName("Vietnamese")
+	locale.SetEnabled(true)
+	if err := app.Save(locale); err != nil {
+		t.Fatal(err)
+	}
+
+	collection := core.NewBaseCollection("automation_i18n_jobs")
+	collection.Fields.Add(&core.TextField{Name: "title"})
+	collection.I18n.Enabled = true
+	collection.I18n.DefaultLocale = core.DefaultLocaleCode
+	collection.I18n.LocalizedFields = []string{"title"}
+	if err := app.Save(collection); err != nil {
+		t.Fatal(err)
+	}
+
+	automation := newRecordTriggerAutomation(t, app, collection.Id, core.AutomationTriggerI18nAIFinished)
+
+	job := core.NewTranslationJob(app)
+	job.SetCollectionRef(collection.Id)
+	job.SetSourceRecordId("source123")
+	job.SetSourceLocale(core.DefaultLocaleCode)
+	job.SetTargetLocale("vi")
+	job.SetStatus(core.TranslationJobStatusPending)
+	if err := app.Save(job); err != nil {
+		t.Fatal(err)
+	}
+
+	job.SetStatus(core.TranslationJobStatusFinished)
+	if err := app.Save(job); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].TriggerType() != core.AutomationTriggerI18nAIFinished {
+		t.Fatalf("Expected AI finished trigger, got %q", runs[0].TriggerType())
+	}
+	if !strings.Contains(runs[0].Input().String(), `"translationJobId":"`+job.Id+`"`) {
+		t.Fatalf("Expected translation job payload, got %s", runs[0].Input().String())
+	}
+}
+
 func TestAutomationRecordTriggerSkippedOnRollback(t *testing.T) {
 	t.Parallel()
 

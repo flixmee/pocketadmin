@@ -323,6 +323,37 @@ func (app *BaseApp) registerI18nHooks() {
 		},
 	})
 
+	app.OnRecordAfterCreateSuccess().Bind(&hook.Handler[*RecordEvent]{
+		Id: "pbI18nRecordCreateAutomation",
+		Func: func(e *RecordEvent) error {
+			if err := e.Next(); err != nil {
+				return err
+			}
+			queueI18nMissingAutomation(e.App, e.Record)
+			return nil
+		},
+	})
+
+	app.OnRecordAfterUpdateSuccess().Bind(&hook.Handler[*RecordEvent]{
+		Id: "pbI18nRecordUpdateAutomation",
+		Func: func(e *RecordEvent) error {
+			if err := e.Next(); err != nil {
+				return err
+			}
+			if e.Record != nil && e.Record.Collection() != nil && e.Record.Collection().I18nEnabled() {
+				queueI18nAutomationRuns(e.App, AutomationTriggerI18nUpdated, e.Record, map[string]any{
+					"collectionId":   e.Record.Collection().Id,
+					"collectionName": e.Record.Collection().Name,
+					"groupId":        e.Record.GetString(FieldNameI18nGroupId),
+					"locale":         e.Record.GetString(FieldNameLocale),
+					"recordId":       e.Record.Id,
+					"isSource":       e.Record.GetBool(FieldNameIsSource),
+				})
+			}
+			return nil
+		},
+	})
+
 	app.OnRecordValidate(CollectionNameLocales).Bind(&hook.Handler[*RecordEvent]{
 		Id:       "pbI18nLocaleValidate",
 		Priority: -10,
@@ -337,6 +368,8 @@ func (app *BaseApp) registerI18nHooks() {
 
 	app.OnRecordCreateExecute(CollectionNameLocales).Bind(localeSaveHandler)
 	app.OnRecordUpdateExecute(CollectionNameLocales).Bind(localeSaveHandler)
+	app.OnRecordAfterCreateSuccess(CollectionNameLocales).Bind(localePublishedAutomationHandler)
+	app.OnRecordAfterUpdateSuccess(CollectionNameLocales).Bind(localePublishedAutomationHandler)
 }
 
 var localeSaveHandler = &hook.Handler[*RecordEvent]{
@@ -353,6 +386,94 @@ var localeSaveHandler = &hook.Handler[*RecordEvent]{
 
 		return e.Next()
 	},
+}
+
+var localePublishedAutomationHandler = &hook.Handler[*RecordEvent]{
+	Id: "pbI18nLocalePublishedAutomation",
+	Func: func(e *RecordEvent) error {
+		if err := e.Next(); err != nil {
+			return err
+		}
+
+		if !e.Record.GetBool("enabled") {
+			return nil
+		}
+		if !e.Record.IsNew() && e.Record.Original().GetBool("enabled") {
+			return nil
+		}
+
+		collections, err := e.App.FindAllCollections(CollectionTypeBase)
+		if err != nil {
+			return err
+		}
+		for _, collection := range collections {
+			if collection == nil || !collection.I18nEnabled() {
+				continue
+			}
+			queueI18nAutomationRuns(e.App, AutomationTriggerI18nPublished, nil, map[string]any{
+				"collectionId":   collection.Id,
+				"collectionName": collection.Name,
+				"locale":         e.Record.GetString("code"),
+				"localeRecordId": e.Record.Id,
+			})
+		}
+
+		return nil
+	},
+}
+
+func queueI18nMissingAutomation(app App, record *Record) {
+	if record == nil || record.Collection() == nil || !record.Collection().I18nEnabled() {
+		return
+	}
+
+	missingLocales, err := missingI18nLocales(app, record.Collection(), record.GetString(FieldNameI18nGroupId))
+	if err != nil || len(missingLocales) == 0 {
+		return
+	}
+
+	queueI18nAutomationRuns(app, AutomationTriggerI18nMissing, record, map[string]any{
+		"collectionId":     record.Collection().Id,
+		"collectionName":   record.Collection().Name,
+		"groupId":          record.GetString(FieldNameI18nGroupId),
+		"sourceLocale":     record.GetString(FieldNameLocale),
+		"sourceRecordId":   record.Id,
+		"missingLocales":   missingLocales,
+		"translationTotal": len(missingLocales),
+	})
+}
+
+func missingI18nLocales(app App, collection *Collection, groupId string) ([]string, error) {
+	if groupId == "" {
+		return nil, nil
+	}
+
+	locales, err := app.FindEnabledLocales()
+	if err != nil {
+		return nil, err
+	}
+
+	records := []*Record{}
+	if err := app.RecordQuery(collection).
+		AndWhere(dbx.HashExp{FieldNameI18nGroupId: groupId}).
+		All(&records); err != nil {
+		return nil, err
+	}
+
+	existing := map[string]struct{}{}
+	for _, record := range records {
+		existing[record.GetString(FieldNameLocale)] = struct{}{}
+	}
+
+	result := []string{}
+	for _, locale := range locales {
+		if _, ok := existing[locale.Code()]; ok {
+			continue
+		}
+		result = append(result, locale.Code())
+	}
+
+	return result, nil
 }
 
 func validateLocaleRecord(app App, record *Record) error {

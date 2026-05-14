@@ -59,7 +59,7 @@ func buildAutomationRegistry(automations []*Automation) *automationRegistry {
 		registry.ByID[automation.Id] = automation
 		registry.ByTrigger[automation.TriggerType()] = append(registry.ByTrigger[automation.TriggerType()], automation)
 
-		if isRecordAutomationTrigger(automation.TriggerType()) {
+		if isRecordAutomationTrigger(automation.TriggerType()) || isI18nAutomationTrigger(automation.TriggerType()) {
 			collectionId := automation.CollectionRef()
 			if collectionId == "" {
 				continue

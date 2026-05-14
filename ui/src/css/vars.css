@@ -5,6 +5,8 @@
   --monospaceFontFamily: "IBM Plex Mono", ui-monospace, monospace, emoji;
   --iconFontFamily: "remixicon";
 
+  --baseSpacing: 30px;
+
   --primaryColor: #25272d;
   --primaryAlt1Color: color-mix(in srgb, var(--primaryColor), white 8%);
   --primaryAlt2Color: color-mix(in srgb, var(--primaryColor), white 13%);

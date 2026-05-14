@@ -19,6 +19,7 @@ type automationTriggerPayload struct {
 	CollectionId   string         `json:"collectionId,omitempty"`
 	CollectionName string         `json:"collectionName,omitempty"`
 	Request        map[string]any `json:"request,omitempty"`
+	I18n           map[string]any `json:"i18n,omitempty"`
 	Record         map[string]any `json:"record,omitempty"`
 	RecordOriginal map[string]any `json:"recordOriginal,omitempty"`
 	triggerRecord  *Record        `json:"-"`
@@ -90,6 +91,78 @@ func queueRecordAutomationRuns(app App, triggerType string, record *Record, orig
 			if err := runAutomation(app, nextAutomation, payload); err != nil {
 				app.Logger().Warn(
 					"Failed to execute record-triggered automation",
+					"automationId", nextAutomation.Id,
+					"triggerType", triggerType,
+					"error", err,
+				)
+			}
+		})
+	}
+}
+
+func queueI18nAutomationRuns(app App, triggerType string, record *Record, i18n map[string]any) {
+	if i18n == nil {
+		i18n = map[string]any{}
+	}
+
+	registry, err := getAutomationRegistry(app)
+	if err != nil {
+		app.Logger().Warn("Failed to load automation registry", "error", err)
+		return
+	}
+
+	var collectionId string
+	var collectionName string
+	var triggerRecord *Record
+	if record != nil && record.Collection() != nil {
+		collectionId = record.Collection().Id
+		collectionName = record.Collection().Name
+		triggerRecord = record
+	}
+	if collectionId == "" {
+		collectionId = toString(i18n["collectionId"])
+	}
+	if collectionName == "" && collectionId != "" {
+		if collection, err := app.FindCachedCollectionByNameOrId(collectionId); err == nil {
+			collectionName = collection.Name
+		}
+	}
+
+	automations := []*Automation{}
+	if collectionId != "" && registry.ByTriggerScope[triggerType] != nil {
+		automations = append(automations, registry.ByTriggerScope[triggerType][collectionId]...)
+	}
+	automations = append(automations, registry.ByTrigger[triggerType]...)
+	if len(automations) == 0 {
+		return
+	}
+
+	payload := automationTriggerPayload{
+		TriggerType:    triggerType,
+		CollectionId:   collectionId,
+		CollectionName: collectionName,
+		I18n:           i18n,
+		triggerRecord:  triggerRecord,
+	}
+	if triggerRecord != nil {
+		payload.Record = automationTemplateRecordData(triggerRecord)
+	}
+
+	seen := map[string]struct{}{}
+	for _, automation := range automations {
+		if automation == nil {
+			continue
+		}
+		if _, ok := seen[automation.Id]; ok {
+			continue
+		}
+		seen[automation.Id] = struct{}{}
+
+		nextAutomation := automation
+		routine.FireAndForget(func() {
+			if err := runAutomation(app, nextAutomation, payload); err != nil {
+				app.Logger().Warn(
+					"Failed to execute i18n-triggered automation",
 					"automationId", nextAutomation.Id,
 					"triggerType", triggerType,
 					"error", err,
@@ -389,7 +462,16 @@ func decodeAutomationRunPayload(run *AutomationRun) (automationTriggerPayload, e
 }
 
 func shouldSkipAutomationTriggerCollection(collectionName string) bool {
-	return collectionName == CollectionNameAutomations || collectionName == CollectionNameAutomationRuns
+	switch collectionName {
+	case CollectionNameAutomations,
+		CollectionNameAutomationRuns,
+		CollectionNameLocales,
+		CollectionNameI18nGroups,
+		CollectionNameTranslationJobs:
+		return true
+	default:
+		return false
+	}
 }
 
 func automationWebhookRequestData(request *AutomationWebhookRequest) map[string]any {
