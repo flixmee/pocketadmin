@@ -52,6 +52,8 @@ func TestAutomationCollectionsExist(t *testing.T) {
 				"authStrategy",
 				"runtimeHandler",
 				"configUI",
+				"connectorRef",
+				"requiredScopes",
 				"active",
 				"created",
 				"updated",
@@ -72,8 +74,89 @@ func TestAutomationCollectionsExist(t *testing.T) {
 				"depth",
 				"dedupeKey",
 				"policyDecision",
+				"workflowVersionRef",
+				"workflowVersionSnapshot",
 				"started",
 				"finished",
+				"created",
+				"updated",
+			},
+		},
+		{
+			name: core.CollectionNameWorkflowState,
+			expectedFields: []string{
+				"id",
+				"automationRef",
+				"runRef",
+				"status",
+				"currentStepIndex",
+				"context",
+				"checkpoints",
+				"resumeToken",
+				"waitingFor",
+				"expires",
+				"created",
+				"updated",
+			},
+		},
+		{
+			name: core.CollectionNameApprovals,
+			expectedFields: []string{
+				"id",
+				"workflowStateRef",
+				"automationRef",
+				"runRef",
+				"stepIndex",
+				"assignee",
+				"role",
+				"status",
+				"decision",
+				"comment",
+				"resolved",
+				"created",
+				"updated",
+			},
+		},
+		{
+			name: core.CollectionNameConnectors,
+			expectedFields: []string{
+				"id",
+				"provider",
+				"authType",
+				"credentials",
+				"scopes",
+				"rateLimits",
+				"active",
+				"created",
+				"updated",
+			},
+		},
+		{
+			name: core.CollectionNameAutomationEvents,
+			expectedFields: []string{
+				"id",
+				"name",
+				"source",
+				"subject",
+				"payload",
+				"occurred",
+				"correlationId",
+				"causationId",
+				"created",
+			},
+		},
+		{
+			name: core.CollectionNameWorkflowVersions,
+			expectedFields: []string{
+				"id",
+				"automationRef",
+				"version",
+				"status",
+				"snapshot",
+				"notes",
+				"createdBy",
+				"publishedBy",
+				"publishedAt",
 				"created",
 				"updated",
 			},
@@ -110,6 +193,23 @@ func TestNewCapability(t *testing.T) {
 
 	if capability.Collection().Name != core.CollectionNameCapabilities {
 		t.Fatalf("Expected record with %q collection, got %q", core.CollectionNameCapabilities, capability.Collection().Name)
+	}
+}
+
+func TestConnectorCredentialsHidden(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.FindCollectionByNameOrId(core.CollectionNameConnectors)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	field := collection.Fields.GetByName("credentials")
+	if field == nil || !field.GetHidden() {
+		t.Fatal("Expected connector credentials field to be hidden")
 	}
 }
 

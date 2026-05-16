@@ -37,6 +37,8 @@ type automationExecutionContext struct {
 	TemplateData    map[string]any
 	WebhookResponse *AutomationWebhookResponse
 	DryRun          bool
+	State           *WorkflowState
+	StartStepIndex  int
 }
 
 func newAutomationExecutionContext(app App, automation *Automation, run *AutomationRun, payload automationTriggerPayload) *automationExecutionContext {
@@ -109,6 +111,14 @@ func executeAutomationStep(ctx *automationExecutionContext, step map[string]any)
 	}
 
 	switch stepType {
+	case AutomationStepWaitDelay, AutomationStepWaitWebhook, AutomationStepWaitEvent, AutomationStepWaitApproval:
+		return automationStepStatusSuccess, map[string]any{
+			"dryRun": true,
+			"type":   stepType,
+		}, nil
+	case AutomationStepAIExtract, AutomationStepAIClassify, AutomationStepAIGenerate, AutomationStepAISummarize:
+		output, err := executeAutomationAIStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	case AutomationStepCondition:
 		return executeAutomationConditionStep(ctx, step)
 	case AutomationStepHTTP:
@@ -187,6 +197,18 @@ func previewAutomationStep(ctx *automationExecutionContext, step map[string]any)
 		}
 	case AutomationStepResponse:
 		for _, key := range []string{"statusCode", "headers", "body"} {
+			if _, ok := step[key]; !ok {
+				continue
+			}
+			rendered, err := renderAutomationTemplateValue(step[key], ctx.TemplateData)
+			if err != nil {
+				return nil, err
+			}
+			output[key] = rendered
+		}
+	case AutomationStepWaitDelay, AutomationStepWaitWebhook, AutomationStepWaitEvent, AutomationStepWaitApproval,
+		AutomationStepAIExtract, AutomationStepAIClassify, AutomationStepAIGenerate, AutomationStepAISummarize:
+		for _, key := range []string{"duration", "key", "assignee", "role", "model", "input", "schema", "labels"} {
 			if _, ok := step[key]; !ok {
 				continue
 			}

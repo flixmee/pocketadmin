@@ -591,6 +591,42 @@ type App interface {
 	// RunAutomationDryRun previews the specified automation without side effects.
 	RunAutomationDryRun(automationID string, input map[string]any) (*AutomationDryRunResult, error)
 
+	// ResumeAutomationWorkflowState resumes a waiting workflow state.
+	ResumeAutomationWorkflowState(stateID string, input AutomationResumeInput) error
+
+	// ResumeAutomationWorkflowByToken resumes a waiting workflow using its resume token.
+	ResumeAutomationWorkflowByToken(token string, input map[string]any) error
+
+	// ResolveAutomationApproval records an approval decision and resumes or fails the workflow.
+	ResolveAutomationApproval(approvalID string, decision AutomationApprovalDecision) error
+
+	// ResumeExpiredAutomationWorkflowStates resumes delay waits whose expiration has passed.
+	ResumeExpiredAutomationWorkflowStates() error
+
+	// FindWorkflowStateById returns a single WorkflowState model by id.
+	FindWorkflowStateById(id string) (*WorkflowState, error)
+
+	// FindWorkflowStateByResumeToken returns a waiting WorkflowState model by resume token.
+	FindWorkflowStateByResumeToken(token string) (*WorkflowState, error)
+
+	// FindApprovalById returns a single Approval model by id.
+	FindApprovalById(id string) (*Approval, error)
+
+	// FindConnectorById returns a single Connector model by id.
+	FindConnectorById(id string) (*Connector, error)
+
+	// PublishAutomationEvent stores an automation event envelope.
+	PublishAutomationEvent(event AutomationEventEnvelope) (*AutomationEventRecord, error)
+
+	// FindAutomationEventById returns a single retained automation event by id.
+	FindAutomationEventById(id string) (*AutomationEventRecord, error)
+
+	// PublishAutomationVersion snapshots an automation as a published workflow version.
+	PublishAutomationVersion(automationID string, options AutomationPublishOptions) (*WorkflowVersion, error)
+
+	// FindLatestPublishedWorkflowVersion returns the latest published version for an automation.
+	FindLatestPublishedWorkflowVersion(automationID string) (*WorkflowVersion, error)
+
 	// FindCapabilityById returns a single Capability model by its id.
 	FindCapabilityById(id string) (*Capability, error)
 

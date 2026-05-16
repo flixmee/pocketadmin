@@ -29,6 +29,14 @@ const (
 	AutomationStepRecordDelete = "record.delete"
 	AutomationStepResponse     = "response"
 	AutomationStepCapability   = "capability"
+	AutomationStepWaitDelay    = "wait.delay"
+	AutomationStepWaitWebhook  = "wait.webhook"
+	AutomationStepWaitEvent    = "wait.event"
+	AutomationStepWaitApproval = "wait.approval"
+	AutomationStepAIExtract    = "ai.extract"
+	AutomationStepAIClassify   = "ai.classify"
+	AutomationStepAIGenerate   = "ai.generate"
+	AutomationStepAISummarize  = "ai.summarize"
 )
 
 var (

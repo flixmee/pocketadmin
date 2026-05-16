@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
 	"github.com/pocketbase/pocketbase/tools/cron"
@@ -1508,6 +1509,36 @@ func decodeAutomationRunInput(t *testing.T, run *core.AutomationRun) map[string]
 	return result
 }
 
+func findWorkflowStateByRunForTest(t *testing.T, app *tests.TestApp, runId string) *core.WorkflowState {
+	t.Helper()
+
+	state := &core.WorkflowState{}
+	err := app.RecordQuery(core.CollectionNameWorkflowState).
+		AndWhere(dbx.HashExp{"runRef": runId}).
+		Limit(1).
+		One(state)
+	if err != nil {
+		t.Fatalf("Failed to load workflow state: %v", err)
+	}
+
+	return state
+}
+
+func findPendingApprovalByStateForTest(t *testing.T, app *tests.TestApp, stateId string) *core.Approval {
+	t.Helper()
+
+	approval := &core.Approval{}
+	err := app.RecordQuery(core.CollectionNameApprovals).
+		AndWhere(dbx.HashExp{"workflowStateRef": stateId, "status": core.ApprovalStatusPending}).
+		Limit(1).
+		One(approval)
+	if err != nil {
+		t.Fatalf("Failed to load pending approval: %v", err)
+	}
+
+	return approval
+}
+
 func TestAutomationRunStartedFieldSet(t *testing.T) {
 	t.Parallel()
 
@@ -1537,6 +1568,302 @@ func TestAutomationRunStartedFieldSet(t *testing.T) {
 	}
 	if runs[0].Finished().Time().Before(types.NowDateTime().Add(-10 * time.Second).Time()) {
 		t.Fatal("Expected finished field to be recent")
+	}
+}
+
+func TestAutomationWorkflowStateCheckpointsSynchronousRun(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"condition","path":"trigger.type","op":"exists"},
+		{"type":"condition","path":"trigger.type","op":"eq","value":"manual"}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	state := findWorkflowStateByRunForTest(t, app, runs[0].Id)
+	if state.Status() != core.WorkflowStateStatusCompleted {
+		t.Fatalf("Expected completed workflow state, got %q", state.Status())
+	}
+	if state.CurrentStepIndex() != 1 {
+		t.Fatalf("Expected checkpoint step index 1, got %d", state.CurrentStepIndex())
+	}
+}
+
+func TestAutomationWaitWebhookResume(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"wait.webhook","key":"payment_completed"},
+		{"type":"condition","path":"request.resume.ok","op":"eq","value":true}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusWaiting {
+		t.Fatalf("Expected waiting run, got %q", runs[0].Status())
+	}
+
+	state := findWorkflowStateByRunForTest(t, app, runs[0].Id)
+	if state.Status() != core.WorkflowStateStatusWaiting {
+		t.Fatalf("Expected waiting state, got %q", state.Status())
+	}
+	if state.ResumeToken() == "" {
+		t.Fatal("Expected resume token to be set")
+	}
+
+	if err := app.ResumeAutomationWorkflowByToken(state.ResumeToken(), map[string]any{"ok": true}); err != nil {
+		t.Fatal(err)
+	}
+
+	resumedRun, err := app.FindAutomationRunById(runs[0].Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumedRun.Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful resumed run, got %q (%s)", resumedRun.Status(), resumedRun.Error())
+	}
+	results := decodeStepResults(t, resumedRun)
+	if len(results) != 2 {
+		t.Fatalf("Expected 2 step results, got %d", len(results))
+	}
+}
+
+func TestAutomationWaitApprovalDecision(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"wait.approval","role":"manager"},
+		{"type":"condition","path":"trigger.type","op":"eq","value":"manual"}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForAutomationRuns(t, app, automation, 1)
+	state := findWorkflowStateByRunForTest(t, app, runs[0].Id)
+	approval := findPendingApprovalByStateForTest(t, app, state.Id)
+	if approval.Role() != "manager" {
+		t.Fatalf("Expected approval role manager, got %q", approval.Role())
+	}
+
+	if err := app.ResolveAutomationApproval(approval.Id, core.AutomationApprovalDecision{Decision: "approved"}); err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := app.FindApprovalById(approval.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Status() != core.ApprovalStatusApproved {
+		t.Fatalf("Expected approved status, got %q", resolved.Status())
+	}
+
+	resumedRun, err := app.FindAutomationRunById(runs[0].Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumedRun.Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q (%s)", resumedRun.Status(), resumedRun.Error())
+	}
+
+	if err := app.ResolveAutomationApproval(approval.Id, core.AutomationApprovalDecision{Decision: "approved"}); err == nil {
+		t.Fatal("Expected duplicate approval decision to fail")
+	}
+}
+
+func TestAutomationConnectorBackedCapability(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	connector := core.NewConnector(app)
+	connector.SetProvider("generic")
+	connector.SetAuthType(core.AutomationConnectorAuthBearer)
+	connector.SetCredentials(mustParseJSONRaw(t, `{"token":"secret-token"}`))
+	connector.SetScopes(mustParseJSONRaw(t, `["send"]`))
+	connector.SetActive(true)
+	if err := app.Save(connector); err != nil {
+		t.Fatal(err)
+	}
+
+	capability := core.NewCapability(app)
+	populateValidCapability(capability)
+	capability.SetKey("generic.post")
+	capability.SetRuntimeHandler(core.AutomationStepHTTP)
+	capability.SetConnectorRef(connector.Id)
+	capability.SetRequiredScopes(mustParseJSONRaw(t, `["send"]`))
+	if err := app.Save(capability); err != nil {
+		t.Fatal(err)
+	}
+
+	var authorization string
+	app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+		authorization = req.Header.Get("Authorization")
+		return &http.Response{
+			StatusCode: 200,
+			Status:     "200 OK",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+		}, nil
+	}))
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[{
+		"type":"capability",
+		"capability":"generic.post",
+		"input":{"url":"https://example.com","method":"POST"}
+	}]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected success, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+	if authorization != "Bearer secret-token" {
+		t.Fatalf("Expected bearer authorization header, got %q", authorization)
+	}
+}
+
+func TestAutomationEventPublicationForRecordTrigger(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.FindCollectionByNameOrId("demo2")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation := newRecordTriggerAutomation(t, app, collection.Id, core.AutomationTriggerRecordCreate)
+	record := core.NewRecord(collection)
+	record.Set("title", "event publication")
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+
+	waitForAutomationRuns(t, app, automation, 1)
+
+	events := []*core.AutomationEventRecord{}
+	err = app.RecordQuery(core.CollectionNameAutomationEvents).
+		AndWhere(dbx.HashExp{"name": core.AutomationTriggerRecordCreate}).
+		All(&events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("Expected 1 retained event, got %d", len(events))
+	}
+}
+
+func TestAutomationAIStepsUseProviderAndValidateOutput(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[{
+		"type":"ai.extract",
+		"input":"invoice text",
+		"schema":{"type":"object","required":["vendor"],"properties":{"vendor":{"type":"string"}}}
+	}]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected success, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+	results := decodeStepResults(t, runs[0])
+	output := results[0]["output"].(map[string]any)
+	extracted := output["output"].(map[string]any)
+	if extracted["vendor"] != "invoice text" {
+		t.Fatalf("Expected deterministic vendor output, got %#v", extracted["vendor"])
+	}
+}
+
+func TestAutomationPublishedVersionSnapshotUsedForRuns(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[{"type":"condition","path":"trigger.type","op":"eq","value":"manual"}]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	version, err := app.PublishAutomationVersion(automation.Id, core.AutomationPublishOptions{Notes: "v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation.SetSteps(mustParseJSONRaw(t, `[{"type":"condition","path":"missing.value","op":"exists"}]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected published snapshot run to succeed, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+	if runs[0].WorkflowVersionRef() != version.Id {
+		t.Fatalf("Expected run version ref %q, got %q", version.Id, runs[0].WorkflowVersionRef())
 	}
 }
 

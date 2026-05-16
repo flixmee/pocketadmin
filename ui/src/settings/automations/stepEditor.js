@@ -12,6 +12,15 @@ const stepTypeOptions = [
     { value: "record.update", label: "Update record" },
     { value: "record.delete", label: "Delete record" },
     { value: "response", label: "Webhook response", triggerTypes: ["webhook"] },
+    { value: "capability", label: "Capability" },
+    { value: "wait.delay", label: "Wait delay" },
+    { value: "wait.webhook", label: "Wait webhook" },
+    { value: "wait.event", label: "Wait event" },
+    { value: "wait.approval", label: "Wait approval" },
+    { value: "ai.extract", label: "AI extract" },
+    { value: "ai.classify", label: "AI classify" },
+    { value: "ai.generate", label: "AI generate" },
+    { value: "ai.summarize", label: "AI summarize" },
 ];
 
 export function stepEditor(propsArg = {}) {
@@ -247,6 +256,16 @@ function renderStepForm(step, error, context = {}) {
             return recordStepForm({ step, error });
         case "response":
             return responseStepForm({ step, error });
+        case "capability":
+        case "wait.delay":
+        case "wait.webhook":
+        case "wait.event":
+        case "wait.approval":
+        case "ai.extract":
+        case "ai.classify":
+        case "ai.generate":
+        case "ai.summarize":
+            return genericJSONStepForm({ step, error });
         default:
             return t.div({ className: "txt-sm txt-danger" }, `Unsupported step type "${step.type}".`);
     }
@@ -330,6 +349,19 @@ function createEditorStep(type, rawStep = {}) {
                 headersText: stringifyJSONObject(rawStep.headers, "{}"),
                 bodyText: stringifyLooseValue(rawStep.body),
             };
+        case "capability":
+        case "wait.delay":
+        case "wait.webhook":
+        case "wait.event":
+        case "wait.approval":
+        case "ai.extract":
+        case "ai.classify":
+        case "ai.generate":
+        case "ai.summarize":
+            return {
+                ...base,
+                configText: stringifyJSONObject(stepConfigWithoutType(rawStep), "{}"),
+            };
         default:
             return createEditorStep("condition", { __id: base.__id });
     }
@@ -351,9 +383,59 @@ function buildStepPayload(step, index) {
             return buildRecordDeletePayload(step, index);
         case "response":
             return buildResponsePayload(step, index);
+        case "capability":
+        case "wait.delay":
+        case "wait.webhook":
+        case "wait.event":
+        case "wait.approval":
+        case "ai.extract":
+        case "ai.classify":
+        case "ai.generate":
+        case "ai.summarize":
+            return buildGenericJSONPayload(step, index);
         default:
             throw new Error(`Step ${index + 1}: unsupported step type "${step.type}".`);
     }
+}
+
+function genericJSONStepForm({ step }) {
+    return t.div(
+        { className: "grid" },
+        t.div(
+            { className: "col-12" },
+            t.div(
+                { className: "field" },
+                t.label({ htmlFor: `${step.__id}_config` }, "Configuration JSON"),
+                t.textarea({
+                    id: `${step.__id}_config`,
+                    rows: 8,
+                    value: () => step.configText || "{}",
+                    oninput: (e) => {
+                        step.configText = e.target.value;
+                    },
+                }),
+            ),
+        ),
+    );
+}
+
+function buildGenericJSONPayload(step, index) {
+    const config = parseJSONObject(step.configText, `Step ${index + 1}: configuration`);
+    return {
+        type: step.type,
+        ...config,
+    };
+}
+
+function stepConfigWithoutType(rawStep = {}) {
+    const result = {};
+    for (const key in rawStep || {}) {
+        if (key === "type" || key === "__id") {
+            continue;
+        }
+        result[key] = rawStep[key];
+    }
+    return result;
 }
 
 function buildConditionPayload(step, index) {

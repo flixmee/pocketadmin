@@ -232,6 +232,67 @@ func TestAutomationDryRun(t *testing.T) {
 	}
 }
 
+func TestAutomationPublish(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "unauthorized",
+			Method:          http.MethodPost,
+			URL:             "/api/automations/autoapi00000062/publish",
+			Body:            strings.NewReader(`{"notes":"v1"}`),
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as regular user",
+			Method: http.MethodPost,
+			URL:    "/api/automations/autoapi00000062/publish",
+			Body:   strings.NewReader(`{"notes":"v1"}`),
+			Headers: map[string]string{
+				"Authorization": testRegularAuthHeader,
+			},
+			ExpectedStatus:  403,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as superuser",
+			Method: http.MethodPost,
+			URL:    "/api/automations/autoapi00000062/publish",
+			Body:   strings.NewReader(`{"notes":"v1"}`),
+			Headers: map[string]string{
+				"Authorization": testSuperuserAuthHeader,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				createAutomationFixture(t, app, "autoapi00000062", "API publish automation")
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"automationRef":"autoapi00000062"`,
+				`"version":1`,
+				`"status":"published"`,
+				`"notes":"v1"`,
+			},
+			ExpectedEvents: map[string]int{
+				"OnRecordValidate":           1,
+				"OnRecordCreate":             1,
+				"OnRecordCreateExecute":      1,
+				"OnRecordAfterCreateSuccess": 1,
+				"OnModelValidate":            1,
+				"OnModelCreate":              1,
+				"OnModelCreateExecute":       1,
+				"OnModelAfterCreateSuccess":  1,
+			},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
 func TestAutomationViewUpdateDelete(t *testing.T) {
 	t.Parallel()
 
@@ -772,6 +833,109 @@ func TestAutomationRunsClear(t *testing.T) {
 	}
 }
 
+func TestAutomationApprovalsList(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "unauthorized",
+			Method:          http.MethodGet,
+			URL:             "/api/automations/approvals",
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as regular user",
+			Method: http.MethodGet,
+			URL:    "/api/automations/approvals",
+			Headers: map[string]string{
+				"Authorization": testRegularAuthHeader,
+			},
+			ExpectedStatus:  403,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as superuser",
+			Method: http.MethodGet,
+			URL:    "/api/automations/approvals?status=pending",
+			Headers: map[string]string{
+				"Authorization": testSuperuserAuthHeader,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				createApprovalFixture(t, app)
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"id":"approvalapi0001"`,
+				`"role":"manager"`,
+				`"status":"pending"`,
+			},
+			ExpectedEvents: map[string]int{"*": 0},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
+func TestAutomationApprovalDecision(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "unauthorized",
+			Method:          http.MethodPost,
+			URL:             "/api/automations/approvals/approvalapi0001/decision",
+			Body:            strings.NewReader(`{"decision":"rejected"}`),
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as regular user",
+			Method: http.MethodPost,
+			URL:    "/api/automations/approvals/approvalapi0001/decision",
+			Body:   strings.NewReader(`{"decision":"rejected"}`),
+			Headers: map[string]string{
+				"Authorization": testRegularAuthHeader,
+			},
+			ExpectedStatus:  403,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as superuser",
+			Method: http.MethodPost,
+			URL:    "/api/automations/approvals/approvalapi0001/decision",
+			Body:   strings.NewReader(`{"decision":"rejected","comment":"No"}`),
+			Headers: map[string]string{
+				"Authorization": testSuperuserAuthHeader,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				createApprovalFixture(t, app)
+			},
+			ExpectedStatus: 204,
+			ExpectedEvents: map[string]int{
+				"OnRecordValidate":           4,
+				"OnRecordUpdate":             4,
+				"OnRecordUpdateExecute":      4,
+				"OnRecordAfterUpdateSuccess": 4,
+				"OnModelValidate":            4,
+				"OnModelUpdate":              4,
+				"OnModelUpdateExecute":       4,
+				"OnModelAfterUpdateSuccess":  4,
+			},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
 func createAutomationFixture(t testing.TB, app *tests.TestApp, id string, name string) *core.Automation {
 	t.Helper()
 
@@ -801,6 +965,51 @@ func createWebhookAutomationFixture(t testing.TB, app *tests.TestApp, id string,
 	}
 
 	return automation
+}
+
+func createApprovalFixture(t testing.TB, app *tests.TestApp) *core.Approval {
+	t.Helper()
+
+	automation := createAutomationFixture(t, app, "autoapproval001", "Approval API automation")
+
+	run := core.NewAutomationRun(app)
+	run.SetRaw("id", "runapproval0001")
+	run.SetAutomationRef(automation.Id)
+	run.SetTriggerType(core.AutomationTriggerManual)
+	run.SetStatus(core.AutomationRunStatusWaiting)
+	run.SetInput(mustAutomationJSONRaw(t, `{"triggerType":"manual"}`))
+	run.ClearErrorStepIndex()
+	if err := app.Save(run); err != nil {
+		t.Fatalf("Failed to create automation run fixture: %v", err)
+	}
+
+	state := core.NewWorkflowState(app)
+	state.SetRaw("id", "stateapproval01")
+	state.SetAutomationRef(automation.Id)
+	state.SetRunRef(run.Id)
+	state.SetStatus(core.WorkflowStateStatusWaiting)
+	state.SetCurrentStepIndex(0)
+	state.SetResumeToken("approval_resume_token")
+	state.SetContext(mustAutomationJSONRaw(t, `{"triggerType":"manual"}`))
+	state.SetCheckpoints(mustAutomationJSONRaw(t, `[]`))
+	state.SetWaitingFor(mustAutomationJSONRaw(t, `{"type":"wait.approval","approvalId":"approvalapi0001"}`))
+	if err := app.Save(state); err != nil {
+		t.Fatalf("Failed to create workflow state fixture: %v", err)
+	}
+
+	approval := core.NewApproval(app)
+	approval.SetRaw("id", "approvalapi0001")
+	approval.SetWorkflowStateRef(state.Id)
+	approval.SetAutomationRef(automation.Id)
+	approval.SetRunRef(run.Id)
+	approval.SetStepIndex(0)
+	approval.SetRole("manager")
+	approval.SetStatus(core.ApprovalStatusPending)
+	if err := app.Save(approval); err != nil {
+		t.Fatalf("Failed to create approval fixture: %v", err)
+	}
+
+	return approval
 }
 
 func mustAutomationJSONRaw(t testing.TB, raw string) types.JSONRaw {

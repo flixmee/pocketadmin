@@ -34,12 +34,33 @@ var (
 		AutomationStepRecordDelete,
 		AutomationStepResponse,
 		AutomationStepCapability,
+		AutomationStepWaitDelay,
+		AutomationStepWaitWebhook,
+		AutomationStepWaitEvent,
+		AutomationStepWaitApproval,
+		AutomationStepAIExtract,
+		AutomationStepAIClassify,
+		AutomationStepAIGenerate,
+		AutomationStepAISummarize,
 	}
 	automationRunStatuses = []string{
 		AutomationRunStatusQueued,
 		AutomationRunStatusRunning,
+		AutomationRunStatusWaiting,
 		AutomationRunStatusSuccess,
 		AutomationRunStatusFailed,
+	}
+	workflowStateStatuses = []string{
+		WorkflowStateStatusRunning,
+		WorkflowStateStatusWaiting,
+		WorkflowStateStatusCompleted,
+		WorkflowStateStatusFailed,
+		WorkflowStateStatusExpired,
+	}
+	approvalStatuses = []string{
+		ApprovalStatusPending,
+		ApprovalStatusApproved,
+		ApprovalStatusRejected,
 	}
 )
 
@@ -58,6 +79,26 @@ func (app *BaseApp) registerAutomationHooks() {
 	app.OnRecordValidate(CollectionNameAutomationRuns).Bind(&hook.Handler[*RecordEvent]{
 		Func: func(e *RecordEvent) error {
 			if err := validateAutomationRunRecord(e.App, e.Record); err != nil {
+				return err
+			}
+
+			return e.Next()
+		},
+		Priority: 99,
+	})
+	app.OnRecordValidate(CollectionNameWorkflowState).Bind(&hook.Handler[*RecordEvent]{
+		Func: func(e *RecordEvent) error {
+			if err := validateWorkflowStateRecord(e.App, e.Record); err != nil {
+				return err
+			}
+
+			return e.Next()
+		},
+		Priority: 99,
+	})
+	app.OnRecordValidate(CollectionNameApprovals).Bind(&hook.Handler[*RecordEvent]{
+		Func: func(e *RecordEvent) error {
+			if err := validateApprovalRecord(e.App, e.Record); err != nil {
 				return err
 			}
 
@@ -113,6 +154,7 @@ func (app *BaseApp) registerAutomationHooks() {
 				return err
 			}
 
+			publishRecordAutomationEvent(e.App, AutomationTriggerRecordCreate, e.Record, nil)
 			queueRecordAutomationRuns(e.App, AutomationTriggerRecordCreate, e.Record, nil)
 
 			return nil
@@ -125,6 +167,7 @@ func (app *BaseApp) registerAutomationHooks() {
 				return err
 			}
 
+			publishRecordAutomationEvent(e.App, AutomationTriggerRecordUpdate, e.Record, e.Record.Original())
 			queueRecordAutomationRuns(e.App, AutomationTriggerRecordUpdate, e.Record, e.Record.Original())
 
 			return nil
@@ -137,6 +180,7 @@ func (app *BaseApp) registerAutomationHooks() {
 				return err
 			}
 
+			publishRecordAutomationEvent(e.App, AutomationTriggerRecordDelete, e.Record, e.Record.Original())
 			queueRecordAutomationRuns(e.App, AutomationTriggerRecordDelete, e.Record, e.Record.Original())
 
 			return nil
@@ -196,6 +240,49 @@ func validateAutomationRunRecord(app App, record *Record) error {
 
 	status := strings.TrimSpace(record.GetString("status"))
 	if err := validation.Validate(status, validation.Required, validation.In(toAnySlice(automationRunStatuses)...)); err != nil {
+		return validation.Errors{"status": err}
+	}
+
+	return nil
+}
+
+func validateWorkflowStateRecord(app App, record *Record) error {
+	automationRef := strings.TrimSpace(record.GetString("automationRef"))
+	if err := validation.Validate(automationRef, validation.Required, validation.By(validateRecordId(app, CollectionNameAutomations))); err != nil {
+		return validation.Errors{"automationRef": err}
+	}
+
+	runRef := strings.TrimSpace(record.GetString("runRef"))
+	if err := validation.Validate(runRef, validation.Required, validation.By(validateRecordId(app, CollectionNameAutomationRuns))); err != nil {
+		return validation.Errors{"runRef": err}
+	}
+
+	status := strings.TrimSpace(record.GetString("status"))
+	if err := validation.Validate(status, validation.Required, validation.In(toAnySlice(workflowStateStatuses)...)); err != nil {
+		return validation.Errors{"status": err}
+	}
+
+	return nil
+}
+
+func validateApprovalRecord(app App, record *Record) error {
+	workflowStateRef := strings.TrimSpace(record.GetString("workflowStateRef"))
+	if err := validation.Validate(workflowStateRef, validation.Required, validation.By(validateRecordId(app, CollectionNameWorkflowState))); err != nil {
+		return validation.Errors{"workflowStateRef": err}
+	}
+
+	automationRef := strings.TrimSpace(record.GetString("automationRef"))
+	if err := validation.Validate(automationRef, validation.Required, validation.By(validateRecordId(app, CollectionNameAutomations))); err != nil {
+		return validation.Errors{"automationRef": err}
+	}
+
+	runRef := strings.TrimSpace(record.GetString("runRef"))
+	if err := validation.Validate(runRef, validation.Required, validation.By(validateRecordId(app, CollectionNameAutomationRuns))); err != nil {
+		return validation.Errors{"runRef": err}
+	}
+
+	status := strings.TrimSpace(record.GetString("status"))
+	if err := validation.Validate(status, validation.Required, validation.In(toAnySlice(approvalStatuses)...)); err != nil {
 		return validation.Errors{"status": err}
 	}
 
@@ -277,9 +364,64 @@ func validateAutomationStepDefinition(app App, automationRecord *Record, step ma
 		return validateAutomationResponseStep(automationRecord, step)
 	case AutomationStepCapability:
 		return validateAutomationCapabilityStep(app, automationRecord, step)
+	case AutomationStepWaitDelay:
+		return validateAutomationWaitDelayStep(step)
+	case AutomationStepWaitWebhook, AutomationStepWaitEvent:
+		return validateAutomationWaitKeyStep(step)
+	case AutomationStepWaitApproval:
+		return validateAutomationWaitApprovalStep(step)
+	case AutomationStepAIExtract, AutomationStepAIClassify, AutomationStepAIGenerate, AutomationStepAISummarize:
+		return validateAutomationAIStep(step)
 	default:
 		return nil
 	}
+}
+
+func validateAutomationAIStep(step map[string]any) error {
+	stepType := strings.TrimSpace(toString(step["type"]))
+	if _, ok := step["input"]; !ok {
+		return validation.NewError("validation_invalid_automation_ai", "AI step requires input.")
+	}
+	if schema, ok := step["schema"]; ok && schema != nil {
+		if _, valid := schema.(map[string]any); !valid {
+			return validation.NewError("validation_invalid_automation_ai", "AI step schema must be a JSON object.")
+		}
+	}
+	if stepType == AutomationStepAIClassify {
+		labels, ok := step["labels"].([]any)
+		if !ok || len(labels) == 0 {
+			return validation.NewError("validation_invalid_automation_ai", "AI classify step requires labels.")
+		}
+	}
+
+	return nil
+}
+
+func validateAutomationWaitDelayStep(step map[string]any) error {
+	if _, ok := step["duration"]; !ok {
+		return validation.NewError("validation_invalid_automation_wait", "Wait delay step requires a duration.")
+	}
+	if duration, err := automationWaitDuration(step["duration"]); err != nil || duration <= 0 {
+		return validation.NewError("validation_invalid_automation_wait", "Wait delay step duration must be a positive duration.")
+	}
+
+	return nil
+}
+
+func validateAutomationWaitKeyStep(step map[string]any) error {
+	if strings.TrimSpace(toString(step["key"])) == "" {
+		return validation.NewError("validation_invalid_automation_wait", "Wait step requires a key.")
+	}
+
+	return nil
+}
+
+func validateAutomationWaitApprovalStep(step map[string]any) error {
+	if strings.TrimSpace(toString(step["role"])) == "" && strings.TrimSpace(toString(step["assignee"])) == "" {
+		return validation.NewError("validation_invalid_automation_wait", "Approval wait step requires a role or assignee.")
+	}
+
+	return nil
 }
 
 func validateAutomationCapabilityStep(app App, automationRecord *Record, step map[string]any) error {

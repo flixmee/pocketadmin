@@ -135,6 +135,23 @@ func (m *Capability) SetConfigUI(config types.JSONRaw) {
 	m.Set("configUI", config)
 }
 
+func (m *Capability) ConnectorRef() string {
+	return m.GetString("connectorRef")
+}
+
+func (m *Capability) SetConnectorRef(id string) {
+	m.Set("connectorRef", strings.TrimSpace(id))
+}
+
+func (m *Capability) RequiredScopes() types.JSONRaw {
+	raw, _ := m.GetRaw("requiredScopes").(types.JSONRaw)
+	return raw
+}
+
+func (m *Capability) SetRequiredScopes(scopes types.JSONRaw) {
+	m.Set("requiredScopes", scopes)
+}
+
 func (m *Capability) Active() bool {
 	return m.GetBool("active")
 }
@@ -225,6 +242,9 @@ func validateCapabilityRecord(app App, record *Record) error {
 	}
 	if err := validateCapabilityJSONSchemaField(record, "configUI", true); err != nil {
 		errs["configUI"] = err
+	}
+	if err := validateConnectorJSONArray(record, "requiredScopes", true); err != nil {
+		errs["requiredScopes"] = err
 	}
 
 	if err := validation.Validate(strings.TrimSpace(record.GetString("runtimeHandler")), validation.Required); err != nil {

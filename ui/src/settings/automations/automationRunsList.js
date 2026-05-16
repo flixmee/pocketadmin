@@ -354,6 +354,8 @@ function formatRunStatus(status) {
             return "Queued";
         case "running":
             return "Running";
+        case "waiting":
+            return "Waiting";
         case "success":
             return "Succeeded";
         case "failed":
@@ -370,7 +372,7 @@ function runStatusClass(status) {
     if (status === "failed") {
         return "danger";
     }
-    if (status === "queued" || status === "running") {
+    if (status === "queued" || status === "running" || status === "waiting") {
         return "warning";
     }
 
@@ -384,7 +386,7 @@ function runStatusIconClass(status) {
     if (status === "failed") {
         return "txt-danger";
     }
-    if (status === "queued" || status === "running") {
+    if (status === "queued" || status === "running" || status === "waiting") {
         return "txt-warning";
     }
 
@@ -413,6 +415,11 @@ function describeRunSummary(run) {
     }
 
     if (hasStepResults(run)) {
+        const waitingCount = run.stepResults.filter((result) => result?.status === "waiting").length;
+        if (waitingCount > 0) {
+            return `${waitingCount} step(s) are waiting to resume.`;
+        }
+
         const stoppedCount = run.stepResults.filter((result) => result?.status === "stopped").length;
         if (stoppedCount > 0) {
             return `${stoppedCount} step(s) stopped the workflow early.`;

@@ -31,19 +31,125 @@ var automationAllowedFields = []string{
 // bindAutomationApi registers the automation api endpoints.
 func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
 	rg.POST("/automation-webhooks/{id}", automationWebhook).Bind(SkipSuccessActivityLog())
+	rg.POST("/automation-resume/{token}", automationResumeByToken).Bind(SkipSuccessActivityLog())
 
 	subGroup := rg.Group("/automations").Bind(RequireSuperuserAuth())
 	subGroup.GET("", automationsList)
 	subGroup.GET("/schemas", automationSchemas)
+	subGroup.GET("/workflow-states", automationWorkflowStatesList)
+	subGroup.POST("/workflow-states/{id}/resume", automationWorkflowStateResume)
+	subGroup.GET("/approvals", automationApprovalsList)
+	subGroup.POST("/approvals/{id}/decision", automationApprovalDecision)
 	subGroup.POST("", automationCreate)
 	subGroup.GET("/{id}", automationView)
 	subGroup.PATCH("/{id}", automationUpdate)
 	subGroup.DELETE("/{id}", automationDelete)
+	subGroup.POST("/{id}/publish", automationPublish)
 	subGroup.POST("/{id}/run", automationRun)
 	subGroup.POST("/{id}/dry-run", automationDryRun)
 	subGroup.POST("/{id}/runs/{runId}/rerun", automationRunRerun)
 	subGroup.GET("/{id}/runs", automationRunsList)
 	subGroup.DELETE("/{id}/runs", automationRunsClear)
+}
+
+func automationPublish(e *core.RequestEvent) error {
+	automation, err := findAutomationForAPI(e.App, e.Request.PathValue("id"))
+	if err != nil {
+		return automationAPIError(e, "publish", err)
+	}
+
+	body := core.AutomationPublishOptions{}
+	if e.Request.Body != nil {
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Failed to load publish options.", err)
+		}
+	}
+
+	version, err := e.App.PublishAutomationVersion(automation.Id, body)
+	if err != nil {
+		return e.BadRequestError("Failed to publish automation.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, version)
+	})
+}
+
+func automationWorkflowStatesList(e *core.RequestEvent) error {
+	states := []*core.WorkflowState{}
+	err := e.App.RecordQuery(core.CollectionNameWorkflowState).
+		OrderBy("updated DESC").
+		All(&states)
+	if err != nil {
+		return e.BadRequestError("Failed to load workflow states.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, states)
+	})
+}
+
+func automationWorkflowStateResume(e *core.RequestEvent) error {
+	body := core.AutomationResumeInput{}
+	if e.Request.Body != nil {
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Failed to load workflow resume input.", err)
+		}
+	}
+
+	if err := e.App.ResumeAutomationWorkflowState(e.Request.PathValue("id"), body); err != nil {
+		return e.BadRequestError("Failed to resume workflow state.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.NoContent(http.StatusNoContent)
+	})
+}
+
+func automationResumeByToken(e *core.RequestEvent) error {
+	body := map[string]any{}
+	if e.Request.Body != nil {
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Failed to load workflow resume input.", err)
+		}
+	}
+
+	if err := e.App.ResumeAutomationWorkflowByToken(e.Request.PathValue("token"), body); err != nil {
+		return e.BadRequestError("Failed to resume workflow.", err)
+	}
+
+	return e.NoContent(http.StatusNoContent)
+}
+
+func automationApprovalsList(e *core.RequestEvent) error {
+	approvals := []*core.Approval{}
+	query := e.App.RecordQuery(core.CollectionNameApprovals).OrderBy("created DESC")
+	if status := strings.TrimSpace(e.Request.URL.Query().Get("status")); status != "" {
+		query.AndWhere(dbx.HashExp{"status": status})
+	}
+
+	if err := query.All(&approvals); err != nil {
+		return e.BadRequestError("Failed to load approvals.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, approvals)
+	})
+}
+
+func automationApprovalDecision(e *core.RequestEvent) error {
+	body := core.AutomationApprovalDecision{}
+	if err := e.BindBody(&body); err != nil {
+		return e.BadRequestError("Failed to load approval decision.", err)
+	}
+
+	if err := e.App.ResolveAutomationApproval(e.Request.PathValue("id"), body); err != nil {
+		return e.BadRequestError("Failed to resolve approval.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.NoContent(http.StatusNoContent)
+	})
 }
 
 func automationSchemas(e *core.RequestEvent) error {

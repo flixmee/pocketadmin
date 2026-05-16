@@ -50,6 +50,14 @@ func AutomationSchemas() AutomationSchemaCatalog {
 			AutomationStepRecordDelete: recordDeleteStepSchema(),
 			AutomationStepResponse:     responseStepSchema(),
 			AutomationStepCapability:   capabilityStepSchema(),
+			AutomationStepWaitDelay:    waitDelayStepSchema(),
+			AutomationStepWaitWebhook:  waitKeyStepSchema(AutomationStepWaitWebhook, "Wait for webhook"),
+			AutomationStepWaitEvent:    waitKeyStepSchema(AutomationStepWaitEvent, "Wait for event"),
+			AutomationStepWaitApproval: waitApprovalStepSchema(),
+			AutomationStepAIExtract:    aiStepSchema(AutomationStepAIExtract, "AI extract"),
+			AutomationStepAIClassify:   aiStepSchema(AutomationStepAIClassify, "AI classify"),
+			AutomationStepAIGenerate:   aiStepSchema(AutomationStepAIGenerate, "AI generate"),
+			AutomationStepAISummarize:  aiStepSchema(AutomationStepAISummarize, "AI summarize"),
 		},
 		Capabilities: BuiltInAutomationCapabilities(),
 		Limits: AutomationRuntimeLimits{
@@ -60,6 +68,87 @@ func AutomationSchemas() AutomationSchemaCatalog {
 			HTTPOutputBodyLimit:   automationHTTPOutputBodyLimit,
 		},
 	}
+}
+
+func aiStepSchema(key string, label string) AutomationSchema {
+	input := map[string]any{
+		"type":   constStringSchema(key),
+		"model":  stringSchema(),
+		"input":  map[string]any{},
+		"schema": objectSchema(nil),
+	}
+	if key == AutomationStepAIClassify {
+		input["labels"] = arraySchema(stringSchema())
+	}
+
+	return AutomationSchema{
+		Key:         key,
+		Label:       label,
+		Category:    "ai",
+		InputSchema: objectSchema(input),
+		OutputSchema: objectSchema(map[string]any{
+			"model":      stringSchema(),
+			"output":     map[string]any{},
+			"tokenUsage": objectSchema(nil),
+		}),
+	}
+}
+
+func waitDelayStepSchema() AutomationSchema {
+	return AutomationSchema{
+		Key:      AutomationStepWaitDelay,
+		Label:    "Wait delay",
+		Category: "wait",
+		InputSchema: objectSchema(map[string]any{
+			"type":     constStringSchema(AutomationStepWaitDelay),
+			"duration": stringSchema(),
+		}),
+		OutputSchema: waitOutputSchema(),
+	}
+}
+
+func waitKeyStepSchema(key string, label string) AutomationSchema {
+	return AutomationSchema{
+		Key:      key,
+		Label:    label,
+		Category: "wait",
+		InputSchema: objectSchema(map[string]any{
+			"type": constStringSchema(key),
+			"key":  stringSchema(),
+		}),
+		OutputSchema: waitOutputSchema(),
+	}
+}
+
+func waitApprovalStepSchema() AutomationSchema {
+	return AutomationSchema{
+		Key:      AutomationStepWaitApproval,
+		Label:    "Wait for approval",
+		Category: "approval",
+		InputSchema: objectSchema(map[string]any{
+			"type":     constStringSchema(AutomationStepWaitApproval),
+			"assignee": stringSchema(),
+			"role":     stringSchema(),
+		}),
+		OutputSchema: objectSchema(map[string]any{
+			"waiting":    boolSchema(),
+			"type":       stringSchema(),
+			"token":      stringSchema(),
+			"approvalId": stringSchema(),
+			"role":       stringSchema(),
+			"assignee":   stringSchema(),
+		}),
+	}
+}
+
+func waitOutputSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"waiting":  boolSchema(),
+		"type":     stringSchema(),
+		"token":    stringSchema(),
+		"key":      stringSchema(),
+		"resumeAt": stringSchema(),
+	})
 }
 
 func capabilityStepSchema() AutomationSchema {

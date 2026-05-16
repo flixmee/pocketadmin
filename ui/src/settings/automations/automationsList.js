@@ -24,6 +24,7 @@ export function automationsList(propsArg = {}) {
     const data = store({
         isLoading: false,
         isRunning: {},
+        isPublishing: {},
         isDeleting: {},
         isToggling: {},
         automations: [],
@@ -89,6 +90,29 @@ export function automationsList(propsArg = {}) {
         }
 
         delete data.isRunning[automation.id];
+    }
+
+    async function publishAutomation(automation) {
+        if (!automation?.id || data.isPublishing[automation.id]) {
+            return;
+        }
+
+        data.isPublishing[automation.id] = true;
+
+        try {
+            await app.pb.send(`/api/automations/${automation.id}/publish`, {
+                method: "POST",
+                body: {},
+            });
+            app.toasts.success(`Published "${automation.name}".`);
+            await loadAutomations();
+        } catch (err) {
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+            }
+        }
+
+        delete data.isPublishing[automation.id];
     }
 
     async function deleteAutomation(automation) {
@@ -309,6 +333,19 @@ export function automationsList(propsArg = {}) {
                             t.button(
                                 {
                                     type: "button",
+                                    ariaLabel: app.attrs.tooltip("Publish version"),
+                                    className: () =>
+                                        `btn sm circle secondary transparent ${
+                                            data.isPublishing[automation.id] ? "loading" : ""
+                                        }`,
+                                    disabled: () => isBusy(automation),
+                                    onclick: () => publishAutomation(automation),
+                                },
+                                t.i({ className: "ri-upload-cloud-line", ariaHidden: true }),
+                            ),
+                            t.button(
+                                {
+                                    type: "button",
                                     ariaLabel: app.attrs.tooltip("Delete"),
                                     className: () =>
                                         `btn sm circle secondary transparent ${
@@ -342,6 +379,7 @@ export function automationsList(propsArg = {}) {
     function isBusy(automation) {
         return !!(
             data.isDeleting[automation.id]
+            || data.isPublishing[automation.id]
             || data.isRunning[automation.id]
             || data.isToggling[automation.id]
         );
@@ -384,6 +422,9 @@ function formatRunStatus(status) {
     if (status === "running") {
         return "Running";
     }
+    if (status === "waiting") {
+        return "Waiting";
+    }
     if (status === "success") {
         return "Succeeded";
     }
@@ -401,7 +442,7 @@ function runStatusClass(status) {
     if (status === "failed") {
         return "danger";
     }
-    if (status === "queued" || status === "running") {
+    if (status === "queued" || status === "running" || status === "waiting") {
         return "warning";
     }
 

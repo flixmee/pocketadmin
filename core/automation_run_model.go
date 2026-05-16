@@ -12,6 +12,7 @@ const (
 
 	AutomationRunStatusQueued  = "queued"
 	AutomationRunStatusRunning = "running"
+	AutomationRunStatusWaiting = "waiting"
 	AutomationRunStatusSuccess = "success"
 	AutomationRunStatusFailed  = "failed"
 
@@ -186,6 +187,27 @@ func (m *AutomationRun) PolicyDecision() types.JSONRaw {
 // SetPolicyDecision updates the policy decision audit payload.
 func (m *AutomationRun) SetPolicyDecision(decision types.JSONRaw) {
 	m.Set("policyDecision", decision)
+}
+
+// WorkflowVersionRef returns the published workflow version used for the run.
+func (m *AutomationRun) WorkflowVersionRef() string {
+	return m.GetString("workflowVersionRef")
+}
+
+// SetWorkflowVersionRef updates the published workflow version used for the run.
+func (m *AutomationRun) SetWorkflowVersionRef(id string) {
+	m.Set("workflowVersionRef", id)
+}
+
+// WorkflowVersionSnapshot returns the immutable automation snapshot used for the run.
+func (m *AutomationRun) WorkflowVersionSnapshot() types.JSONRaw {
+	raw, _ := m.GetRaw("workflowVersionSnapshot").(types.JSONRaw)
+	return raw
+}
+
+// SetWorkflowVersionSnapshot updates the immutable automation snapshot used for the run.
+func (m *AutomationRun) SetWorkflowVersionSnapshot(snapshot types.JSONRaw) {
+	m.Set("workflowVersionSnapshot", snapshot)
 }
 
 // Started returns the run start timestamp.

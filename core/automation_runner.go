@@ -72,7 +72,7 @@ func queueRecordAutomationRuns(app App, triggerType string, record *Record, orig
 		return
 	}
 
-	if shouldSkipAutomationTriggerCollection(record.Collection().Name) {
+	if record.Collection().System || shouldSkipAutomationTriggerCollection(record.Collection().Name) {
 		return
 	}
 
@@ -162,6 +162,17 @@ func queueI18nAutomationRuns(app App, triggerType string, record *Record, i18n m
 	if triggerRecord != nil {
 		payload.Record = automationTemplateRecordData(triggerRecord)
 	}
+	_, _ = app.PublishAutomationEvent(AutomationEventEnvelope{
+		Name:    triggerType,
+		Source:  "i18n",
+		Subject: collectionName,
+		Payload: map[string]any{
+			"collectionId":   collectionId,
+			"collectionName": collectionName,
+			"i18n":           i18n,
+			"record":         payload.Record,
+		},
+	})
 
 	seen := map[string]struct{}{}
 	for _, automation := range automations {
@@ -304,10 +315,21 @@ func (app *BaseApp) RunAutomationWebhook(automationID string, request *Automatio
 		return nil, fmt.Errorf("missing active webhook automation %q", automationID)
 	}
 
-	ctx, err := runAutomationWithContext(app, automation, automationTriggerPayload{
+	payload := automationTriggerPayload{
 		TriggerType: AutomationTriggerWebhook,
 		Request:     automationWebhookRequestData(request),
+	}
+	_, _ = app.PublishAutomationEvent(AutomationEventEnvelope{
+		Name:    AutomationTriggerWebhook,
+		Source:  "webhook",
+		Subject: automation.Id,
+		Payload: map[string]any{
+			"automationId": automation.Id,
+			"request":      payload.Request,
+		},
 	})
+
+	ctx, err := runAutomationWithContext(app, automation, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -329,6 +351,7 @@ func runAutomationWithContext(app App, automation *Automation, payload automatio
 	}
 
 	var run *AutomationRun
+	var state *WorkflowState
 	var stepResults []AutomationStepResult
 
 	defer func() {
@@ -371,6 +394,19 @@ func runAutomationWithContext(app App, automation *Automation, payload automatio
 	run.SetDedupeKey(automationRunDedupeKey(payload))
 	run.ClearErrorStepIndex()
 
+	effectiveAutomation := automation
+	if baseApp, ok := app.(*BaseApp); ok {
+		if version, err := baseApp.FindLatestPublishedWorkflowVersion(automation.Id); err == nil {
+			run.SetWorkflowVersionRef(version.Id)
+			run.SetWorkflowVersionSnapshot(version.Snapshot())
+			if snapshotAutomation, err := applyAutomationVersionSnapshot(automation, version.Snapshot()); err == nil {
+				effectiveAutomation = snapshotAutomation
+			}
+		} else if snapshot, err := automationSnapshotRaw(automation); err == nil {
+			run.SetWorkflowVersionSnapshot(snapshot)
+		}
+	}
+
 	policyDecision, policyErr := evaluateAutomationPolicy(app, automation, payload, run)
 	if decisionRaw, err := toJSONRaw(policyDecision); err == nil {
 		run.SetPolicyDecision(decisionRaw)
@@ -402,11 +438,23 @@ func runAutomationWithContext(app App, automation *Automation, payload automatio
 		return nil, err
 	}
 
-	ctx = newAutomationExecutionContext(app, automation, run, payload)
+	state, err = createAutomationWorkflowState(app, automation, run, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx = newAutomationExecutionContext(app, effectiveAutomation, run, payload)
+	ctx.State = state
 	setCurrentAutomationPolicyContext(app, run)
 	defer clearCurrentAutomationPolicyContext(app, run.Id)
 
 	stepResults, err = executeAutomationSteps(ctx)
+	if isAutomationPauseError(err) {
+		if checkpointErr := persistAutomationWorkflowCheckpoint(app, state, run, stepResults); checkpointErr != nil {
+			return ctx, checkpointErr
+		}
+		return ctx, nil
+	}
 	if finishErr := finalizeAutomationRun(app, automation, run, stepResults, err); finishErr != nil {
 		return ctx, finishErr
 	}
@@ -443,6 +491,25 @@ func finalizeAutomationRun(app App, automation *Automation, run *AutomationRun, 
 		return err
 	}
 
+	if state, err := findAutomationWorkflowStateByRun(app, run.Id); err == nil {
+		if execErr != nil {
+			state.SetStatus(WorkflowStateStatusFailed)
+		} else {
+			state.SetStatus(WorkflowStateStatusCompleted)
+		}
+		state.SetCurrentStepIndex(len(stepResults) - 1)
+		state.SetResumeToken("")
+		if raw, err := toJSONRaw(map[string]any{}); err == nil {
+			state.SetWaitingFor(raw)
+		}
+		if raw, err := toJSONRaw(stepResults); err == nil {
+			state.SetCheckpoints(raw)
+		}
+		if saveErr := app.Save(state); saveErr != nil {
+			return saveErr
+		}
+	}
+
 	if err := updateAutomationLastRunState(app, automation.Id, run.Status(), run.Finished()); err != nil {
 		app.Logger().Warn(
 			"Failed to update automation last run state",
@@ -471,11 +538,25 @@ func executeAutomationSteps(ctx *automationExecutionContext) ([]AutomationStepRe
 	}
 
 	results := make([]AutomationStepResult, 0, len(steps))
+	if ctx.StartStepIndex > 0 {
+		results = append(results, automationRunStepResults(ctx.Run)...)
+		for _, result := range results {
+			ctx.appendStepTemplateResult(result)
+		}
+	}
 
-	for i, step := range steps {
+	for i := ctx.StartStepIndex; i < len(steps); i++ {
+		step := steps[i]
 		stepType := strings.TrimSpace(toString(step["type"]))
 		started := types.NowDateTime()
-		status, output, err := executeAutomationStep(ctx, step)
+		var status string
+		var output any
+		var err error
+		if isAutomationWaitStep(stepType) && !ctx.DryRun {
+			status, output, err = executeAutomationWaitStep(ctx, step, i)
+		} else {
+			status, output, err = executeAutomationStep(ctx, step)
+		}
 		finished := types.NowDateTime()
 		result := AutomationStepResult{
 			Index:      i,
@@ -488,6 +569,12 @@ func executeAutomationSteps(ctx *automationExecutionContext) ([]AutomationStepRe
 		}
 
 		if err != nil {
+			if isAutomationPauseError(err) {
+				result.Status = status
+				results = append(results, result)
+				ctx.appendStepTemplateResult(result)
+				return results, err
+			}
 			result.Status = automationStepStatusFailed
 			result.Error = err.Error()
 			results = append(results, result)
@@ -496,6 +583,11 @@ func executeAutomationSteps(ctx *automationExecutionContext) ([]AutomationStepRe
 
 		results = append(results, result)
 		ctx.appendStepTemplateResult(result)
+		if ctx.State != nil && !ctx.DryRun {
+			if err := persistAutomationWorkflowCheckpoint(ctx.App, ctx.State, ctx.Run, results); err != nil {
+				return results, err
+			}
+		}
 
 		if stepType == AutomationStepResponse {
 			return results, nil
@@ -592,6 +684,11 @@ func shouldSkipAutomationTriggerCollection(collectionName string) bool {
 	case CollectionNameAutomations,
 		CollectionNameAutomationRuns,
 		CollectionNameCapabilities,
+		CollectionNameConnectors,
+		CollectionNameWorkflowState,
+		CollectionNameApprovals,
+		CollectionNameAutomationEvents,
+		CollectionNameWorkflowVersions,
 		CollectionNameLocales,
 		CollectionNameI18nGroups,
 		CollectionNameTranslationJobs:

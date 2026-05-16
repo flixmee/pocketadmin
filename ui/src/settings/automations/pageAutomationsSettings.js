@@ -1,4 +1,5 @@
 import { settingsSidebar } from "../settingsSidebar";
+import { automationApprovalsList } from "./automationApprovalsList";
 import { automationsList } from "./automationsList";
 
 export function pageAutomationsSettings() {
@@ -41,6 +42,17 @@ export function pageAutomationsSettings() {
                     "The editor now uses structured step forms for supported triggers and actions.",
                 ),
                 automationsList({
+                    reset: () => data.resetList,
+                }),
+                t.div(
+                    { className: "flex gap-10 m-t-base m-b-sm" },
+                    t.div({ className: "txt-lg" }, "Pending approvals"),
+                    app.components.refreshButton({
+                        className: "btn sm transparent secondary circle",
+                        onclick: resetAutomationsList,
+                    }),
+                ),
+                automationApprovalsList({
                     reset: () => data.resetList,
                 }),
             ),

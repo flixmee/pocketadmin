@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Implement Platform Phase 3 policy and recursion safety MVP.
-- Success: add run audit fields, policy decision checks for depth/rate/concurrency/cooldown/dedupe, and focused tests without breaking normal automations.
+- Implement Platform Phases 7-10 from `FUTURE_AUTOMATION_PLATFORM_PLAN.md`.
+- Success: add connector foundation, internal event bus MVP, AI runtime MVP, and workflow versioning/publish flow foundation with focused tests while preserving existing automation behavior.
 
 Constraints/Assumptions:
 
@@ -79,14 +79,41 @@ State:
     - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation|TestCapability|TestFindAllCollections|TestImportCollections'`; passed.
     - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation|TestCollectionsList|TestCollectionsImport'`; passed.
     - Broader `go test ./core ./apis` was attempted; remaining failures are known environment/existing issues: watcher tests and sandboxed `httptest` listener in OAuth2 test.
+    - User requested: "review FUTURE_AUTOMATION_PLATFORM_PLAN.md and handle phase 4 - 6".
+    - Implemented Platform Phase 4 persistent workflow state MVP with `_workflowState`, `WorkflowState` model, checkpoint persistence, resumable runner support, and state queries.
+    - Implemented Platform Phase 5 wait/resume MVP with `wait.delay`, `wait.webhook`, and `wait.event` validation/schema/runtime support, waiting run status, resume-by-state/token APIs, and expired delay resume helper.
+    - Implemented Platform Phase 6 approval MVP with `_approvals`, `Approval` model, `wait.approval`, approval decision APIs, duplicate decision protection, rejection failure handling, and admin UI pending approval actions.
+    - Updated automation schema discovery and admin run labels for waiting runs.
+    - Updated collection-count fixtures for `_workflowState` and `_approvals`.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation|TestCapability|TestFindAllCollections|TestImportCollections'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation|TestCollectionsList|TestCollectionsImport'`; passed.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core ./apis`; `./core` passed, `./apis` failed only on sandboxed `httptest` listener permission in `TestRecordAuthWithOAuth2`.
+    - User requested Platform Phases 7-10.
+    - Implemented Platform Phase 7 connector foundation: `_connectors` collection/model, connector validation, hidden credentials, capability `connectorRef`/`requiredScopes`, connector-backed HTTP auth headers, and scope enforcement.
+    - Implemented Platform Phase 8 event bus MVP: `_automationEvents` collection/model, retained event envelope publishing, record trigger event retention when subscribed automations exist, and webhook/i18n event publishing.
+    - Implemented Platform Phase 9 AI runtime MVP: injectable `AutomationAIProvider`, deterministic default provider, and `ai.extract`, `ai.classify`, `ai.generate`, and `ai.summarize` step validation/schema/dry-run/runtime support.
+    - Implemented Platform Phase 10 workflow versioning foundation: `_workflowVersions` collection/model, publish helper/API, version snapshots, run `workflowVersionRef`/`workflowVersionSnapshot`, and execution from latest published snapshots.
+    - Updated automation admin UI with generic JSON editing for capability/wait/AI steps, a publish action, waiting run status labels, and approvals list wiring.
+    - Updated system collection fixtures/counts for `_connectors`, `_automationEvents`, `_workflowVersions`, `_workflowState`, and `_approvals`.
+    - Added focused backend coverage for connector-backed capabilities, event publishing, AI steps, published snapshot execution, and publish API.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation|TestCapability|TestConnector|TestFindAllCollections|TestImportCollections'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation|TestCollectionsList|TestCollectionsImport'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationEventPublicationForRecordTrigger|TestAutomation|TestFindAllCollections'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestRecordConfirmPasswordReset|TestRecordConfirmEmailChange|TestCollectionTruncate|TestAutomation|TestCollectionsList|TestCollectionsImport'`; passed.
+    - Ran isolated notify watcher regressions after the broad run: `TestNotifyWatcher_SettingsUpdate` and `TestNotifyWatcher_CollectionsUpdate`; both passed.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - Broad `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core ./apis` was attempted; remaining failures were full-load timing-sensitive notify watcher tests in `./core` that pass isolated, plus the known sandboxed `httptest` listener permission in `TestRecordAuthWithOAuth2`.
   - Now:
-    - Platform Phase 3 implementation slice is complete.
+    - Platform Phases 7-10 implementation and focused verification are complete.
   - Next:
-    - Continue with Platform Phase 4 persistent workflow state MVP.
+    - Continue with Platform Phase 11+ refinements or harden full-suite watcher/OAuth2 environment issues if requested.
 
 Open questions (UNCONFIRMED if needed):
 
-- UNCONFIRMED: exact AI provider integration. For this pass, AI translation is represented as jobs plus automation trigger surfaces, not a provider call.
+- UNCONFIRMED: scheduler wiring cadence for automatic delay resume; MVP exposes `ResumeExpiredAutomationWorkflowStates`.
+- UNCONFIRMED: external connector provider credentials and real AI provider integration. For Platform Phases 7-10, use non-OAuth connector primitives and fake/injected AI provider seams by default.
+- UNCONFIRMED: full draft/published workflow editing lifecycle beyond snapshot publishing.
 
 Working set (files/ids/commands):
 
