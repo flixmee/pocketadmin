@@ -18,6 +18,9 @@ type automationTriggerPayload struct {
 	TriggerType    string         `json:"triggerType"`
 	CollectionId   string         `json:"collectionId,omitempty"`
 	CollectionName string         `json:"collectionName,omitempty"`
+	ParentRunId    string         `json:"parentRunId,omitempty"`
+	Depth          int            `json:"depth,omitempty"`
+	DedupeKey      string         `json:"dedupeKey,omitempty"`
 	Request        map[string]any `json:"request,omitempty"`
 	I18n           map[string]any `json:"i18n,omitempty"`
 	Record         map[string]any `json:"record,omitempty"`
@@ -43,7 +46,17 @@ type AutomationWebhookResponse struct {
 	Body       any               `json:"body,omitempty"`
 }
 
-type automationStepResult struct {
+type AutomationDryRunResult struct {
+	AutomationId string                 `json:"automationId"`
+	TriggerType  string                 `json:"triggerType"`
+	Input        map[string]any         `json:"input"`
+	StepResults  []AutomationStepResult `json:"stepResults"`
+	Status       string                 `json:"status"`
+	Error        string                 `json:"error,omitempty"`
+}
+
+// AutomationStepResult describes the outcome of a single automation step.
+type AutomationStepResult struct {
 	Index      int            `json:"index"`
 	Type       string         `json:"type"`
 	Status     string         `json:"status"`
@@ -80,6 +93,7 @@ func queueRecordAutomationRuns(app App, triggerType string, record *Record, orig
 	}
 
 	payload := newAutomationTriggerPayload(triggerType, record, original)
+	inheritAutomationPolicyContext(app, &payload)
 
 	for _, automation := range automations {
 		if automation == nil {
@@ -144,6 +158,7 @@ func queueI18nAutomationRuns(app App, triggerType string, record *Record, i18n m
 		I18n:           i18n,
 		triggerRecord:  triggerRecord,
 	}
+	inheritAutomationPolicyContext(app, &payload)
 	if triggerRecord != nil {
 		payload.Record = automationTemplateRecordData(triggerRecord)
 	}
@@ -218,6 +233,65 @@ func (app *BaseApp) RunAutomationFromRun(runID string) error {
 	return runAutomation(app, automation, payload)
 }
 
+// RunAutomationDryRun previews the specified automation without persisting a run
+// or executing side-effecting steps such as HTTP, mail, or record writes.
+func (app *BaseApp) RunAutomationDryRun(automationID string, input map[string]any) (*AutomationDryRunResult, error) {
+	automation, err := app.FindAutomationById(automationID)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := automationTriggerPayload{}
+	if len(input) > 0 {
+		inputRaw, err := toJSONRaw(input)
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(inputRaw.String()), &payload); err != nil {
+			return nil, err
+		}
+	}
+	if strings.TrimSpace(payload.TriggerType) == "" {
+		payload.TriggerType = AutomationTriggerManual
+	}
+
+	inputRaw, err := toJSONRaw(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	normalizedInput := map[string]any{}
+	if err := json.Unmarshal([]byte(inputRaw.String()), &normalizedInput); err != nil {
+		return nil, err
+	}
+
+	run := NewAutomationRun(app)
+	run.Id = "dry_run"
+	run.SetAutomationRef(automation.Id)
+	run.SetTriggerType(payload.TriggerType)
+	run.SetStatus(AutomationRunStatusRunning)
+	run.SetInput(inputRaw)
+	run.ClearErrorStepIndex()
+
+	ctx := newAutomationExecutionContext(app, automation, run, payload)
+	ctx.DryRun = true
+
+	stepResults, err := executeAutomationSteps(ctx)
+	result := &AutomationDryRunResult{
+		AutomationId: automation.Id,
+		TriggerType:  payload.TriggerType,
+		Input:        normalizedInput,
+		StepResults:  stepResults,
+		Status:       AutomationRunStatusSuccess,
+	}
+	if err != nil {
+		result.Status = AutomationRunStatusFailed
+		result.Error = err.Error()
+	}
+
+	return result, err
+}
+
 // RunAutomationWebhook runs the specified active automation using the webhook trigger type.
 func (app *BaseApp) RunAutomationWebhook(automationID string, request *AutomationWebhookRequest) (*AutomationWebhookResponse, error) {
 	registry, err := getAutomationRegistry(app)
@@ -255,7 +329,7 @@ func runAutomationWithContext(app App, automation *Automation, payload automatio
 	}
 
 	var run *AutomationRun
-	var stepResults []automationStepResult
+	var stepResults []AutomationStepResult
 
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -292,7 +366,32 @@ func runAutomationWithContext(app App, automation *Automation, payload automatio
 	run.SetTriggerType(payload.TriggerType)
 	run.SetStatus(AutomationRunStatusQueued)
 	run.SetInput(inputRaw)
+	run.SetParentRunId(payload.ParentRunId)
+	run.SetDepth(payload.Depth)
+	run.SetDedupeKey(automationRunDedupeKey(payload))
 	run.ClearErrorStepIndex()
+
+	policyDecision, policyErr := evaluateAutomationPolicy(app, automation, payload, run)
+	if decisionRaw, err := toJSONRaw(policyDecision); err == nil {
+		run.SetPolicyDecision(decisionRaw)
+	}
+	if policyErr != nil {
+		run.SetStatus(AutomationRunStatusFailed)
+		run.SetError(policyErr.Error())
+		run.ClearErrorStepIndex()
+		run.SetRaw("finished", types.NowDateTime())
+		if err := app.Save(run); err != nil {
+			return nil, err
+		}
+		if err := updateAutomationLastRunState(app, automation.Id, run.Status(), run.Finished()); err != nil {
+			app.Logger().Warn(
+				"Failed to update automation last run state",
+				"automationId", automation.Id,
+				"error", err,
+			)
+		}
+		return nil, policyErr
+	}
 
 	if err := app.Save(run); err != nil {
 		return nil, err
@@ -304,6 +403,9 @@ func runAutomationWithContext(app App, automation *Automation, payload automatio
 	}
 
 	ctx = newAutomationExecutionContext(app, automation, run, payload)
+	setCurrentAutomationPolicyContext(app, run)
+	defer clearCurrentAutomationPolicyContext(app, run.Id)
+
 	stepResults, err = executeAutomationSteps(ctx)
 	if finishErr := finalizeAutomationRun(app, automation, run, stepResults, err); finishErr != nil {
 		return ctx, finishErr
@@ -312,7 +414,7 @@ func runAutomationWithContext(app App, automation *Automation, payload automatio
 	return ctx, err
 }
 
-func finalizeAutomationRun(app App, automation *Automation, run *AutomationRun, stepResults []automationStepResult, execErr error) error {
+func finalizeAutomationRun(app App, automation *Automation, run *AutomationRun, stepResults []AutomationStepResult, execErr error) error {
 	if len(stepResults) > 0 {
 		stepResultsRaw, err := toJSONRaw(stepResults)
 		if err != nil {
@@ -352,7 +454,7 @@ func finalizeAutomationRun(app App, automation *Automation, run *AutomationRun, 
 	return nil
 }
 
-func failedAutomationStepIndex(stepResults []automationStepResult) (int, bool) {
+func failedAutomationStepIndex(stepResults []AutomationStepResult) (int, bool) {
 	for i := len(stepResults) - 1; i >= 0; i-- {
 		if stepResults[i].Status == automationStepStatusFailed {
 			return stepResults[i].Index, true
@@ -362,20 +464,20 @@ func failedAutomationStepIndex(stepResults []automationStepResult) (int, bool) {
 	return 0, false
 }
 
-func executeAutomationSteps(ctx *automationExecutionContext) ([]automationStepResult, error) {
+func executeAutomationSteps(ctx *automationExecutionContext) ([]AutomationStepResult, error) {
 	steps, err := decodeAutomationSteps(ctx.Automation.Steps().String())
 	if err != nil {
 		return nil, err
 	}
 
-	results := make([]automationStepResult, 0, len(steps))
+	results := make([]AutomationStepResult, 0, len(steps))
 
 	for i, step := range steps {
 		stepType := strings.TrimSpace(toString(step["type"]))
 		started := types.NowDateTime()
 		status, output, err := executeAutomationStep(ctx, step)
 		finished := types.NowDateTime()
-		result := automationStepResult{
+		result := AutomationStepResult{
 			Index:      i,
 			Type:       stepType,
 			Status:     status,
@@ -439,6 +541,30 @@ func newAutomationTriggerPayload(triggerType string, record *Record, original *R
 	return payload
 }
 
+func automationRunDedupeKey(payload automationTriggerPayload) string {
+	if strings.TrimSpace(payload.DedupeKey) != "" {
+		return strings.TrimSpace(payload.DedupeKey)
+	}
+	if value := toString(payload.I18n["dedupeKey"]); strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	if value := toString(payload.Request["dedupeKey"]); strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	if body, ok := payload.Request["body"].(map[string]any); ok {
+		if value := toString(body["dedupeKey"]); strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	if payload.CollectionId != "" && payload.Record != nil {
+		if recordID := toString(payload.Record["id"]); strings.TrimSpace(recordID) != "" {
+			return payload.TriggerType + ":" + payload.CollectionId + ":" + strings.TrimSpace(recordID)
+		}
+	}
+
+	return ""
+}
+
 func decodeAutomationRunPayload(run *AutomationRun) (automationTriggerPayload, error) {
 	if run == nil {
 		return automationTriggerPayload{}, errors.New("missing automation run")
@@ -465,6 +591,7 @@ func shouldSkipAutomationTriggerCollection(collectionName string) bool {
 	switch collectionName {
 	case CollectionNameAutomations,
 		CollectionNameAutomationRuns,
+		CollectionNameCapabilities,
 		CollectionNameLocales,
 		CollectionNameI18nGroups,
 		CollectionNameTranslationJobs:

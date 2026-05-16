@@ -34,14 +34,22 @@ func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 
 	subGroup := rg.Group("/automations").Bind(RequireSuperuserAuth())
 	subGroup.GET("", automationsList)
+	subGroup.GET("/schemas", automationSchemas)
 	subGroup.POST("", automationCreate)
 	subGroup.GET("/{id}", automationView)
 	subGroup.PATCH("/{id}", automationUpdate)
 	subGroup.DELETE("/{id}", automationDelete)
 	subGroup.POST("/{id}/run", automationRun)
+	subGroup.POST("/{id}/dry-run", automationDryRun)
 	subGroup.POST("/{id}/runs/{runId}/rerun", automationRunRerun)
 	subGroup.GET("/{id}/runs", automationRunsList)
 	subGroup.DELETE("/{id}/runs", automationRunsClear)
+}
+
+func automationSchemas(e *core.RequestEvent) error {
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, core.AutomationSchemas())
+	})
 }
 
 func automationsList(e *core.RequestEvent) error {
@@ -146,6 +154,32 @@ func automationRun(e *core.RequestEvent) error {
 	})
 
 	return e.NoContent(http.StatusNoContent)
+}
+
+func automationDryRun(e *core.RequestEvent) error {
+	automation, err := findAutomationForAPI(e.App, e.Request.PathValue("id"))
+	if err != nil {
+		return automationAPIError(e, "dry-run", err)
+	}
+
+	body := map[string]any{}
+	if e.Request.Body != nil {
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Failed to load dry-run input.", err)
+		}
+	}
+
+	result, err := e.App.RunAutomationDryRun(automation.Id, body)
+	if result != nil {
+		return execAfterSuccessTx(true, e.App, func() error {
+			return e.JSON(http.StatusOK, result)
+		})
+	}
+	if err != nil {
+		return e.BadRequestError("Failed to dry-run automation.", err)
+	}
+
+	return e.BadRequestError("Failed to dry-run automation.", nil)
 }
 
 func automationRunRerun(e *core.RequestEvent) error {

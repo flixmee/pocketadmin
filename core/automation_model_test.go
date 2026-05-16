@@ -3,6 +3,7 @@ package core_test
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
@@ -39,6 +40,24 @@ func TestAutomationCollectionsExist(t *testing.T) {
 			},
 		},
 		{
+			name: core.CollectionNameCapabilities,
+			expectedFields: []string{
+				"id",
+				"key",
+				"version",
+				"category",
+				"icon",
+				"inputSchema",
+				"outputSchema",
+				"authStrategy",
+				"runtimeHandler",
+				"configUI",
+				"active",
+				"created",
+				"updated",
+			},
+		},
+		{
 			name: core.CollectionNameAutomationRuns,
 			expectedFields: []string{
 				"id",
@@ -49,6 +68,10 @@ func TestAutomationCollectionsExist(t *testing.T) {
 				"stepResults",
 				"error",
 				"errorStepIndex",
+				"parentRunId",
+				"depth",
+				"dedupeKey",
+				"policyDecision",
 				"started",
 				"finished",
 				"created",
@@ -75,6 +98,165 @@ func TestAutomationCollectionsExist(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewCapability(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	capability := core.NewCapability(app)
+
+	if capability.Collection().Name != core.CollectionNameCapabilities {
+		t.Fatalf("Expected record with %q collection, got %q", core.CollectionNameCapabilities, capability.Collection().Name)
+	}
+}
+
+func TestCapabilityFields(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	capability := core.NewCapability(app)
+	inputSchema := mustParseJSONRaw(t, `{"type":"object"}`)
+	outputSchema := mustParseJSONRaw(t, `{"type":"object","properties":{"ok":{"type":"boolean"}}}`)
+	configUI := mustParseJSONRaw(t, `{"fields":[]}`)
+
+	capability.SetKey("test.capability")
+	capability.SetVersion("1.2.3")
+	capability.SetCategory("test")
+	capability.SetIcon("bolt")
+	capability.SetInputSchema(inputSchema)
+	capability.SetOutputSchema(outputSchema)
+	capability.SetAuthStrategy("apiKey")
+	capability.SetRuntimeHandler(core.AutomationStepHTTP)
+	capability.SetConfigUI(configUI)
+	capability.SetActive(true)
+
+	if capability.Key() != "test.capability" {
+		t.Fatalf("Expected key to roundtrip, got %q", capability.Key())
+	}
+	if capability.Version() != "1.2.3" {
+		t.Fatalf("Expected version to roundtrip, got %q", capability.Version())
+	}
+	if capability.Category() != "test" {
+		t.Fatalf("Expected category to roundtrip, got %q", capability.Category())
+	}
+	if capability.Icon() != "bolt" {
+		t.Fatalf("Expected icon to roundtrip, got %q", capability.Icon())
+	}
+	if capability.InputSchema().String() != inputSchema.String() {
+		t.Fatalf("Expected input schema to roundtrip, got %s", capability.InputSchema())
+	}
+	if capability.OutputSchema().String() != outputSchema.String() {
+		t.Fatalf("Expected output schema to roundtrip, got %s", capability.OutputSchema())
+	}
+	if capability.AuthStrategy() != "apiKey" {
+		t.Fatalf("Expected auth strategy to roundtrip, got %q", capability.AuthStrategy())
+	}
+	if capability.RuntimeHandler() != core.AutomationStepHTTP {
+		t.Fatalf("Expected runtime handler to roundtrip, got %q", capability.RuntimeHandler())
+	}
+	if capability.ConfigUI().String() != configUI.String() {
+		t.Fatalf("Expected config UI to roundtrip, got %s", capability.ConfigUI())
+	}
+	if !capability.Active() {
+		t.Fatal("Expected active to be true")
+	}
+}
+
+func TestCapabilityValidation(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	capabilitiesCol, err := app.FindCollectionByNameOrId(core.CollectionNameCapabilities)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scenarios := []struct {
+		name          string
+		mutate        func(c *core.Capability)
+		expectedField string
+	}{
+		{
+			name: "invalid key",
+			mutate: func(c *core.Capability) {
+				c.SetKey("Bad")
+			},
+			expectedField: "key",
+		},
+		{
+			name: "invalid version",
+			mutate: func(c *core.Capability) {
+				c.SetVersion("1")
+			},
+			expectedField: "version",
+		},
+		{
+			name: "missing category",
+			mutate: func(c *core.Capability) {
+				c.SetCategory("")
+			},
+			expectedField: "category",
+		},
+		{
+			name: "invalid schema",
+			mutate: func(c *core.Capability) {
+				c.SetInputSchema(mustParseJSONRaw(t, `[]`))
+			},
+			expectedField: "inputSchema",
+		},
+		{
+			name: "missing runtime handler",
+			mutate: func(c *core.Capability) {
+				c.SetRuntimeHandler("")
+			},
+			expectedField: "runtimeHandler",
+		},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.name, func(t *testing.T) {
+			capability := &core.Capability{}
+			capability.SetProxyRecord(core.NewRecord(capabilitiesCol))
+			populateValidCapability(capability)
+			s.mutate(capability)
+
+			err := app.Validate(capability)
+			assertValidationField(t, err, s.expectedField)
+		})
+	}
+
+	t.Run("valid", func(t *testing.T) {
+		capability := &core.Capability{}
+		capability.SetProxyRecord(core.NewRecord(capabilitiesCol))
+		populateValidCapability(capability)
+
+		if err := app.Validate(capability); err != nil {
+			t.Fatalf("Expected validation to succeed, got %v", err)
+		}
+	})
+
+	t.Run("duplicate key and version", func(t *testing.T) {
+		first := core.NewCapability(app)
+		populateValidCapability(first)
+		first.SetKey("duplicate.capability")
+		if err := app.Save(first); err != nil {
+			t.Fatalf("Failed to create first capability: %v", err)
+		}
+
+		second := core.NewCapability(app)
+		populateValidCapability(second)
+		second.SetKey("duplicate.capability")
+
+		err := app.Save(second)
+		assertValidationField(t, err, "key")
+	})
 }
 
 func TestNewAutomation(t *testing.T) {
@@ -227,6 +409,23 @@ func TestAutomationValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	inactiveCapability := core.NewCapability(app)
+	populateValidCapability(inactiveCapability)
+	inactiveCapability.SetKey("custom.inactive")
+	inactiveCapability.SetActive(false)
+	if err := app.Save(inactiveCapability); err != nil {
+		t.Fatalf("Failed to create inactive capability fixture: %v", err)
+	}
+
+	activeCapability := core.NewCapability(app)
+	populateValidCapability(activeCapability)
+	activeCapability.SetKey("custom.http")
+	activeCapability.SetRuntimeHandler(core.AutomationStepHTTP)
+	activeCapability.SetActive(true)
+	if err := app.Save(activeCapability); err != nil {
+		t.Fatalf("Failed to create active capability fixture: %v", err)
+	}
+
 	scenarios := []struct {
 		name          string
 		mutate        func(a *core.Automation)
@@ -340,6 +539,35 @@ func TestAutomationValidation(t *testing.T) {
 			},
 			expectedField: "steps",
 		},
+		{
+			name: "too many steps",
+			mutate: func(a *core.Automation) {
+				items := make([]string, core.AutomationMaxSteps+1)
+				for i := range items {
+					items[i] = `{"type":"condition","path":"trigger.type","op":"exists"}`
+				}
+				a.SetSteps(mustParseJSONRaw(t, `[`+strings.Join(items, ",")+`]`))
+			},
+			expectedField: "steps",
+		},
+		{
+			name: "http timeout too large",
+			mutate: func(a *core.Automation) {
+				a.SetSteps(mustParseJSONRaw(t, `[{"type":"http","url":"https://example.com","timeout":61}]`))
+			},
+			expectedField: "steps",
+		},
+		{
+			name: "inactive capability",
+			mutate: func(a *core.Automation) {
+				a.SetSteps(mustParseJSONRaw(t, `[{
+					"type":"capability",
+					"capability":"custom.inactive",
+					"input":{"url":"https://example.com"}
+				}]`))
+			},
+			expectedField: "steps",
+		},
 	}
 
 	for _, s := range scenarios {
@@ -396,6 +624,52 @@ func TestAutomationValidation(t *testing.T) {
 			t.Fatalf("Expected validation to succeed, got %v", err)
 		}
 	})
+
+	t.Run("valid custom capability step", func(t *testing.T) {
+		automation := &core.Automation{}
+		automation.SetProxyRecord(core.NewRecord(automationsCol))
+		populateValidAutomation(automation)
+		automation.SetSteps(mustParseJSONRaw(t, `[{
+			"type":"capability",
+			"capability":"custom.http",
+			"input":{"url":"https://example.com"}
+		}]`))
+
+		if err := app.Validate(automation); err != nil {
+			t.Fatalf("Expected validation to succeed, got %v", err)
+		}
+	})
+}
+
+func TestAutomationSchemas(t *testing.T) {
+	t.Parallel()
+
+	catalog := core.AutomationSchemas()
+
+	if catalog.Limits.MaxSteps != core.AutomationMaxSteps {
+		t.Fatalf("Expected max steps %d, got %d", core.AutomationMaxSteps, catalog.Limits.MaxSteps)
+	}
+	if catalog.Limits.HTTPMaxTimeoutSeconds != int(core.AutomationHTTPMaxTimeout.Seconds()) {
+		t.Fatalf("Expected HTTP max timeout %d, got %d", int(core.AutomationHTTPMaxTimeout.Seconds()), catalog.Limits.HTTPMaxTimeoutSeconds)
+	}
+	if _, ok := catalog.Triggers[core.AutomationTriggerRecordCreate]; !ok {
+		t.Fatalf("Expected %q trigger schema", core.AutomationTriggerRecordCreate)
+	}
+	if _, ok := catalog.Triggers[core.AutomationTriggerI18nMissing]; !ok {
+		t.Fatalf("Expected %q trigger schema", core.AutomationTriggerI18nMissing)
+	}
+	if _, ok := catalog.Steps[core.AutomationStepHTTP]; !ok {
+		t.Fatalf("Expected %q step schema", core.AutomationStepHTTP)
+	}
+	if _, ok := catalog.Steps[core.AutomationStepMailSend]; !ok {
+		t.Fatalf("Expected %q step schema", core.AutomationStepMailSend)
+	}
+	if _, ok := catalog.Steps[core.AutomationStepCapability]; !ok {
+		t.Fatalf("Expected %q step schema", core.AutomationStepCapability)
+	}
+	if _, ok := catalog.Capabilities[core.AutomationCapabilityHTTPRequest]; !ok {
+		t.Fatalf("Expected %q capability schema", core.AutomationCapabilityHTTPRequest)
+	}
 }
 
 func TestNewAutomationRun(t *testing.T) {
@@ -443,6 +717,11 @@ func TestAutomationRunFields(t *testing.T) {
 	run.SetStepResults(stepResults)
 	run.SetError("boom")
 	run.SetErrorStepIndex(2)
+	run.SetParentRunId("parent1")
+	run.SetDepth(3)
+	run.SetDedupeKey("dedupe1")
+	policyDecision := mustParseJSONRaw(t, `{"allowed":true}`)
+	run.SetPolicyDecision(policyDecision)
 	run.SetRaw("started", now)
 	run.SetRaw("finished", now)
 	run.SetRaw("created", now)
@@ -468,6 +747,18 @@ func TestAutomationRunFields(t *testing.T) {
 	}
 	if !run.HasErrorStepIndex() || run.ErrorStepIndex() != 2 {
 		t.Fatalf("Expected errorStepIndex to roundtrip, got %v / %d", run.HasErrorStepIndex(), run.ErrorStepIndex())
+	}
+	if run.ParentRunId() != "parent1" {
+		t.Fatalf("Expected parentRunId to roundtrip, got %q", run.ParentRunId())
+	}
+	if run.Depth() != 3 {
+		t.Fatalf("Expected depth to roundtrip, got %d", run.Depth())
+	}
+	if run.DedupeKey() != "dedupe1" {
+		t.Fatalf("Expected dedupeKey to roundtrip, got %q", run.DedupeKey())
+	}
+	if run.PolicyDecision().String() != policyDecision.String() {
+		t.Fatalf("Expected policyDecision to roundtrip, got %s", run.PolicyDecision())
 	}
 	if run.Started().String() != now.String() {
 		t.Fatalf("Expected started %q, got %q", now.String(), run.Started().String())
@@ -600,6 +891,16 @@ func populateValidAutomationRun(t *testing.T, app core.App, run *core.Automation
 	run.SetAutomationRef(automation.Id)
 	run.SetTriggerType(core.AutomationTriggerManual)
 	run.SetStatus(core.AutomationRunStatusQueued)
+}
+
+func populateValidCapability(capability *core.Capability) {
+	capability.SetKey("test.capability")
+	capability.SetVersion("1.0.0")
+	capability.SetCategory("test")
+	capability.SetInputSchema(mustParseJSONRaw(nil, `{"type":"object"}`))
+	capability.SetOutputSchema(mustParseJSONRaw(nil, `{"type":"object"}`))
+	capability.SetRuntimeHandler(core.AutomationStepHTTP)
+	capability.SetActive(true)
 }
 
 func assertValidationField(t *testing.T, err error, field string) {

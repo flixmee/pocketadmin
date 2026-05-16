@@ -33,6 +33,7 @@ var (
 		AutomationStepRecordUpdate,
 		AutomationStepRecordDelete,
 		AutomationStepResponse,
+		AutomationStepCapability,
 	}
 	automationRunStatuses = []string{
 		AutomationRunStatusQueued,
@@ -215,6 +216,14 @@ func validateAutomationSteps(app App, automationRecord *Record) error {
 	if len(steps) == 0 {
 		return nil
 	}
+	if len(steps) > AutomationMaxSteps {
+		return validation.Errors{
+			"steps": validation.NewError(
+				"validation_automation_steps_limit",
+				fmt.Sprintf("Automations can have at most %d steps.", AutomationMaxSteps),
+			),
+		}
+	}
 
 	stepErrs := validation.Errors{}
 
@@ -266,9 +275,25 @@ func validateAutomationStepDefinition(app App, automationRecord *Record, step ma
 		return validateAutomationRecordDeleteStep(step)
 	case AutomationStepResponse:
 		return validateAutomationResponseStep(automationRecord, step)
+	case AutomationStepCapability:
+		return validateAutomationCapabilityStep(app, automationRecord, step)
 	default:
 		return nil
 	}
+}
+
+func validateAutomationCapabilityStep(app App, automationRecord *Record, step map[string]any) error {
+	key := automationCapabilityKey(step)
+	if key == "" {
+		return validation.NewError("validation_invalid_automation_capability", "Capability step requires a capability key.")
+	}
+
+	legacyStep, err := automationCapabilityLegacyStep(app, step)
+	if err != nil {
+		return validation.NewError("validation_invalid_automation_capability", err.Error())
+	}
+
+	return validateAutomationStepDefinition(app, automationRecord, legacyStep)
 }
 
 func validateAutomationConditionStep(step map[string]any) error {
@@ -316,8 +341,15 @@ func validateAutomationHTTPStep(step map[string]any) error {
 	}
 
 	if timeout, ok := step["timeout"]; ok {
-		if automationStepDuration(timeout) <= 0 {
+		duration := automationStepDuration(timeout)
+		if duration <= 0 {
 			return validation.NewError("validation_invalid_automation_http", "HTTP step timeout must be greater than zero.")
+		}
+		if duration > AutomationHTTPMaxTimeout {
+			return validation.NewError(
+				"validation_invalid_automation_http",
+				fmt.Sprintf("HTTP step timeout must be %d seconds or less.", int(AutomationHTTPMaxTimeout.Seconds())),
+			)
 		}
 	}
 

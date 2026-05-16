@@ -9,6 +9,9 @@ import (
 const (
 	StoreKeyAutomationHTTPDoer = "pbAppAutomationHTTPDoer"
 
+	AutomationMaxSteps              = 100
+	AutomationMaxTemplateStringSize = 256 * 1024
+
 	automationStepStatusSuccess = "success"
 	automationStepStatusFailed  = "failed"
 	automationStepStatusStopped = "stopped"
@@ -33,6 +36,7 @@ type automationExecutionContext struct {
 	OriginalRecord  *Record
 	TemplateData    map[string]any
 	WebhookResponse *AutomationWebhookResponse
+	DryRun          bool
 }
 
 func newAutomationExecutionContext(app App, automation *Automation, run *AutomationRun, payload automationTriggerPayload) *automationExecutionContext {
@@ -62,7 +66,7 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 	}
 }
 
-func (ctx *automationExecutionContext) appendStepTemplateResult(result automationStepResult) {
+func (ctx *automationExecutionContext) appendStepTemplateResult(result AutomationStepResult) {
 	entry := map[string]any{
 		"index":      result.Index,
 		"type":       result.Type,
@@ -86,6 +90,23 @@ func (ctx *automationExecutionContext) appendStepTemplateResult(result automatio
 
 func executeAutomationStep(ctx *automationExecutionContext, step map[string]any) (string, any, error) {
 	stepType := strings.TrimSpace(toString(step["type"]))
+
+	if stepType == AutomationStepCapability {
+		legacyStep, err := automationCapabilityLegacyStep(ctx.App, step)
+		if err != nil {
+			return automationStepStatusFailed, nil, err
+		}
+		if ctx.DryRun {
+			output, err := previewAutomationStep(ctx, legacyStep)
+			return automationStepStatusSuccess, output, err
+		}
+		return executeAutomationStep(ctx, legacyStep)
+	}
+
+	if ctx.DryRun && stepType != AutomationStepCondition {
+		output, err := previewAutomationStep(ctx, step)
+		return automationStepStatusSuccess, output, err
+	}
 
 	switch stepType {
 	case AutomationStepCondition:
@@ -111,6 +132,75 @@ func executeAutomationStep(ctx *automationExecutionContext, step map[string]any)
 	default:
 		return automationStepStatusFailed, nil, fmt.Errorf("unsupported automation step type %q", stepType)
 	}
+}
+
+func previewAutomationStep(ctx *automationExecutionContext, step map[string]any) (map[string]any, error) {
+	stepType := strings.TrimSpace(toString(step["type"]))
+	output := map[string]any{
+		"dryRun": true,
+		"type":   stepType,
+	}
+
+	switch stepType {
+	case AutomationStepHTTP:
+		renderedURL, err := renderAutomationTemplateString(toString(step["url"]), ctx.TemplateData)
+		if err != nil {
+			return nil, err
+		}
+		output["method"] = stringsToUpperDefault(toString(step["method"]), "GET")
+		output["url"] = renderedURL
+		if headers, ok := step["headers"].(map[string]any); ok {
+			renderedHeaders, err := renderAutomationTemplateValue(headers, ctx.TemplateData)
+			if err != nil {
+				return nil, err
+			}
+			output["headers"] = renderedHeaders
+		}
+		if _, ok := step["body"]; ok {
+			renderedBody, err := renderAutomationTemplateValue(step["body"], ctx.TemplateData)
+			if err != nil {
+				return nil, err
+			}
+			output["body"] = renderedBody
+		}
+	case AutomationStepMailSend:
+		for _, key := range []string{"to", "cc", "bcc", "subject", "text", "html", "attachments"} {
+			if _, ok := step[key]; !ok {
+				continue
+			}
+			rendered, err := renderAutomationTemplateValue(step[key], ctx.TemplateData)
+			if err != nil {
+				return nil, err
+			}
+			output[key] = rendered
+		}
+	case AutomationStepRecordCreate, AutomationStepRecordUpdate, AutomationStepRecordDelete:
+		for _, key := range []string{"collection", "id", "filter", "data"} {
+			if _, ok := step[key]; !ok {
+				continue
+			}
+			rendered, err := renderAutomationTemplateValue(step[key], ctx.TemplateData)
+			if err != nil {
+				return nil, err
+			}
+			output[key] = rendered
+		}
+	case AutomationStepResponse:
+		for _, key := range []string{"statusCode", "headers", "body"} {
+			if _, ok := step[key]; !ok {
+				continue
+			}
+			rendered, err := renderAutomationTemplateValue(step[key], ctx.TemplateData)
+			if err != nil {
+				return nil, err
+			}
+			output[key] = rendered
+		}
+	default:
+		return nil, fmt.Errorf("unsupported automation step type %q", stepType)
+	}
+
+	return output, nil
 }
 
 func executeAutomationConditionStep(ctx *automationExecutionContext, step map[string]any) (string, any, error) {

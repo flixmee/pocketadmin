@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
@@ -183,8 +182,6 @@ func (app *BaseApp) registerTranslationJobHooks() {
 			if err := e.Next(); err != nil {
 				return err
 			}
-
-			fmt.Println("status", e.Record.GetString("status"))
 
 			if e.Record.GetString("status") == TranslationJobStatusFinished &&
 				e.Record.Original().GetString("status") != TranslationJobStatusFinished {

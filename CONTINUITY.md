@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Document the `Translation missing`, `Locale published`, `Translation updated`, and `AI translation finished` automations.
-- Success: `AUTOMATION_PLAN.md` explains each trigger's purpose, how to use it, when to use it, and practical payload/template fields.
+- Implement Platform Phase 3 policy and recursion safety MVP.
+- Success: add run audit fields, policy decision checks for depth/rate/concurrency/cooldown/dedupe, and focused tests without breaking normal automations.
 
 Constraints/Assumptions:
 
@@ -47,10 +47,42 @@ State:
     - Added automation documentation to `AUTOMATION_PLAN.md` covering current capabilities, API routes, trigger payloads, step schemas, examples, and operational notes.
     - User requested focused documentation for Translation missing, Locale published, Translation updated, and AI translation finished automation.
     - Added a dedicated `i18n automation triggers` section to `AUTOMATION_PLAN.md` covering purpose, how to use, when to use, and payload fields for all four triggers.
+    - User requested review of `FUTURE_AUTOMATION_PLATFORM_PLAN.md` and a phase-by-phase execution plan.
+    - Reviewed `FUTURE_AUTOMATION_PLATFORM_PLAN.md`, `AUTOMATION_PLAN.md`, and key automation runtime/model files.
+    - Appended a `Phase-by-Phase Execution Roadmap` to `FUTURE_AUTOMATION_PLATFORM_PLAN.md` with Platform Phase 0-13, including goals, deliverables, verification, and exit criteria.
+    - Renamed the earlier future sketch from `Recommended New Phases` / `Phase 9-14` to `Recommended Platform Capability Areas` / `Area A-F` to avoid conflicting with the already completed automation/i18n Phase 9.
+    - User requested implementation of Platform Phase 0-11.
+    - Implemented Platform Phase 0 foundation: max automation steps, template output, HTTP timeout, and HTTP body guardrails with tests.
+    - Implemented Platform Phase 1 foundation: `core.AutomationSchemas()` plus superuser `GET /api/automations/schemas` with tests.
+    - Implemented Platform Phase 11 backend foundation: `RunAutomationDryRun` plus superuser `POST /api/automations/{id}/dry-run`; dry-run previews side-effecting steps and does not persist `_automationRuns`.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation'`; passed.
+    - User requested Platform Phase 2.
+    - Added `_capabilities` system collection migration.
+    - Added `Capability` model/proxy, query helpers, validation hooks, and app interface methods.
+    - Added built-in capability registry for `http.request`, `mail.send`, `record.create`, `record.update`, and `record.delete`.
+    - Added `capability` automation step support with `capability`/`key` plus `input` object shape, mapped internally to existing legacy step handlers.
+    - Extended schema discovery to include built-in capabilities and the `capability` step schema.
+    - Updated system collection count fixtures for `_capabilities`.
+    - Removed stray debug `fmt.Println` from translation job hook.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation|TestCapability|TestFindAllCollections|TestImportCollections'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation|TestCollectionsList|TestCollectionsImport'`; passed.
+    - Broader `go test ./core ./apis` was attempted; after fixture updates, remaining failures were known environment/existing issues: `TestNotifyWatcher_SettingsUpdate` watcher event and `TestRecordAuthWithOAuth2` sandboxed `httptest` listener.
+    - User requested Platform Phase 3.
+    - Added automation run audit fields: `parentRunId`, `depth`, `dedupeKey`, and `policyDecision`.
+    - Added migration `1778000000_automation_policy_audit.go` for policy audit fields and indexes.
+    - Added app-level `AutomationPolicyConfig` via `StoreKeyAutomationPolicyConfig` with defaults for max depth, max runs per minute, max concurrent runs, plus optional cooldown and dedupe windows.
+    - Added runtime policy evaluation before execution; denied runs are persisted as failed with policyDecision audit JSON.
+    - Added parent/depth inheritance for automations triggered by automation-created records.
+    - Added tests for rate limit, concurrency limit, duplicate dedupe key, and recursive depth rejection.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationPolicy|TestAutomationRunFields|TestAutomationCollectionsExist'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation|TestCapability|TestFindAllCollections|TestImportCollections'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation|TestCollectionsList|TestCollectionsImport'`; passed.
+    - Broader `go test ./core ./apis` was attempted; remaining failures are known environment/existing issues: watcher tests and sandboxed `httptest` listener in OAuth2 test.
   - Now:
-    - Focused i18n automation trigger documentation update is complete.
+    - Platform Phase 3 implementation slice is complete.
   - Next:
-    - Await user review or follow-up edits.
+    - Continue with Platform Phase 4 persistent workflow state MVP.
 
 Open questions (UNCONFIRMED if needed):
 
@@ -59,17 +91,36 @@ Open questions (UNCONFIRMED if needed):
 Working set (files/ids/commands):
 
 - `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/FUTURE_AUTOMATION_PLATFORM_PLAN.md`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/AUTOMATION_PLAN.md`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/cmd/i18n.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/automation.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/automation_test.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/collection_import_test.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/apis/i18n.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/apis/i18n_test.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/apis/collection_test.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/i18n_migrate.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/i18n_translation_job.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/i18n_model.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/app.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/base.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_capability_model.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_capability_runtime.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_schema.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_model.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_http.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_policy.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_run_model.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner_test.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_steps.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_templates.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_validate.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_model_test.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/collection_query_test.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1777000000_capabilities.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1778000000_automation_policy_audit.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1776000001_translation_jobs.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationUpsertModal.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationsList.js`
@@ -80,3 +131,11 @@ Working set (files/ids/commands):
 - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./cmd -run 'TestSuperuser|TestI18n'`
 - `cd ui && npm run build`
 - `sed -n '110,300p' AUTOMATION_PLAN.md`
+- `sed -n '1,1040p' FUTURE_AUTOMATION_PLATFORM_PLAN.md`
+- `rg -n "Platform Phase|Recommended Build Order|numbering note|Phase 9" FUTURE_AUTOMATION_PLATFORM_PLAN.md AUTOMATION_PLAN.md`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation'`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation'`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation|TestCapability|TestFindAllCollections|TestImportCollections'`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation|TestCollectionsList|TestCollectionsImport'`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core ./apis`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationPolicy|TestAutomationRunFields|TestAutomationCollectionsExist'`

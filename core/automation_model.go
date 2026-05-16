@@ -28,6 +28,7 @@ const (
 	AutomationStepRecordUpdate = "record.update"
 	AutomationStepRecordDelete = "record.delete"
 	AutomationStepResponse     = "response"
+	AutomationStepCapability   = "capability"
 )
 
 var (

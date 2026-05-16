@@ -14,7 +14,11 @@ import (
 	"time"
 )
 
-const automationHTTPOutputBodyLimit = 64 * 1024
+const (
+	AutomationHTTPMaxTimeout      = 60 * time.Second
+	AutomationHTTPInputBodyLimit  = 1024 * 1024
+	automationHTTPOutputBodyLimit = 64 * 1024
+)
 
 type automationHTTPDoer interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -159,11 +163,17 @@ func buildAutomationHTTPBody(ctx *automationExecutionContext, raw any) (io.Reade
 	case nil:
 		return nil, "", nil
 	case string:
+		if len(v) > AutomationHTTPInputBodyLimit {
+			return nil, "", fmt.Errorf("http step body exceeds %d bytes", AutomationHTTPInputBodyLimit)
+		}
 		return bytes.NewBufferString(v), "text/plain; charset=utf-8", nil
 	default:
 		encoded, err := toJSONRaw(v)
 		if err != nil {
 			return nil, "", err
+		}
+		if len(encoded.String()) > AutomationHTTPInputBodyLimit {
+			return nil, "", fmt.Errorf("http step body exceeds %d bytes", AutomationHTTPInputBodyLimit)
 		}
 
 		return bytes.NewReader([]byte(encoded.String())), "application/json", nil

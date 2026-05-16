@@ -688,6 +688,286 @@ func TestAutomationHTTPStepExecutesRequest(t *testing.T) {
 	}
 }
 
+func TestAutomationCapabilityStepExecutesBuiltInHTTP(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	var gotPath string
+	app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+		gotPath = req.URL.Path
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+		}, nil
+	}))
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerManual)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"capability",
+			"capability":"http.request",
+			"input":{
+				"method":"POST",
+				"url":"https://example.com/{{trigger.type}}",
+				"body":{"automation":"{{automation.name}}"}
+			}
+		}
+	]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatalf("Failed to create automation: %v", err)
+	}
+
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatalf("Expected capability automation to run, got %v", err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+	if gotPath != "/manual" {
+		t.Fatalf("Expected rendered capability URL path %q, got %q", "/manual", gotPath)
+	}
+}
+
+func TestAutomationPolicyRejectsRateLimit(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	app.Store().Set(core.StoreKeyAutomationPolicyConfig, core.AutomationPolicyConfig{
+		MaxDepth:          5,
+		MaxRunsPerMinute:  1,
+		MaxConcurrentRuns: 10,
+	})
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetTriggerType(core.AutomationTriggerManual)
+	if err := app.Save(automation); err != nil {
+		t.Fatalf("Failed to create automation: %v", err)
+	}
+
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatalf("Expected first run to pass, got %v", err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err == nil {
+		t.Fatal("Expected second run to be rejected by rate policy")
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 2)
+	if runs[0].Status() != core.AutomationRunStatusFailed {
+		t.Fatalf("Expected newest run to fail, got %q", runs[0].Status())
+	}
+	if !strings.Contains(runs[0].Error(), "max_runs_per_minute_exceeded") {
+		t.Fatalf("Expected rate policy error, got %q", runs[0].Error())
+	}
+	if !strings.Contains(runs[0].PolicyDecision().String(), `"allowed":false`) {
+		t.Fatalf("Expected denied policy decision, got %s", runs[0].PolicyDecision())
+	}
+}
+
+func TestAutomationPolicyRejectsConcurrentRun(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	app.Store().Set(core.StoreKeyAutomationPolicyConfig, core.AutomationPolicyConfig{
+		MaxDepth:          5,
+		MaxRunsPerMinute:  100,
+		MaxConcurrentRuns: 1,
+	})
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	if err := app.Save(automation); err != nil {
+		t.Fatalf("Failed to create automation: %v", err)
+	}
+
+	running := core.NewAutomationRun(app)
+	running.SetAutomationRef(automation.Id)
+	running.SetTriggerType(core.AutomationTriggerManual)
+	running.SetStatus(core.AutomationRunStatusRunning)
+	if err := app.Save(running); err != nil {
+		t.Fatalf("Failed to create running run fixture: %v", err)
+	}
+
+	if err := app.RunAutomationManually(automation.Id); err == nil {
+		t.Fatal("Expected run to be rejected by concurrency policy")
+	}
+
+	runs := waitForAutomationRuns(t, app, automation, 2)
+	var failed *core.AutomationRun
+	for _, run := range runs {
+		if run.Status() == core.AutomationRunStatusFailed {
+			failed = run
+			break
+		}
+	}
+	if failed == nil || !strings.Contains(failed.Error(), "max_concurrent_runs_exceeded") {
+		t.Fatalf("Expected concurrency policy failure, got %#v", failed)
+	}
+}
+
+func TestAutomationPolicyRejectsDuplicateDedupeKey(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	app.Store().Set(core.StoreKeyAutomationPolicyConfig, core.AutomationPolicyConfig{
+		MaxDepth:          5,
+		MaxRunsPerMinute:  100,
+		MaxConcurrentRuns: 10,
+		DedupeWindow:      time.Minute,
+	})
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	if err := app.Save(automation); err != nil {
+		t.Fatalf("Failed to create automation: %v", err)
+	}
+
+	previous := core.NewAutomationRun(app)
+	previous.SetAutomationRef(automation.Id)
+	previous.SetTriggerType(core.AutomationTriggerManual)
+	previous.SetStatus(core.AutomationRunStatusSuccess)
+	previous.SetDedupeKey("dedupe1")
+	previous.SetInput(mustParseJSONRaw(t, `{"triggerType":"manual","dedupeKey":"dedupe1"}`))
+	if err := app.Save(previous); err != nil {
+		t.Fatalf("Failed to create previous run fixture: %v", err)
+	}
+
+	if err := app.RunAutomationFromRun(previous.Id); err == nil {
+		t.Fatal("Expected run to be rejected by dedupe policy")
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 2)
+	if runs[0].Status() != core.AutomationRunStatusFailed || !strings.Contains(runs[0].Error(), "duplicate_dedupe_key") {
+		t.Fatalf("Expected dedupe policy failure, got status=%q error=%q", runs[0].Status(), runs[0].Error())
+	}
+	if runs[0].DedupeKey() != "dedupe1" {
+		t.Fatalf("Expected denied run dedupe key %q, got %q", "dedupe1", runs[0].DedupeKey())
+	}
+}
+
+func TestAutomationPolicyRejectsRecursiveDepth(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	app.Store().Set(core.StoreKeyAutomationPolicyConfig, core.AutomationPolicyConfig{
+		MaxDepth:          0,
+		MaxRunsPerMinute:  100,
+		MaxConcurrentRuns: 10,
+	})
+
+	collection, err := app.FindCollectionByNameOrId("demo2")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerRecordCreate)
+	automation.SetCollectionRef(collection.Id)
+	automation.SetSteps(mustParseJSONRaw(t, `[{
+		"type":"record.create",
+		"collection":"demo2",
+		"data":{"title":"recursive"}
+	}]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatalf("Failed to create automation: %v", err)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("title", "seed")
+	if err := app.Save(record); err != nil {
+		t.Fatalf("Failed to create seed record: %v", err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 2)
+	var denied *core.AutomationRun
+	for _, run := range runs {
+		if strings.Contains(run.Error(), "max_depth_exceeded") {
+			denied = run
+			break
+		}
+	}
+	if denied == nil {
+		t.Fatalf("Expected a depth policy failure, got %d runs", len(runs))
+	}
+	if denied.Depth() != 1 {
+		t.Fatalf("Expected denied run depth 1, got %d", denied.Depth())
+	}
+	if denied.ParentRunId() == "" {
+		t.Fatal("Expected denied run to store parentRunId")
+	}
+}
+
+func TestAutomationDryRunPreviewsSideEffects(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	httpCalls := 0
+	app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+		httpCalls++
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+		}, nil
+	}))
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetName("dry_run_preview")
+	automation.SetTriggerType(core.AutomationTriggerManual)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"http","method":"POST","url":"https://example.com/{{trigger.type}}","body":{"name":"{{automation.name}}"}},
+		{"type":"record.create","collection":"demo2","data":{"title":"created"}}
+	]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatalf("Failed to create automation: %v", err)
+	}
+
+	result, err := app.RunAutomationDryRun(automation.Id, nil)
+	if err != nil {
+		t.Fatalf("Expected dry-run to succeed, got %v", err)
+	}
+	if result.Status != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected dry-run success, got %q", result.Status)
+	}
+	if len(result.StepResults) != 2 {
+		t.Fatalf("Expected 2 dry-run step results, got %d", len(result.StepResults))
+	}
+	if httpCalls != 0 {
+		t.Fatalf("Expected dry-run not to call HTTP doer, got %d calls", httpCalls)
+	}
+
+	runs, err := app.FindAllAutomationRunsByAutomation(automation)
+	if err != nil {
+		t.Fatalf("Failed to fetch automation runs: %v", err)
+	}
+	if len(runs) != 0 {
+		t.Fatalf("Expected dry-run not to persist automation runs, got %d", len(runs))
+	}
+}
+
 func TestAutomationMailStepSendsMessageWithRecordAttachments(t *testing.T) {
 	t.Parallel()
 

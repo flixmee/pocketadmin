@@ -64,6 +64,59 @@ func TestAutomationsList(t *testing.T) {
 	}
 }
 
+func TestAutomationSchemas(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "unauthorized",
+			Method:          http.MethodGet,
+			URL:             "/api/automations/schemas",
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as regular user",
+			Method: http.MethodGet,
+			URL:    "/api/automations/schemas",
+			Headers: map[string]string{
+				"Authorization": testRegularAuthHeader,
+			},
+			ExpectedStatus:  403,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as superuser",
+			Method: http.MethodGet,
+			URL:    "/api/automations/schemas",
+			Headers: map[string]string{
+				"Authorization": testSuperuserAuthHeader,
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"triggers":{`,
+				`"record.create"`,
+				`"i18n.translation_missing"`,
+				`"steps":{`,
+				`"http"`,
+				`"mail.send"`,
+				`"capability"`,
+				`"capabilities":{`,
+				`"http.request"`,
+				`"limits":{`,
+				`"maxSteps":100`,
+			},
+			ExpectedEvents: map[string]int{"*": 0},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
 func TestAutomationCreate(t *testing.T) {
 	t.Parallel()
 
@@ -130,6 +183,47 @@ func TestAutomationCreate(t *testing.T) {
 				`"name":"API create automation"`,
 				`"triggerType":"manual"`,
 			},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
+func TestAutomationDryRun(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "unauthorized",
+			Method:          http.MethodPost,
+			URL:             "/api/automations/autoapi00000061/dry-run",
+			Body:            strings.NewReader(`{}`),
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as superuser",
+			Method: http.MethodPost,
+			URL:    "/api/automations/autoapi00000061/dry-run",
+			Body:   strings.NewReader(`{"triggerType":"manual"}`),
+			Headers: map[string]string{
+				"Authorization": testSuperuserAuthHeader,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				createAutomationFixture(t, app, "autoapi00000061", "API dry-run automation")
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"automationId":"autoapi00000061"`,
+				`"triggerType":"manual"`,
+				`"status":"success"`,
+				`"stepResults":[`,
+				`"type":"condition"`,
+			},
+			ExpectedEvents: map[string]int{"*": 0},
 		},
 	}
 

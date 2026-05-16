@@ -147,6 +147,47 @@ func (m *AutomationRun) ClearErrorStepIndex() {
 	m.Set("errorStepIndex", automationRunErrorStepIndexUnset)
 }
 
+// ParentRunId returns the parent automation run id, if this run was triggered by another automation.
+func (m *AutomationRun) ParentRunId() string {
+	return m.GetString("parentRunId")
+}
+
+// SetParentRunId updates the parent automation run id.
+func (m *AutomationRun) SetParentRunId(runId string) {
+	m.Set("parentRunId", runId)
+}
+
+// Depth returns the run recursion depth.
+func (m *AutomationRun) Depth() int {
+	return m.GetInt("depth")
+}
+
+// SetDepth updates the run recursion depth.
+func (m *AutomationRun) SetDepth(depth int) {
+	m.Set("depth", depth)
+}
+
+// DedupeKey returns the optional run dedupe key.
+func (m *AutomationRun) DedupeKey() string {
+	return m.GetString("dedupeKey")
+}
+
+// SetDedupeKey updates the optional run dedupe key.
+func (m *AutomationRun) SetDedupeKey(key string) {
+	m.Set("dedupeKey", key)
+}
+
+// PolicyDecision returns the policy decision audit payload.
+func (m *AutomationRun) PolicyDecision() types.JSONRaw {
+	raw, _ := m.GetRaw("policyDecision").(types.JSONRaw)
+	return raw
+}
+
+// SetPolicyDecision updates the policy decision audit payload.
+func (m *AutomationRun) SetPolicyDecision(decision types.JSONRaw) {
+	m.Set("policyDecision", decision)
+}
+
 // Started returns the run start timestamp.
 func (m *AutomationRun) Started() types.DateTime {
 	return m.GetDateTime("started")

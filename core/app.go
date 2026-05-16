@@ -588,6 +588,18 @@ type App interface {
 	// RunAutomationWebhook runs the specified active webhook automation.
 	RunAutomationWebhook(automationID string, request *AutomationWebhookRequest) (*AutomationWebhookResponse, error)
 
+	// RunAutomationDryRun previews the specified automation without side effects.
+	RunAutomationDryRun(automationID string, input map[string]any) (*AutomationDryRunResult, error)
+
+	// FindCapabilityById returns a single Capability model by its id.
+	FindCapabilityById(id string) (*Capability, error)
+
+	// FindCapabilityByKey returns the newest active Capability model by key.
+	FindCapabilityByKey(key string) (*Capability, error)
+
+	// FindAllActiveCapabilities returns all active Capability models.
+	FindAllActiveCapabilities() ([]*Capability, error)
+
 	// ---------------------------------------------------------------
 
 	// FindLocaleByCode returns a single locale by code.

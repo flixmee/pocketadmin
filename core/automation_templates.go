@@ -55,6 +55,10 @@ func renderAutomationTemplateString(value string, ctx map[string]any) (any, erro
 			return nil, err
 		}
 
+		if text, ok := resolved.(string); ok && len(text) > AutomationMaxTemplateStringSize {
+			return nil, fmt.Errorf("automation template output exceeds %d bytes", AutomationMaxTemplateStringSize)
+		}
+
 		return resolved, nil
 	}
 
@@ -83,6 +87,9 @@ func renderAutomationTemplateString(value string, ctx map[string]any) (any, erro
 	})
 	if renderErr != nil {
 		return nil, renderErr
+	}
+	if len(result) > AutomationMaxTemplateStringSize {
+		return nil, fmt.Errorf("automation template output exceeds %d bytes", AutomationMaxTemplateStringSize)
 	}
 
 	return result, nil

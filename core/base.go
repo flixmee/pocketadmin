@@ -1384,6 +1384,7 @@ func (app *BaseApp) registerBaseHooks() {
 	app.registerOTPHooks()
 	app.registerAuthOriginHooks()
 	app.registerAutomationHooks()
+	app.registerCapabilityHooks()
 	app.registerI18nHooks()
 	app.registerTranslationJobHooks()
 	app.registerMediaHooks()

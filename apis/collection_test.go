@@ -47,7 +47,7 @@ func TestCollectionsList(t *testing.T) {
 			ExpectedContent: []string{
 				`"page":1`,
 				`"perPage":30`,
-				`"totalItems":22`,
+				`"totalItems":23`,
 				`"items":[{`,
 				`"collectionGroup":""`,
 				`"name":"` + core.CollectionNameSuperusers + `"`,
@@ -57,6 +57,7 @@ func TestCollectionsList(t *testing.T) {
 				`"name":"` + core.CollectionNameOTPs + `"`,
 				`"name":"` + core.CollectionNameMedias + `"`,
 				`"name":"` + core.CollectionNameAutomations + `"`,
+				`"name":"` + core.CollectionNameCapabilities + `"`,
 				`"name":"` + core.CollectionNameAutomationRuns + `"`,
 				`"name":"` + core.CollectionNameLocales + `"`,
 				`"name":"` + core.CollectionNameI18nGroups + `"`,
@@ -92,7 +93,7 @@ func TestCollectionsList(t *testing.T) {
 			ExpectedContent: []string{
 				`"page":2`,
 				`"perPage":2`,
-				`"totalItems":22`,
+				`"totalItems":23`,
 				`"items":[{`,
 				`"name":"` + core.CollectionNameLocales + `"`,
 			},
