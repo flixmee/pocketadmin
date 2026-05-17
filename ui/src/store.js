@@ -73,6 +73,11 @@ window.app.store = store({
             label: "Logs",
         },
         {
+            href: "#/automations",
+            icon: "ri-git-branch-line",
+            label: "Automations",
+        },
+        {
             href: "#/settings",
             icon: "ri-settings-3-line",
             label: "Settings",
@@ -106,11 +111,6 @@ window.app.store = store({
                 href: "#/settings/crons",
                 icon: "ri-time-line",
                 label: "Crons",
-            },
-            {
-                href: "#/settings/automations",
-                icon: "ri-git-branch-line",
-                label: "Automations",
             },
             {
                 href: "#/settings/locales",

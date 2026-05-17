@@ -1,5 +1,4 @@
 import { openAutomationRunsModal } from "./automationRunsList";
-import { openAutomationUpsertModal } from "./automationUpsertModal";
 
 const triggerLabels = {
     "manual": "Manual",
@@ -147,15 +146,13 @@ export function automationsList(propsArg = {}) {
     }
 
     function openCreateModal() {
-        openAutomationUpsertModal(null, {
-            onsave: () => loadAutomations(),
-        });
+        window.location.hash = "#/automations/new";
     }
 
     function openEditModal(automation) {
-        openAutomationUpsertModal(automation, {
-            onsave: () => loadAutomations(),
-        });
+        if (automation?.id) {
+            window.location.hash = `#/automations/${automation.id}`;
+        }
     }
 
     function openRunsModal(automation) {
@@ -167,6 +164,7 @@ export function automationsList(propsArg = {}) {
             pbEvent: "automationsList",
             className: "list automations-list",
             onmount: () => {
+                loadAutomations();
                 watchers.push(
                     watch(() => props.reset, () => {
                         loadAutomations();

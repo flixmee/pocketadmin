@@ -1,4 +1,3 @@
-import { settingsSidebar } from "../settingsSidebar";
 import { automationApprovalsList } from "./automationApprovalsList";
 import { automationsList } from "./automationsList";
 
@@ -15,15 +14,19 @@ export function pageAutomationsSettings() {
 
     return t.div(
         { pbEvent: "pageAutomationsSettings", className: "page page-automations-settings" },
-        settingsSidebar(),
         t.div(
             { className: "page-content full-height" },
             t.header(
                 { className: "page-header" },
                 t.nav(
                     { className: "breadcrumbs" },
-                    t.div({ className: "breadcrumb-item" }, "Settings"),
                     t.div({ className: "breadcrumb-item" }, () => app.store.title),
+                ),
+                t.div({ className: "flex-fill" }),
+                t.a(
+                    { href: "#/automations/new", className: "btn" },
+                    t.i({ className: "ri-add-line", ariaHidden: true }),
+                    t.span({ className: "txt" }, "Create automation"),
                 ),
             ),
             t.div(

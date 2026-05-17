@@ -5,22 +5,59 @@ import { recordStepForm } from "./recordStepForm";
 import { responseStepForm } from "./responseStepForm";
 
 const stepTypeOptions = [
-    { value: "condition", label: "Condition" },
-    { value: "http", label: "HTTP request" },
-    { value: "mail.send", label: "Send mail" },
-    { value: "record.create", label: "Create record" },
-    { value: "record.update", label: "Update record" },
-    { value: "record.delete", label: "Delete record" },
-    { value: "response", label: "Webhook response", triggerTypes: ["webhook"] },
-    { value: "capability", label: "Capability" },
-    { value: "wait.delay", label: "Wait delay" },
-    { value: "wait.webhook", label: "Wait webhook" },
-    { value: "wait.event", label: "Wait event" },
-    { value: "wait.approval", label: "Wait approval" },
-    { value: "ai.extract", label: "AI extract" },
-    { value: "ai.classify", label: "AI classify" },
-    { value: "ai.generate", label: "AI generate" },
-    { value: "ai.summarize", label: "AI summarize" },
+    { value: "condition", label: "Condition", icon: "ri-git-merge-line", category: "control" },
+    { value: "http", label: "HTTP request", icon: "ri-global-line", category: "integration" },
+    { value: "mail.send", label: "Send mail", icon: "ri-mail-send-line", category: "communication" },
+    { value: "record.create", label: "Create record", icon: "ri-add-box-line", category: "record" },
+    { value: "record.update", label: "Update record", icon: "ri-edit-2-line", category: "record" },
+    { value: "record.delete", label: "Delete record", icon: "ri-delete-bin-7-line", category: "record" },
+    {
+        value: "response",
+        label: "Webhook response",
+        icon: "ri-reply-line",
+        category: "webhook",
+        triggerTypes: ["webhook"],
+    },
+    { value: "capability", label: "Capability", icon: "ri-puzzle-2-line", category: "capability" },
+    { value: "wait.delay", label: "Wait delay", icon: "ri-timer-line", category: "wait" },
+    { value: "wait.webhook", label: "Wait webhook", icon: "ri-webhook-line", category: "wait" },
+    { value: "wait.event", label: "Wait event", icon: "ri-radar-line", category: "wait" },
+    { value: "wait.approval", label: "Wait approval", icon: "ri-user-follow-line", category: "approval" },
+    { value: "ai.extract", label: "AI extract", icon: "ri-sparkling-2-line", category: "ai" },
+    { value: "ai.classify", label: "AI classify", icon: "ri-sparkling-line", category: "ai" },
+    { value: "ai.generate", label: "AI generate", icon: "ri-magic-line", category: "ai" },
+    { value: "ai.summarize", label: "AI summarize", icon: "ri-file-reduce-line", category: "ai" },
+];
+
+const mappingTokenGroups = [
+    {
+        title: "Trigger",
+        tokens: ["{{trigger.type}}", "{{automation.id}}", "{{run.id}}"],
+    },
+    {
+        title: "Record",
+        tokens: ["{{record.id}}", "{{record.*}}", "{{recordOriginal.*}}"],
+        triggerTypes: ["record.create", "record.update", "record.delete"],
+    },
+    {
+        title: "Webhook",
+        tokens: ["{{request.method}}", "{{request.headers.*}}", "{{request.query.*}}", "{{request.body.*}}"],
+        triggerTypes: ["webhook"],
+    },
+    {
+        title: "i18n",
+        tokens: ["{{i18n.locale}}", "{{i18n.sourceLocale}}", "{{i18n.jobId}}"],
+        triggerTypes: [
+            "i18n.translation_missing",
+            "i18n.locale_published",
+            "i18n.translation_updated",
+            "i18n.ai_translation_finished",
+        ],
+    },
+    {
+        title: "Steps",
+        tokens: ["{{prevStep.output.*}}", "{{steps[0].output.*}}"],
+    },
 ];
 
 export function stepEditor(propsArg = {}) {
@@ -33,24 +70,97 @@ export function stepEditor(propsArg = {}) {
     });
 
     const watchers = app.utils.extendStore(props, propsArg);
+    let activeStepModal = null;
+    let stopPointerDrag = null;
+    let suppressedClickStepId = "";
+    let suppressedClickUntil = 0;
+    let dragState = null;
 
     const data = store({
         expandedById: {},
+        mode: "visual",
+        selectedStepId: "",
+        schemas: null,
+        isLoadingSchemas: false,
+        schemaError: "",
+        capabilityQuery: "",
+        capabilityCategory: "",
+        drawerOpen: false,
+        drawerActiveTab: "settings",
+        dragStepId: "",
     });
+
+    async function loadSchemas() {
+        if (data.schemas || data.isLoadingSchemas) {
+            return;
+        }
+
+        data.isLoadingSchemas = true;
+        data.schemaError = "";
+
+        try {
+            data.schemas = await app.pb.send("/api/automations/schemas", {
+                requestKey: "automationStepEditor.schemas",
+            });
+        } catch (err) {
+            if (!err?.isAbort) {
+                data.schemaError = err?.message || "Failed to load automation schemas.";
+            }
+        }
+
+        data.isLoadingSchemas = false;
+    }
 
     function setSteps(steps) {
         props.onchange?.(steps);
     }
 
-    function addStep(type) {
-        const nextStep = createEditorStep(type);
+    function addStep(type, insertIndex = -1) {
+        const nextStep = createReactiveEditorStep(type);
         data.expandedById[nextStep.__id] = true;
-        setSteps([...(props.steps || []), nextStep]);
+        data.selectedStepId = nextStep.__id;
+        data.drawerOpen = true;
+        data.drawerActiveTab = "settings";
+
+        const nextSteps = [...(props.steps || [])];
+        if (insertIndex >= 0 && insertIndex <= nextSteps.length) {
+            nextSteps.splice(insertIndex, 0, nextStep);
+        } else {
+            nextSteps.push(nextStep);
+        }
+        setSteps(nextSteps);
+        openStepEditModal(nextStep);
+    }
+
+    function addCapabilityStep(capabilityKey, insertIndex = -1) {
+        const nextStep = createReactiveEditorStep("capability");
+        nextStep.configText = stringifyJSONObject({
+            capability: capabilityKey,
+            input: {},
+        });
+        data.expandedById[nextStep.__id] = true;
+        data.selectedStepId = nextStep.__id;
+        data.drawerOpen = true;
+        data.drawerActiveTab = "settings";
+
+        const nextSteps = [...(props.steps || [])];
+        if (insertIndex >= 0 && insertIndex <= nextSteps.length) {
+            nextSteps.splice(insertIndex, 0, nextStep);
+        } else {
+            nextSteps.push(nextStep);
+        }
+        setSteps(nextSteps);
+        openStepEditModal(nextStep);
     }
 
     function removeStep(stepId) {
         const nextSteps = (props.steps || []).filter((step) => step.__id !== stepId);
         delete data.expandedById[stepId];
+        if (data.selectedStepId === stepId) {
+            data.selectedStepId = nextSteps[0]?.__id || "";
+            data.drawerOpen = !!data.selectedStepId;
+            closeDrawer();
+        }
         setSteps(nextSteps);
     }
 
@@ -63,15 +173,257 @@ export function stepEditor(propsArg = {}) {
         data.expandedById[stepId] = !isExpanded(stepId);
     }
 
+    function selectStep(stepId) {
+        data.selectedStepId = stepId;
+        data.expandedById[stepId] = true;
+        data.drawerOpen = true;
+        data.drawerActiveTab = "settings";
+        openStepEditModal(stepId);
+    }
+
+    function closeDrawer() {
+        data.drawerOpen = false;
+        if (activeStepModal) {
+            app.modals.close(activeStepModal, true);
+            activeStepModal = null;
+        }
+    }
+
+    function moveStep(stepId, insertIndex, animate = false) {
+        const nextSteps = [...(props.steps || [])];
+        const fromIndex = nextSteps.findIndex((step) => step.__id === stepId);
+        if (fromIndex < 0) {
+            return false;
+        }
+
+        const [step] = nextSteps.splice(fromIndex, 1);
+        let toIndex = insertIndex;
+        if (fromIndex < insertIndex) {
+            toIndex -= 1;
+        }
+        toIndex = Math.max(0, Math.min(toIndex, nextSteps.length));
+        if (toIndex === fromIndex) {
+            return false;
+        }
+
+        const previousRects = animate ? snapshotStepNodeRects() : null;
+        nextSteps.splice(toIndex, 0, step);
+        data.selectedStepId = step.__id;
+        setSteps(nextSteps);
+        if (previousRects) {
+            animateStepNodeLayout(previousRects, stepId);
+        }
+        return true;
+    }
+
+    function beginDrag(stepId) {
+        data.dragStepId = stepId;
+    }
+
+    function endDrag() {
+        data.dragStepId = "";
+    }
+
+    function beginNodePointerDrag(e, stepId) {
+        if (e.button !== undefined && e.button !== 0) {
+            return;
+        }
+
+        stopPointerDrag?.();
+
+        const sourceEl = e.currentTarget;
+        const canvasEl = sourceEl?.closest?.(".automation-builder-canvas");
+        const sourceRect = sourceEl?.getBoundingClientRect?.();
+        if (!sourceEl || !sourceRect) {
+            return;
+        }
+
+        const pointerId = e.pointerId;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        let hasStarted = false;
+
+        const start = () => {
+            if (hasStarted) {
+                return;
+            }
+            hasStarted = true;
+            sourceEl.setPointerCapture?.(pointerId);
+            dragState = createNodeDragState(sourceEl, canvasEl, stepId, startX, startY);
+            beginDrag(stepId);
+            document.body.classList.add("automation-builder-node-dragging");
+            queueDragFrame();
+        };
+
+        const cleanup = () => {
+            window.removeEventListener("pointermove", handlePointerMove);
+            window.removeEventListener("pointerup", handlePointerUp);
+            window.removeEventListener("pointercancel", handlePointerCancel);
+            document.body.classList.remove("automation-builder-node-dragging");
+            if (dragState?.frame) {
+                cancelAnimationFrame(dragState.frame);
+            }
+            dragState?.overlay?.remove();
+            dragState = null;
+            stopPointerDrag = null;
+        };
+
+        const finish = (event, shouldMove) => {
+            if (hasStarted && shouldMove && dragState) {
+                dragState.clientX = event.clientX;
+                dragState.clientY = event.clientY;
+                runDragFrame(true);
+            }
+            cleanup();
+            if (hasStarted) {
+                event.preventDefault();
+                suppressedClickStepId = stepId;
+                suppressedClickUntil = Date.now() + 350;
+            }
+            endDrag();
+        };
+
+        const handlePointerMove = (event) => {
+            if (pointerId !== undefined && event.pointerId !== pointerId) {
+                return;
+            }
+
+            const deltaX = Math.abs(event.clientX - startX);
+            const deltaY = Math.abs(event.clientY - startY);
+            if (!hasStarted && deltaX < 4 && deltaY < 4) {
+                return;
+            }
+
+            start();
+            event.preventDefault();
+            if (dragState) {
+                dragState.clientX = event.clientX;
+                dragState.clientY = event.clientY;
+                queueDragFrame();
+            }
+        };
+
+        const handlePointerUp = (event) => {
+            if (pointerId !== undefined && event.pointerId !== pointerId) {
+                return;
+            }
+            finish(event, true);
+        };
+
+        const handlePointerCancel = (event) => {
+            if (pointerId !== undefined && event.pointerId !== pointerId) {
+                return;
+            }
+            finish(event, false);
+        };
+
+        stopPointerDrag = () => finish(new Event("pointercancel"), false);
+
+        window.addEventListener("pointermove", handlePointerMove, { passive: false });
+        window.addEventListener("pointerup", handlePointerUp);
+        window.addEventListener("pointercancel", handlePointerCancel);
+    }
+
+    function queueDragFrame() {
+        if (!dragState || dragState.frame) {
+            return;
+        }
+
+        dragState.frame = requestAnimationFrame(() => runDragFrame());
+    }
+
+    function runDragFrame(isFinal = false) {
+        if (!dragState) {
+            return;
+        }
+
+        dragState.frame = 0;
+        updateDragOverlay(dragState);
+        const scrolled = autoScrollForDrag(dragState);
+        const insertIndex = resolvePointerDropIndex(dragState.clientY);
+        if (insertIndex !== dragState.lastInsertIndex || isFinal) {
+            dragState.lastInsertIndex = insertIndex;
+            moveStep(dragState.stepId, insertIndex, true);
+        }
+        if (scrolled) {
+            queueDragFrame();
+        }
+    }
+
+    function isClickSuppressed(stepId) {
+        return suppressedClickStepId === stepId && Date.now() < suppressedClickUntil;
+    }
+
     function isExpanded(stepId) {
         return data.expandedById[stepId] !== false;
+    }
+
+    function stepEditOptions() {
+        return {
+            get steps() {
+                return props.steps || [];
+            },
+            get schemas() {
+                return data.schemas;
+            },
+            get errors() {
+                return props.errors;
+            },
+            get triggerType() {
+                return props.triggerType;
+            },
+            get triggerCollectionRef() {
+                return props.triggerCollectionRef;
+            },
+            get drawerActiveTab() {
+                return data.drawerActiveTab;
+            },
+            setDrawerActiveTab: (tab) => (data.drawerActiveTab = tab),
+            addStep,
+            removeStep,
+            changeStepType,
+            closeDrawer,
+            onafterclose: (el) => {
+                if (activeStepModal === el) {
+                    activeStepModal = null;
+                }
+                data.drawerOpen = false;
+                el?.remove();
+            },
+        };
+    }
+
+    function openStepEditModal(stepOrId) {
+        const step = typeof stepOrId === "string"
+            ? (props.steps || []).find((item) => item.__id === stepOrId)
+            : stepOrId;
+        if (!step) {
+            return;
+        }
+
+        if (activeStepModal) {
+            app.modals.close(activeStepModal, true);
+            activeStepModal = null;
+        }
+
+        data.drawerOpen = true;
+        const modal = renderStepEditModal(step, stepEditOptions());
+        activeStepModal = modal;
+        document.body.appendChild(modal);
+        app.modals.open(modal);
     }
 
     return t.div(
         {
             pbEvent: "automationStepEditor",
-            className: "automation-step-editor",
+            className: "automation-step-editor automation-visual-builder",
+            onmount: () => loadSchemas(),
             onunmount: () => {
+                if (activeStepModal) {
+                    app.modals.close(activeStepModal, true);
+                    activeStepModal = null;
+                }
+                stopPointerDrag?.();
                 watchers.forEach((w) => w?.unwatch());
             },
         },
@@ -86,134 +438,88 @@ export function stepEditor(propsArg = {}) {
                 t.div({ className: "content" }, stepsError),
             );
         },
-        app.components.sortable({
-            className: "list automation-steps-list",
-            handle: ".sort-handle",
-            data: () => props.steps || [],
-            onchange: (sortedSteps) => setSteps(sortedSteps),
-            before: () => {
-                if (props.steps?.length) {
-                    return null;
-                }
-
-                return t.div(
-                    { className: "list-item" },
-                    t.div(
-                        { className: "content block txt-hint" },
-                        "No steps added yet. Add a condition, HTTP request, mail step, or record action below.",
-                    ),
-                );
-            },
-            dataItem: (step, index) => {
-                const stepError = resolveStepError(props.errors, index);
-
-                return t.div(
-                    { rid: step.__id, className: "list-item automation-step-item" },
-                    t.div(
-                        { className: "content block" },
-                        t.div(
-                            { className: "flex gap-10 flex-wrap m-b-sm" },
-                            t.span(
-                                {
-                                    className: "label handle sort-handle",
-                                    title: "Reorder step",
-                                },
-                                t.i({ className: "ri-draggable", ariaHidden: true }),
-                                t.span({ className: "txt" }, () => `Step ${index + 1}`),
-                            ),
-                            t.span({ className: "txt-bold" }, () => summarizeStep(step)),
-                            t.div({ className: "m-l-auto" }),
-                            t.button(
-                                {
-                                    type: "button",
-                                    className: "btn sm secondary transparent circle",
-                                    ariaLabel: app.attrs.tooltip(isExpanded(step.__id) ? "Collapse" : "Expand"),
-                                    onclick: () => toggleExpanded(step.__id),
-                                },
-                                t.i({
-                                    className: () =>
-                                        isExpanded(step.__id) ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line",
-                                    ariaHidden: true,
-                                }),
-                            ),
-                            t.button(
-                                {
-                                    type: "button",
-                                    className: "btn sm secondary transparent circle",
-                                    ariaLabel: app.attrs.tooltip("Remove"),
-                                    onclick: () => removeStep(step.__id),
-                                },
-                                t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
-                            ),
-                        ),
-                        t.div(
-                            { className: "grid" },
-                            t.div(
-                                { className: "col-lg-4" },
-                                t.div(
-                                    { className: "field" },
-                                    t.label({ htmlFor: `${step.__id}_type` }, "Step type"),
-                                    app.components.select({
-                                        id: `${step.__id}_type`,
-                                        value: () => step.type,
-                                        options: () => stepTypeSelectOptions(props.triggerType, step.type),
-                                        onchange: (selected) => {
-                                            const nextType = selected?.[0]?.value || "condition";
-                                            if (nextType !== step.type) {
-                                                changeStepType(step, nextType);
-                                            }
-                                        },
-                                    }),
-                                ),
-                            ),
-                        ),
-                        app.components.slide(
-                            () => isExpanded(step.__id),
-                            t.div(
-                                { className: "m-t-sm" },
-                                () =>
-                                    renderStepForm(step, stepError, {
-                                        triggerType: props.triggerType,
-                                        triggerCollectionRef: props.triggerCollectionRef,
-                                    }),
-                            ),
-                        ),
-                        () => {
-                            const message = extractErrorMessage(stepError);
-                            if (!message) {
-                                return null;
-                            }
-
-                            return t.div(
-                                { className: "field-error txt-danger m-t-sm" },
-                                message,
-                            );
-                        },
-                    ),
-                );
-            },
-            after: () => {
-                return t.div(
-                    { className: "list-item block" },
-                    t.div(
-                        { className: "flex gap-5 flex-wrap" },
-                        () =>
-                            stepTypeAddOptions(props.triggerType).map((option) => {
-                                return t.button(
-                                    {
-                                        rid: option.value,
-                                        type: "button",
-                                        className: "btn sm secondary transparent",
-                                        onclick: () => addStep(option.value),
-                                    },
-                                    t.i({ className: "ri-add-line", ariaHidden: true }),
-                                    t.span({ className: "txt" }, option.label),
-                                );
-                            }),
-                    ),
-                );
-            },
-        }),
+        t.div(
+            { className: "automation-builder-toolbar" },
+            t.div(
+                { className: "tabs-header equal-width" },
+                t.button(
+                    {
+                        type: "button",
+                        className: () => data.mode === "visual" ? "active" : "",
+                        onclick: () => (data.mode = "visual"),
+                    },
+                    t.i({ className: "ri-node-tree", ariaHidden: true }),
+                    t.span({ className: "txt" }, "Visual builder"),
+                ),
+                t.button(
+                    {
+                        type: "button",
+                        className: () => data.mode === "structured" ? "active" : "",
+                        onclick: () => (data.mode = "structured"),
+                    },
+                    t.i({ className: "ri-list-check-3", ariaHidden: true }),
+                    t.span({ className: "txt" }, "Structured editor"),
+                ),
+            ),
+            t.div(
+                { className: "txt-sm txt-hint" },
+                () => {
+                    const limit = data.schemas?.limits?.maxSteps;
+                    return limit
+                        ? `${(props.steps || []).length}/${limit} steps`
+                        : `${(props.steps || []).length} steps`;
+                },
+            ),
+        ),
+        () =>
+            data.mode === "visual"
+                ? renderVisualBuilder({
+                    steps: props.steps || [],
+                    schemas: data.schemas,
+                    isLoadingSchemas: data.isLoadingSchemas,
+                    schemaError: data.schemaError,
+                    selectedStepId: data.selectedStepId,
+                    triggerType: props.triggerType,
+                    capabilityQuery: data.capabilityQuery,
+                    capabilityCategory: data.capabilityCategory,
+                    setCapabilityQuery: (value) => (data.capabilityQuery = value),
+                    setCapabilityCategory: (value) => (data.capabilityCategory = value),
+                    drawerOpen: data.drawerOpen,
+                    drawerActiveTab: data.drawerActiveTab,
+                    setDrawerActiveTab: (tab) => (data.drawerActiveTab = tab),
+                    dragStepId: data.dragStepId,
+                    selectStep,
+                    closeDrawer,
+                    addStep,
+                    addCapabilityStep,
+                    removeStep,
+                    changeStepType,
+                    beginDrag,
+                    endDrag,
+                    beginNodePointerDrag,
+                    isClickSuppressed,
+                    moveStep,
+                    errors: props.errors,
+                    triggerCollectionRef: props.triggerCollectionRef,
+                })
+                : null,
+        () =>
+            data.mode === "structured"
+                ? renderStructuredStepList({
+                    steps: props.steps || [],
+                    errors: props.errors,
+                    triggerType: props.triggerType,
+                    triggerCollectionRef: props.triggerCollectionRef,
+                    setSteps,
+                    addStep,
+                    removeStep,
+                    selectStep,
+                    changeStepType,
+                    toggleExpanded,
+                    isExpanded,
+                    selectedStepId: data.selectedStepId,
+                })
+                : null,
     );
 }
 
@@ -269,6 +575,803 @@ function renderStepForm(step, error, context = {}) {
         default:
             return t.div({ className: "txt-sm txt-danger" }, `Unsupported step type "${step.type}".`);
     }
+}
+
+function renderStructuredStepList(options) {
+    return app.components.sortable({
+        className: "list automation-steps-list",
+        handle: ".sort-handle",
+        data: () => options.steps,
+        onchange: (sortedSteps) => options.setSteps(sortedSteps),
+        before: () => {
+            if (options.steps?.length) {
+                return null;
+            }
+
+            return t.div(
+                { className: "list-item" },
+                t.div(
+                    { className: "content block txt-hint" },
+                    "No steps added yet. Add a condition, HTTP request, mail step, or record action below.",
+                ),
+            );
+        },
+        dataItem: (step, index) => {
+            const stepError = resolveStepError(options.errors, index);
+
+            return t.div(
+                {
+                    rid: step.__id,
+                    className: () =>
+                        `list-item automation-step-item ${options.selectedStepId === step.__id ? "selected" : ""}`,
+                },
+                t.div(
+                    { className: "content block" },
+                    t.div(
+                        { className: "flex gap-10 flex-wrap m-b-sm" },
+                        t.span(
+                            {
+                                className: "label handle sort-handle",
+                                title: "Reorder step",
+                            },
+                            t.i({ className: "ri-draggable", ariaHidden: true }),
+                            t.span({ className: "txt" }, () => `Step ${index + 1}`),
+                        ),
+                        t.span({ className: "txt-bold" }, () => summarizeStep(step)),
+                        () => renderValidationLabel(step),
+                        t.div({ className: "m-l-auto" }),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn sm secondary transparent circle",
+                                ariaLabel: app.attrs.tooltip("Focus in builder"),
+                                onclick: () => options.selectStep(step.__id),
+                            },
+                            t.i({ className: "ri-focus-3-line", ariaHidden: true }),
+                        ),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn sm secondary transparent circle",
+                                ariaLabel: app.attrs.tooltip(options.isExpanded(step.__id) ? "Collapse" : "Expand"),
+                                onclick: () => options.toggleExpanded(step.__id),
+                            },
+                            t.i({
+                                className: () =>
+                                    options.isExpanded(step.__id) ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line",
+                                ariaHidden: true,
+                            }),
+                        ),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn sm secondary transparent circle",
+                                ariaLabel: app.attrs.tooltip("Remove"),
+                                onclick: () => options.removeStep(step.__id),
+                            },
+                            t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                        ),
+                    ),
+                    renderStepTypeSelect(step, options),
+                    app.components.slide(
+                        () => options.isExpanded(step.__id),
+                        t.div(
+                            { className: "m-t-sm" },
+                            () => renderStepValidation(step),
+                            () =>
+                                renderStepForm(step, stepError, {
+                                    triggerType: options.triggerType,
+                                    triggerCollectionRef: options.triggerCollectionRef,
+                                }),
+                        ),
+                    ),
+                    () => renderServerStepError(stepError),
+                ),
+            );
+        },
+        after: () => {
+            return t.div(
+                { className: "list-item block" },
+                t.div(
+                    { className: "flex gap-5 flex-wrap" },
+                    () =>
+                        t.div(
+                            { className: "flex gap-5 flex-wrap" },
+                            ...stepTypeAddOptions(options.triggerType).map((option) =>
+                                t.button(
+                                    {
+                                        rid: option.value,
+                                        type: "button",
+                                        className: "btn sm secondary transparent",
+                                        onclick: () => options.addStep(option.value),
+                                    },
+                                    t.i({ className: "ri-add-line", ariaHidden: true }),
+                                    t.span({ className: "txt" }, option.label),
+                                )
+                            ),
+                        ),
+                ),
+            );
+        },
+    });
+}
+
+function renderVisualBuilder(options) {
+    const selectedStep = options.steps.find((step) => step.__id === options.selectedStepId) || options.steps[0] || null;
+    return t.div(
+        { className: "automation-n8n-builder" },
+        renderActionPalette(options),
+        t.div(
+            { className: "automation-builder-canvas" },
+            renderTriggerNode(options),
+            t.div(
+                { className: "automation-builder-connector" },
+                t.span({ className: "automation-builder-connector-line" }),
+                t.button(
+                    {
+                        type: "button",
+                        className: "automation-builder-plus",
+                        title: "Add step after trigger",
+                        onclick: () => options.addStep("condition", 0),
+                    },
+                    t.i({ className: "ri-add-line", ariaHidden: true }),
+                ),
+            ),
+            () => {
+                if (!options.steps.length) {
+                    return t.div(
+                        { className: "automation-builder-empty" },
+                        t.i({ className: "ri-node-tree", ariaHidden: true }),
+                        t.div({ className: "txt-bold" }, "Start with a step"),
+                        t.div({ className: "txt-sm txt-hint" }, "Use the action palette to add workflow blocks."),
+                    );
+                }
+
+                return t.div(
+                    { className: "automation-builder-step-nodes" },
+                    ...options.steps.map((step, index) => {
+                        const validation = clientValidateStep(step);
+                        return t.div(
+                            { className: "automation-builder-node-wrap" },
+                            t.button(
+                                {
+                                    rid: step.__id,
+                                    type: "button",
+                                    "html-data-automation-step-node": "true",
+                                    "html-data-automation-step-id": step.__id,
+                                    className: () =>
+                                        `automation-builder-node ${
+                                            selectedStep?.__id === step.__id ? "selected" : ""
+                                        } ${validation.length ? "has-issues" : ""} ${
+                                            options.dragStepId === step.__id ? "dragging" : ""
+                                        }`,
+                                    onpointerdown: (e) => options.beginNodePointerDrag(e, step.__id),
+                                    onclick: (e) => {
+                                        if (options.isClickSuppressed(step.__id)) {
+                                            e.preventDefault();
+                                            return;
+                                        }
+                                        options.selectStep(step.__id);
+                                    },
+                                },
+                                t.span(
+                                    {
+                                        className: "automation-builder-drag-handle",
+                                        title: "Drag to reorder",
+                                    },
+                                    t.i({ className: "ri-draggable", ariaHidden: true }),
+                                ),
+                                t.div(
+                                    { className: "automation-builder-node-icon" },
+                                    t.i({ className: stepTypeIcon(step.type), ariaHidden: true }),
+                                ),
+                                t.div(
+                                    { className: "content block txt-left" },
+                                    t.div(
+                                        { className: "flex gap-5 flex-wrap" },
+                                        t.span({ className: "label" }, `Step ${index + 1}`),
+                                        t.span(
+                                            {
+                                                className: () => `label ${validation.length ? "warning" : "success"}`,
+                                            },
+                                            validation.length ? `${validation.length} issue(s)` : "Valid",
+                                        ),
+                                    ),
+                                    t.div({ className: "txt-bold m-t-5" }, () => stepTypeLabel(step.type)),
+                                    t.div({ className: "txt-sm txt-hint txt-ellipsis" }, () => summarizeStep(step)),
+                                ),
+                                t.span({ className: "automation-builder-port input-port" }),
+                                t.span({ className: "automation-builder-port output-port" }),
+                            ),
+                            t.div(
+                                { className: "automation-builder-connector" },
+                                t.span({ className: "automation-builder-connector-line" }),
+                                t.button(
+                                    {
+                                        type: "button",
+                                        className: "automation-builder-plus",
+                                        title: "Add connected step",
+                                        onclick: () => options.addStep("condition", index + 1),
+                                    },
+                                    t.i({ className: "ri-add-line", ariaHidden: true }),
+                                ),
+                            ),
+                        );
+                    }),
+                );
+            },
+        ),
+    );
+}
+
+function renderActionPalette(options) {
+    return t.aside(
+        { className: "automation-builder-palette" },
+        t.div({ className: "txt-bold m-b-xs" }, "Actions"),
+        t.div({ className: "txt-sm txt-hint m-b-sm" }, "Drag nodes in the canvas to reconnect the ordered flow."),
+        t.div(
+            { className: "automation-builder-palette-actions" },
+            () =>
+                t.div(
+                    { className: "automation-builder-palette-actions-inner" },
+                    ...stepTypeAddOptions(options.triggerType).map((option) =>
+                        t.button(
+                            {
+                                type: "button",
+                                className: "automation-builder-palette-action",
+                                onclick: () => options.addStep(option.value),
+                            },
+                            t.i({ className: option.icon || "ri-add-line", ariaHidden: true }),
+                            t.div(
+                                { className: "content block txt-left" },
+                                t.div({ className: "txt-bold" }, option.label),
+                                t.div({ className: "txt-xs txt-hint" }, option.category || "step"),
+                            ),
+                        )
+                    ),
+                ),
+        ),
+        renderMappingPalette(options.triggerType),
+        renderCapabilityBrowser(options),
+    );
+}
+
+function renderTriggerNode(options) {
+    return t.div(
+        { className: "automation-builder-node trigger-node" },
+        t.div({ className: "automation-builder-node-icon" }, t.i({ className: "ri-flashlight-line" })),
+        t.div(
+            { className: "content block" },
+            t.div({ className: "txt-bold" }, "Trigger"),
+            t.div({ className: "txt-sm txt-hint" }, () => options.triggerType || "manual"),
+        ),
+        t.span({ className: "automation-builder-port output-port" }),
+    );
+}
+
+function createNodeDragState(sourceEl, canvasEl, stepId, clientX, clientY) {
+    const rect = sourceEl.getBoundingClientRect();
+    const overlay = sourceEl.cloneNode(true);
+    overlay.removeAttribute("rid");
+    overlay.removeAttribute("id");
+    overlay.classList.add("automation-builder-node-overlay");
+    overlay.classList.remove("selected");
+    overlay.style.width = `${rect.width}px`;
+    overlay.style.height = `${rect.height}px`;
+    overlay.style.left = "0px";
+    overlay.style.top = "0px";
+    overlay.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0) scale(1.03)`;
+    document.body.appendChild(overlay);
+
+    return {
+        stepId,
+        overlay,
+        canvasEl,
+        clientX,
+        clientY,
+        offsetX: clientX - rect.left,
+        offsetY: clientY - rect.top,
+        lastInsertIndex: -1,
+        frame: 0,
+    };
+}
+
+function updateDragOverlay(state) {
+    if (!state?.overlay) {
+        return;
+    }
+
+    const x = state.clientX - state.offsetX;
+    const y = state.clientY - state.offsetY;
+    state.overlay.style.transform = `translate3d(${x}px, ${y}px, 0) scale(1.035)`;
+}
+
+function autoScrollForDrag(state) {
+    if (!state) {
+        return false;
+    }
+
+    const edgeSize = 72;
+    const maxScroll = 18;
+    let didScroll = false;
+
+    const scrollByEdge = (el, top, bottom, scrollFn) => {
+        let delta = 0;
+        if (state.clientY < top + edgeSize) {
+            delta = -Math.round(maxScroll * (1 - Math.max(0, state.clientY - top) / edgeSize));
+        } else if (state.clientY > bottom - edgeSize) {
+            delta = Math.round(maxScroll * (1 - Math.max(0, bottom - state.clientY) / edgeSize));
+        }
+
+        if (delta) {
+            scrollFn(delta);
+            didScroll = true;
+        }
+    };
+
+    if (state.canvasEl && state.canvasEl.scrollHeight > state.canvasEl.clientHeight) {
+        const rect = state.canvasEl.getBoundingClientRect();
+        scrollByEdge(state.canvasEl, rect.top, rect.bottom, (delta) => {
+            state.canvasEl.scrollTop += delta;
+        });
+    }
+
+    scrollByEdge(window, 0, window.innerHeight, (delta) => window.scrollBy(0, delta));
+
+    return didScroll;
+}
+
+function snapshotStepNodeRects() {
+    const rects = new Map();
+    document
+        .querySelectorAll(".automation-step-editor .automation-builder-node[data-automation-step-id]")
+        .forEach((node) => {
+            rects.set(node.dataset.automationStepId, node.getBoundingClientRect());
+        });
+    return rects;
+}
+
+function animateStepNodeLayout(previousRects, draggedStepId) {
+    requestAnimationFrame(() => {
+        document
+            .querySelectorAll(".automation-step-editor .automation-builder-node[data-automation-step-id]")
+            .forEach((node) => {
+                const id = node.dataset.automationStepId;
+                if (id === draggedStepId) {
+                    return;
+                }
+
+                const previous = previousRects.get(id);
+                if (!previous) {
+                    return;
+                }
+
+                const current = node.getBoundingClientRect();
+                const deltaX = previous.left - current.left;
+                const deltaY = previous.top - current.top;
+                if (!deltaX && !deltaY) {
+                    return;
+                }
+
+                node.style.transition = "none";
+                node.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+                void node.offsetHeight;
+                requestAnimationFrame(() => {
+                    node.style.transition = "";
+                    node.style.transform = "";
+                });
+            });
+    });
+}
+
+function resolvePointerDropIndex(clientY) {
+    const nodes = Array.from(
+        document.querySelectorAll(".automation-step-editor .automation-builder-node[data-automation-step-node='true']"),
+    );
+
+    if (!nodes.length) {
+        return 0;
+    }
+
+    for (let i = 0; i < nodes.length; i++) {
+        const rect = nodes[i].getBoundingClientRect();
+        if (clientY < rect.top + rect.height / 2) {
+            return i;
+        }
+    }
+
+    return nodes.length;
+}
+
+function renderStepEditModal(step, options) {
+    return t.div(
+        {
+            pbEvent: "automationStepEditModal",
+            className: "modal popup lg automation-builder-drawer-shell automation-step-edit-modal",
+            onafterclose: (el) => options.onafterclose?.(el),
+        },
+        t.header(
+            { className: "modal-header isolated automation-builder-drawer-header" },
+            t.div(
+                { className: "automation-builder-node-icon" },
+                t.i({ className: () => stepTypeIcon(step.type), ariaHidden: true }),
+            ),
+            t.div(
+                { className: "content block" },
+                t.div({ className: "txt-bold" }, () => stepTypeLabel(step.type)),
+                t.div(
+                    { className: "txt-sm txt-hint" },
+                    () => {
+                        const stepIndex = options.steps.findIndex((item) => item.__id === step.__id);
+                        return stepIndex >= 0 ? `Step ${stepIndex + 1}` : "Step";
+                    },
+                ),
+            ),
+            t.button(
+                {
+                    type: "button",
+                    className: "btn sm secondary transparent circle",
+                    ariaLabel: app.attrs.tooltip("Close"),
+                    onclick: () => app.modals.close(),
+                },
+                t.i({ className: "ri-close-line", ariaHidden: true }),
+            ),
+        ),
+        t.div(
+            { className: "modal-content" },
+            t.nav(
+                { className: "tabs-header equal-width m-b-base" },
+                t.button(
+                    {
+                        type: "button",
+                        className: () => `tab-item ${options.drawerActiveTab === "settings" ? "active" : ""}`,
+                        onclick: () => options.setDrawerActiveTab("settings"),
+                    },
+                    t.span({ className: "txt" }, "Settings"),
+                ),
+                t.button(
+                    {
+                        type: "button",
+                        className: () => `tab-item ${options.drawerActiveTab === "mapping" ? "active" : ""}`,
+                        onclick: () => options.setDrawerActiveTab("mapping"),
+                    },
+                    t.span({ className: "txt" }, "Data"),
+                ),
+                t.button(
+                    {
+                        type: "button",
+                        className: () => `tab-item ${options.drawerActiveTab === "schema" ? "active" : ""}`,
+                        onclick: () => options.setDrawerActiveTab("schema"),
+                    },
+                    t.span({ className: "txt" }, "Schema"),
+                ),
+            ),
+            () => {
+                const stepIndex = options.steps.findIndex((item) => item.__id === step.__id);
+                const stepError = resolveStepError(options.errors, stepIndex);
+                if (options.drawerActiveTab === "mapping") {
+                    return renderDrawerMappingTab(options);
+                }
+                if (options.drawerActiveTab === "schema") {
+                    return renderSchemaInspector(step, options.schemas, options);
+                }
+
+                return t.div(
+                    { className: "automation-builder-drawer-form" },
+                    renderStepTypeSelect(step, options),
+                    () => renderStepValidation(step),
+                    () => renderServerStepError(stepError),
+                    () =>
+                        renderStepForm(step, stepError, {
+                            triggerType: options.triggerType,
+                            triggerCollectionRef: options.triggerCollectionRef,
+                        }),
+                );
+            },
+        ),
+        t.footer(
+            { className: "modal-footer automation-builder-drawer-footer" },
+            t.button(
+                {
+                    type: "button",
+                    className: "btn secondary transparent m-r-auto",
+                    onclick: () => {
+                        const stepIndex = options.steps.findIndex((item) => item.__id === step.__id);
+                        options.addStep("condition", stepIndex + 1);
+                    },
+                },
+                t.i({ className: "ri-link", ariaHidden: true }),
+                t.span({ className: "txt" }, "Connect next"),
+            ),
+            t.button(
+                {
+                    type: "button",
+                    className: "btn secondary transparent txt-danger",
+                    onclick: () => options.removeStep(step.__id),
+                },
+                t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                t.span({ className: "txt" }, "Remove"),
+            ),
+        ),
+    );
+}
+
+function renderDrawerMappingTab(options) {
+    return t.div(
+        { className: "automation-builder-drawer-form" },
+        t.div({ className: "txt-bold m-b-xs" }, "Template data"),
+        t.div(
+            { className: "txt-sm txt-hint m-b-sm" },
+            "Copy a token and paste it into any text or JSON field in the Settings tab.",
+        ),
+        renderMappingPalette(options.triggerType),
+    );
+}
+
+function renderStepTypeSelect(step, options) {
+    return t.div(
+        { className: "grid" },
+        t.div(
+            { className: "col-lg-12" },
+            t.div(
+                { className: "field" },
+                t.label({ htmlFor: `${step.__id}_type` }, "Step type"),
+                app.components.select({
+                    id: `${step.__id}_type`,
+                    value: () => step.type,
+                    options: () => stepTypeSelectOptions(options.triggerType, step.type),
+                    onchange: (selected) => {
+                        const nextType = selected?.[0]?.value || "condition";
+                        if (nextType !== step.type) {
+                            options.changeStepType(step, nextType);
+                        }
+                    },
+                }),
+            ),
+        ),
+    );
+}
+
+function renderValidationLabel(step) {
+    const validation = clientValidateStep(step);
+    if (!validation.length) {
+        return t.span({ className: "label success" }, "Valid");
+    }
+
+    return t.span({ className: "label warning" }, `${validation.length} issue(s)`);
+}
+
+function renderServerStepError(stepError) {
+    const message = extractErrorMessage(stepError);
+    if (!message) {
+        return null;
+    }
+
+    return t.div(
+        { className: "field-error txt-danger m-t-sm" },
+        message,
+    );
+}
+
+function renderMappingPalette(triggerType) {
+    return t.div(
+        { className: "automation-builder-card" },
+        t.div({ className: "txt-bold m-b-xs" }, "Data mapping"),
+        t.div(
+            { className: "txt-sm txt-hint m-b-sm" },
+            "Copy a token, then paste it into any text or JSON field.",
+        ),
+        t.div(
+            { className: "automation-token-groups" },
+            () =>
+                t.div(
+                    { className: "automation-token-groups-inner" },
+                    ...mappingTokenGroups
+                        .filter((group) => !group.triggerTypes || group.triggerTypes.includes(triggerType))
+                        .map((group) =>
+                            t.div(
+                                { className: "automation-token-group" },
+                                t.div({ className: "txt-xs txt-hint" }, group.title),
+                                t.div(
+                                    { className: "flex gap-5 flex-wrap" },
+                                    ...group.tokens.map((token) =>
+                                        t.button(
+                                            {
+                                                type: "button",
+                                                className: "label code-like",
+                                                onclick: () => {
+                                                    app.utils.copyToClipboard(token);
+                                                    app.toasts.success("Mapping token copied.");
+                                                },
+                                            },
+                                            token,
+                                        )
+                                    ),
+                                ),
+                            )
+                        ),
+                ),
+        ),
+    );
+}
+
+function renderCapabilityBrowser(options) {
+    const capabilities = Object.values(options.schemas?.capabilities || {});
+    const categories = [...new Set(capabilities.map((capability) => capability.category).filter(Boolean))].sort();
+
+    return t.div(
+        { className: "automation-builder-card" },
+        t.div(
+            { className: "flex gap-5 flex-wrap m-b-sm" },
+            t.div({ className: "txt-bold" }, "Capability browser"),
+            () => options.isLoadingSchemas ? t.span({ className: "label info" }, "Loading") : null,
+        ),
+        () => {
+            if (options.schemaError) {
+                return t.div({ className: "txt-sm txt-danger" }, options.schemaError);
+            }
+
+            if (!capabilities.length) {
+                return t.div({ className: "txt-sm txt-hint" }, "No capability schemas are available.");
+            }
+
+            return t.div(
+                { className: "automation-capability-browser-content" },
+                t.div(
+                    { className: "grid gap-sm" },
+                    t.div(
+                        { className: "col-md-7" },
+                        t.div(
+                            { className: "field" },
+                            t.input({
+                                type: "search",
+                                placeholder: "Search capabilities",
+                                value: () => options.capabilityQuery,
+                                oninput: (e) => options.setCapabilityQuery(e.target.value),
+                            }),
+                        ),
+                    ),
+                    t.div(
+                        { className: "col-md-5" },
+                        app.components.select({
+                            value: () => options.capabilityCategory,
+                            options: [{ value: "", label: "All categories" }].concat(
+                                categories.map((category) => ({ value: category, label: category })),
+                            ),
+                            onchange: (selected) => options.setCapabilityCategory(selected?.[0]?.value || ""),
+                        }),
+                    ),
+                ),
+                t.div(
+                    { className: "automation-capability-list" },
+                    () =>
+                        t.div(
+                            { className: "automation-capability-list-inner" },
+                            ...filteredCapabilities(capabilities, options).map((capability) =>
+                                t.button(
+                                    {
+                                        type: "button",
+                                        className: "automation-capability-item",
+                                        onclick: () => options.addCapabilityStep(capability.key),
+                                    },
+                                    t.i({ className: "ri-puzzle-2-line", ariaHidden: true }),
+                                    t.div(
+                                        { className: "content block txt-left" },
+                                        t.div({ className: "txt-bold" }, capability.key),
+                                        t.div(
+                                            { className: "txt-sm txt-hint" },
+                                            () =>
+                                                `${capability.category || "capability"} • v${
+                                                    capability.version || "1"
+                                                }`,
+                                        ),
+                                    ),
+                                    t.i({ className: "ri-add-line m-l-auto", ariaHidden: true }),
+                                )
+                            ),
+                        ),
+                ),
+            );
+        },
+    );
+}
+
+function renderSchemaInspector(step, schemas, options) {
+    return t.div(
+        { className: "automation-builder-card" },
+        t.div({ className: "txt-bold m-b-sm" }, "Inspector"),
+        () => {
+            if (!step) {
+                return t.div({ className: "txt-sm txt-hint" }, "Select a step to inspect its schema and mappings.");
+            }
+
+            const schema = schemas?.steps?.[step.type] || null;
+            const validation = clientValidateStep(step);
+            return t.div(
+                { className: "automation-builder-inspector-content" },
+                t.div(
+                    { className: "flex gap-5 flex-wrap m-b-sm" },
+                    t.span({ className: "label" }, () => step.type),
+                    t.span(
+                        { className: () => `label ${validation.length ? "warning" : "success"}` },
+                        () => validation.length ? `${validation.length} issue(s)` : "Valid",
+                    ),
+                ),
+                t.div({ className: "txt-sm m-b-sm" }, () => summarizeStep(step)),
+                renderStepValidation(step),
+                () => {
+                    if (!schema) {
+                        return t.div({ className: "txt-sm txt-hint" }, "No schema metadata loaded for this step.");
+                    }
+
+                    return t.div(
+                        { className: "automation-builder-schema-sections" },
+                        renderSchemaProperties("Inputs", schema.inputSchema),
+                        renderSchemaProperties("Outputs", schema.outputSchema),
+                    );
+                },
+                t.div(
+                    { className: "flex gap-5 flex-wrap m-t-sm" },
+                    t.button(
+                        {
+                            type: "button",
+                            className: "btn sm secondary transparent",
+                            onclick: () => options.selectStep(step.__id),
+                        },
+                        t.i({ className: "ri-edit-2-line", ariaHidden: true }),
+                        t.span({ className: "txt" }, "Edit below"),
+                    ),
+                    t.button(
+                        {
+                            type: "button",
+                            className: "btn sm secondary transparent",
+                            onclick: () => options.removeStep(step.__id),
+                        },
+                        t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                        t.span({ className: "txt" }, "Remove"),
+                    ),
+                ),
+            );
+        },
+    );
+}
+
+function renderSchemaProperties(title, schema) {
+    const properties = schema?.properties || {};
+    const keys = Object.keys(properties);
+    if (!keys.length) {
+        return null;
+    }
+
+    return t.div(
+        { className: "m-t-sm" },
+        t.div({ className: "txt-xs txt-hint m-b-xs" }, title),
+        t.div(
+            { className: "automation-schema-fields" },
+            ...keys.map((key) =>
+                t.span(
+                    { className: "label" },
+                    key,
+                    t.span({ className: "txt-hint" }, `:${properties[key]?.type || "any"}`),
+                )
+            ),
+        ),
+    );
+}
+
+function renderStepValidation(step) {
+    const messages = clientValidateStep(step);
+    if (!messages.length) {
+        return null;
+    }
+
+    return t.div(
+        { className: "alert warning automation-validation m-b-sm" },
+        t.div(
+            { className: "content" },
+            ...messages.map((message) => t.div(null, message)),
+        ),
+    );
 }
 
 function stepTypeAddOptions(triggerType) {
@@ -365,6 +1468,10 @@ function createEditorStep(type, rawStep = {}) {
         default:
             return createEditorStep("condition", { __id: base.__id });
     }
+}
+
+function createReactiveEditorStep(type, rawStep = {}) {
+    return store(createEditorStep(type, rawStep));
 }
 
 function buildStepPayload(step, index) {
@@ -659,6 +1766,186 @@ function summarizeStep(step) {
         default:
             return step.type || "Step";
     }
+}
+
+function clientValidateStep(step) {
+    const messages = [];
+
+    switch (step.type) {
+        case "condition":
+            if (!step.path?.trim()) {
+                messages.push("Condition path is required.");
+            }
+            if (step.op !== "exists" && !step.valueText?.trim()) {
+                messages.push("Condition value is required for this operator.");
+            }
+            break;
+        case "http":
+            if (!step.url?.trim()) {
+                messages.push("HTTP URL is required.");
+            }
+            validateOptionalJSONObject(step.headersText, "HTTP headers", messages);
+            validateOptionalNumber(step.timeoutText, "HTTP timeout", messages);
+            break;
+        case "mail.send":
+            if (!parseStringList(step.toText || "").length) {
+                messages.push("At least one mail recipient is required.");
+            }
+            if (!step.subject?.trim()) {
+                messages.push("Mail subject is required.");
+            }
+            if (!step.text?.trim() && !step.html?.trim()) {
+                messages.push("Mail text or HTML body is required.");
+            }
+            break;
+        case "record.create":
+            if (!step.collection?.trim()) {
+                messages.push("Record collection is required.");
+            }
+            validateJSONObject(step.dataText, "Record data", messages);
+            break;
+        case "record.update":
+            if (!step.collection?.trim()) {
+                messages.push("Record collection is required.");
+            }
+            if (!step.id?.trim() && !step.filter?.trim()) {
+                messages.push("Record update requires an id or filter.");
+            }
+            validateJSONObject(step.dataText, "Record data", messages);
+            break;
+        case "record.delete":
+            if (!step.collection?.trim()) {
+                messages.push("Record collection is required.");
+            }
+            if (!step.id?.trim() && !step.filter?.trim()) {
+                messages.push("Record delete requires an id or filter.");
+            }
+            break;
+        case "response":
+            validateOptionalNumber(step.statusCodeText, "Response status code", messages);
+            validateOptionalJSONObject(step.headersText, "Response headers", messages);
+            break;
+        case "capability":
+        case "wait.delay":
+        case "wait.webhook":
+        case "wait.event":
+        case "wait.approval":
+        case "ai.extract":
+        case "ai.classify":
+        case "ai.generate":
+        case "ai.summarize":
+            validateJSONObject(step.configText, "Configuration JSON", messages);
+            validateGenericStepConfig(step, messages);
+            break;
+    }
+
+    return messages;
+}
+
+function validateJSONObject(raw, label, messages) {
+    try {
+        parseJSONObject(raw || "", label);
+    } catch (err) {
+        messages.push(err.message);
+    }
+}
+
+function validateOptionalJSONObject(raw, label, messages) {
+    if (!raw?.trim()) {
+        return;
+    }
+
+    validateJSONObject(raw, label, messages);
+}
+
+function validateOptionalNumber(raw, label, messages) {
+    if (!raw?.trim()) {
+        return;
+    }
+
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+        messages.push(`${label} must be greater than zero.`);
+    }
+}
+
+function validateGenericStepConfig(step, messages) {
+    let config;
+    try {
+        config = parseJSONObject(step.configText || "{}", "Configuration JSON");
+    } catch (_) {
+        return;
+    }
+
+    switch (step.type) {
+        case "capability":
+            if (!String(config.capability || config.key || "").trim()) {
+                messages.push("Capability key is required.");
+            }
+            if (
+                config.input !== undefined
+                && (!config.input || typeof config.input !== "object" || Array.isArray(config.input))
+            ) {
+                messages.push("Capability input must be a JSON object.");
+            }
+            break;
+        case "wait.delay":
+            if (!String(config.duration || "").trim()) {
+                messages.push("Wait duration is required.");
+            }
+            break;
+        case "wait.webhook":
+        case "wait.event":
+            if (!String(config.key || config.event || "").trim()) {
+                messages.push("Wait key is required.");
+            }
+            break;
+        case "wait.approval":
+            if (!String(config.assignee || config.role || "").trim()) {
+                messages.push("Approval assignee or role is required.");
+            }
+            break;
+        case "ai.extract":
+        case "ai.classify":
+        case "ai.generate":
+        case "ai.summarize":
+            if (config.input === undefined || config.input === null || config.input === "") {
+                messages.push("AI input is required.");
+            }
+            if (step.type === "ai.classify" && (!Array.isArray(config.labels) || !config.labels.length)) {
+                messages.push("AI classify labels are required.");
+            }
+            break;
+    }
+}
+
+function stepTypeLabel(type) {
+    return stepTypeOptions.find((option) => option.value === type)?.label || type || "Step";
+}
+
+function stepTypeIcon(type) {
+    return stepTypeOptions.find((option) => option.value === type)?.icon || "ri-git-branch-line";
+}
+
+function filteredCapabilities(capabilities, options) {
+    const query = (options.capabilityQuery || "").trim().toLowerCase();
+    const category = options.capabilityCategory || "";
+
+    return capabilities
+        .filter((capability) => !category || capability.category === category)
+        .filter((capability) => {
+            if (!query) {
+                return true;
+            }
+
+            return [
+                capability.key,
+                capability.category,
+                capability.version,
+                capability.authStrategy,
+            ].some((value) => String(value || "").toLowerCase().includes(query));
+        })
+        .sort((a, b) => String(a.key || "").localeCompare(String(b.key || "")));
 }
 
 function resolveStepListError(errors) {

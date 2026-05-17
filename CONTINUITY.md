@@ -104,16 +104,88 @@ State:
     - Ran isolated notify watcher regressions after the broad run: `TestNotifyWatcher_SettingsUpdate` and `TestNotifyWatcher_CollectionsUpdate`; both passed.
     - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
     - Broad `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core ./apis` was attempted; remaining failures were full-load timing-sensitive notify watcher tests in `./core` that pass isolated, plus the known sandboxed `httptest` listener permission in `TestRecordAuthWithOAuth2`.
+    - Reviewed `FUTURE_AUTOMATION_PLATFORM_PLAN.md` Visual Builder / Platform Phase 12 requirements.
+    - Implemented Visual Builder UI foundation in the automation step editor: visual/structured mode switch, graph/list hybrid, schema loading, mapping token palette, capability browser, schema inspector, and inline client validation.
+    - Added saved-automation dry-run preview modal wired to `POST /api/automations/{id}/dry-run`.
+    - Added automation builder CSS and rebuilt tracked `ui/dist` assets.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation'`; passed.
+    - User requested Automations become a top-level menu and create/edit automation stop using popups.
+    - Added top-level `#/automations`, `#/automations/new`, and `#/automations/{id}` routes while keeping legacy `#/settings/automations` working.
+    - Added Automations to `app.store.headerLinks` and removed it from the Settings sidebar group.
+    - Converted automation list create/edit actions to route navigation instead of opening the upsert popup.
+    - Added `pageAutomationUpsert.js` for in-page automation create/edit using the existing visual builder, dry-run modal, runs modal, validation, and save APIs.
+    - Updated automation page layout/CSS for top-level navigation and sticky page actions.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User reported Create Automation UI cannot add more steps or edit steps.
+    - Fixed the in-page automation form lifecycle by keeping the form/step editor in a stable DOM subtree and toggling the loading skeleton separately, avoiding step editor recreation during interactions.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User reported `appendChild` TypeError when adding an automation step.
+    - Fixed direct array children in the automation create page and visual builder by spreading form sections, mapping tokens, schema fields, and validation messages into node child lists.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User provided a Shablon stack trace showing the `appendChild` crash persisted.
+    - Reworked remaining automation builder reactive list returns to always return wrapper DOM nodes instead of arrays: add-step buttons, visual graph nodes, mapping token groups, capability browser contents/list, schema inspector sections, and dry-run step results.
+    - Added CSS for the new wrapper nodes so builder spacing/layout stays intact.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User requested remaking the automation UI like n8n with click-to-edit drawer and drag/drop move/connect.
+    - Reworked the Visual Builder into a three-column n8n-style layout: action palette, connected canvas, and sticky node editor drawer.
+    - Visual mode now edits the clicked step in a drawer instead of inline list panels; Structured editor tab remains available as fallback.
+    - Added draggable canvas nodes and drop slots that reconnect/reorder the runtime's linear step chain, plus connector lines and add-connected-step buttons.
+    - Updated automation builder CSS for canvas grid background, ports, connectors, drop zones, palette actions, and drawer layout.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User requested updating the step edit modal/drawer by referring to `recordUpsertModal`.
+    - Updated the step edit drawer to follow record modal conventions: isolated `modal-header`, `modal-content`, equal-width tab strip, and `modal-footer` actions.
+    - Added Settings/Data/Schema drawer tabs; Settings edits the selected node, Data exposes template tokens, Schema shows schema metadata.
+    - Adjusted automation drawer CSS to fit the modal-style structure while staying docked in the builder.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User requested using `window.app.modals` for `automation-builder-drawer-shell`.
+    - Converted automation step editing from an embedded drawer column into a real `window.app.modals` popup appended to `document.body` and opened with `app.modals.open(modal)`.
+    - Node clicks/add/connect actions now open the shared modal; modal cleanup uses `onafterclose`, and editor unmount force-closes any active step modal.
+    - Removed docked drawer CSS behavior and scoped modal sizing/content styles to `automation-step-edit-modal`.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User requested `.automation-n8n-builder` use only 2 columns now that step editing uses `window.app.modals`.
+    - Updated `.automation-n8n-builder` from palette/canvas/drawer columns to palette/canvas only.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User reported that selecting a collection did not work when editing an automation record step in the shared modal.
+    - Made the automation record-step collection selector use reactive collection options.
+    - Updated the shared select component to resync selected labels when its option list changes after mount.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User clarified the root issue: on first edit, the reactive state was not updated.
+    - Wrapped newly added automation editor steps with `store(...)` before opening the edit modal so first-time field edits trigger reactive UI updates.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User reported the automation Target collection select was not loaded.
+    - Made Target collection options reactive in both `pageAutomationUpsert.js` and legacy `automationUpsertModal.js`, with fallback display for an already saved `collectionRef`.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User requested improving drag for `automation-builder-node`.
+    - Fixed visual builder node reordering by tracking drag-over insertion indexes, allowing drops directly on node upper/lower halves, correcting move index math when dragging downward, and avoiding edit-modal open as a drop side effect.
+    - Added a visible drag handle and stronger drop-target styling for automation builder nodes.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User reported drag still did not work.
+    - Replaced native HTML5 node drag/drop with pointer-based drag behavior to avoid reactive rerender/dataTransfer fragility.
+    - Pointer drag now starts after a small movement threshold, computes drop index from rendered node positions, moves on pointerup, cancels cleanly, and suppresses the follow-up click after dragging.
+    - Removed native visual-node `draggable` usage and updated node cursor/touch behavior.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User requested a production-quality drag-and-drop UX with cursor-following preview, live placeholder/reordering, smooth shifting, auto-scroll, touch support, and 60fps-minded transforms.
+    - Refactored visual node dragging into separate drag state, fixed overlay preview, live placeholder state, auto-scroll, collision detection, and FLIP-style layout animation helpers.
+    - Drag preview now follows the pointer above the UI with scale, shadow, opacity/glass styling; the in-list source node becomes a dashed placeholder at the live insertion position.
+    - Reordering now happens during pointer movement, with guarded reactive updates and transform-based item movement to reduce jitter.
+    - Updated automation builder CSS with overlay, placeholder, drop target easing, grab/grabbing cursors, touch behavior, and transform transitions.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User requested removing `automation-builder-drop-slot`.
+    - Removed `renderCanvasDropSlot`, drop-slot DOM usage, `dragOverIndex` state, pointer-over slot targeting, and all `.automation-builder-drop-*` CSS.
+    - Live drag feedback now relies only on the dragged node placeholder plus overlay preview.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
   - Now:
-    - Platform Phases 7-10 implementation and focused verification are complete.
+    - `automation-builder-drop-slot` removal is complete and build-verified.
   - Next:
-    - Continue with Platform Phase 11+ refinements or harden full-suite watcher/OAuth2 environment issues if requested.
+    - User can retest visual builder drag without drop-slot elements.
 
 Open questions (UNCONFIRMED if needed):
 
 - UNCONFIRMED: scheduler wiring cadence for automatic delay resume; MVP exposes `ResumeExpiredAutomationWorkflowStates`.
 - UNCONFIRMED: external connector provider credentials and real AI provider integration. For Platform Phases 7-10, use non-OAuth connector primitives and fake/injected AI provider seams by default.
 - UNCONFIRMED: full draft/published workflow editing lifecycle beyond snapshot publishing.
+- UNCONFIRMED: exact Visual Builder interaction depth beyond the implemented foundation, such as true drag-and-drop graph edges or AI-assisted workflow generation.
 
 Working set (files/ids/commands):
 
@@ -153,6 +225,23 @@ Working set (files/ids/commands):
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationsList.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunsList.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunPreviewModal.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/CONTINUITY.md`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/FUTURE_AUTOMATION_PLATFORM_PLAN.md`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/UI_DOCS.md`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/automations/stepEditor.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/automations/automationUpsertModal.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/automations/pageAutomationUpsert.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/automations/automationDryRunModal.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/automations/pageAutomationUpsert.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/automations/pageAutomationsSettings.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/automations/automationsList.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/css/automations.css`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/css/_main.css`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/router.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/store.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/base/select.js`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/automations/recordStepForm.js`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation'`
 - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestI18n|TestAutomationI18n|TestAutomation|TestFindAllCollections'`
 - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestI18n|TestLocales|TestTranslation|TestCollectionsList'`
 - `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./cmd -run 'TestSuperuser|TestI18n'`

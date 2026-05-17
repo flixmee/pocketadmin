@@ -1,3 +1,4 @@
+import { openAutomationDryRunModal } from "./automationDryRunModal";
 import { openAutomationRunsModal } from "./automationRunsList";
 import { buildAutomationStepsPayload, normalizeAutomationEditorSteps, stepEditor } from "./stepEditor";
 
@@ -63,13 +64,22 @@ function automationUpsertModal(automation, settings) {
         },
     });
 
-    function collectionOptions() {
-        return (app.store.collections || [])
+    function collectionOptions(selectedValue = "") {
+        const options = (app.store.collections || [])
             .filter((collection) => collection?.type === "base" || collection?.type === "auth")
             .map((collection) => ({
                 value: collection.id,
                 label: `${collection.name} (${collection.type})`,
             }));
+
+        if (selectedValue && !options.find((option) => option.value === selectedValue)) {
+            options.unshift({
+                value: selectedValue,
+                label: selectedValue,
+            });
+        }
+
+        return options;
     }
 
     function setTriggerType(triggerType) {
@@ -130,6 +140,14 @@ function automationUpsertModal(automation, settings) {
         }
 
         openAutomationRunsModal(automation);
+    }
+
+    function openDryRunModal() {
+        if (!automation?.id || data.isSaving) {
+            return;
+        }
+
+        openAutomationDryRunModal(automation);
     }
 
     modal = t.div(
@@ -215,7 +233,7 @@ function automationUpsertModal(automation, settings) {
                             id: formId + "_collectionRef",
                             name: "collectionRef",
                             value: () => data.form.collectionRef,
-                            options: collectionOptions(),
+                            options: () => collectionOptions(data.form.collectionRef),
                             placeholder: "- Select collection -",
                             onchange: (selected) => {
                                 data.form.collectionRef = selected?.[0]?.value || "";
@@ -345,6 +363,22 @@ function automationUpsertModal(automation, settings) {
                 },
                 t.span({ className: "txt" }, "Close"),
             ),
+            () => {
+                if (isNew) {
+                    return null;
+                }
+
+                return t.button(
+                    {
+                        type: "button",
+                        className: "btn transparent",
+                        disabled: () => data.isSaving,
+                        onclick: openDryRunModal,
+                    },
+                    t.i({ className: "ri-play-circle-line", ariaHidden: true }),
+                    t.span({ className: "txt" }, "Dry-run"),
+                );
+            },
             () => {
                 if (isNew) {
                     return null;

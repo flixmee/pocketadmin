@@ -53,7 +53,7 @@ export function recordStepForm(propsArg = {}) {
                 app.components.select({
                     id: `${props.step.__id}_collection`,
                     value: () => props.step.collection,
-                    options: collectionOptions(props.step.collection),
+                    options: () => collectionOptions(props.step.collection),
                     placeholder: "- Select collection -",
                     onchange: (selected) => {
                         props.step.collection = selected?.[0]?.value || "";

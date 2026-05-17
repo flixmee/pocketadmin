@@ -264,6 +264,7 @@ window.app.components.select = function(propsArg = {}) {
         watch(
             () => props.options,
             () => {
+                syncSelected();
                 toggleNoItemsFoundElem();
             },
         ),
