@@ -63,79 +63,95 @@ export function automationApprovalsList(propsArg = {}) {
     return t.div(
         {
             pbEvent: "automationApprovalsList",
-            className: "list automation-approvals-list",
+            className: "al-card-list",
             onmount: () => {
                 loadApprovals();
                 watchers.push(watch(() => props.reset, () => loadApprovals()));
             },
             onunmount: () => watchers.forEach((w) => w?.unwatch()),
         },
+        // Loading skeleton
         t.div(
-            { className: "list-content" },
-            t.div(
-                {
-                    hidden: () => !data.isLoading || data.approvals.length,
-                    className: "list-item",
-                },
-                t.div({ className: "skeleton-loader" }),
-            ),
-            t.div(
-                {
-                    hidden: () => data.isLoading || data.approvals.length,
-                    className: "list-item",
-                },
-                t.div({ className: "content block txt-hint" }, "No pending approvals."),
-            ),
-            () =>
-                data.approvals.map((approval) => {
-                    return t.div(
-                        { className: () => `list-item ${data.isLoading ? "faded" : ""}` },
-                        t.i({ className: "ri-shield-check-line txt-warning", ariaHidden: true }),
-                        t.div(
-                            { className: "content block" },
-                            t.div(
-                                { className: "flex flex-wrap gap-5" },
-                                t.span({ className: "txt-bold txt-code" }, () => approval.id),
-                                t.span({ className: "label warning" }, "Pending"),
-                                () => approval.role ? t.span({ className: "label" }, approval.role) : null,
-                                () => approval.assignee ? t.span({ className: "label" }, approval.assignee) : null,
-                            ),
-                            t.div(
-                                { className: "txt-sm txt-hint m-t-5" },
-                                () => `Run ${approval.runRef || "N/A"} • Step ${Number(approval.stepIndex || 0) + 1}`,
-                            ),
-                        ),
-                        t.nav(
-                            { className: "actions" },
-                            t.button(
-                                {
-                                    type: "button",
-                                    className: () =>
-                                        `btn sm circle success transparent ${
-                                            data.isResolving[approval.id] ? "loading" : ""
-                                        }`,
-                                    disabled: () => data.isLoading || !!data.isResolving[approval.id],
-                                    ariaLabel: app.attrs.tooltip("Approve"),
-                                    onclick: () => confirmDecision(approval, "approved"),
-                                },
-                                t.i({ className: "ri-check-line", ariaHidden: true }),
-                            ),
-                            t.button(
-                                {
-                                    type: "button",
-                                    className: () =>
-                                        `btn sm circle danger transparent ${
-                                            data.isResolving[approval.id] ? "loading" : ""
-                                        }`,
-                                    disabled: () => data.isLoading || !!data.isResolving[approval.id],
-                                    ariaLabel: app.attrs.tooltip("Reject"),
-                                    onclick: () => confirmDecision(approval, "rejected"),
-                                },
-                                t.i({ className: "ri-close-line", ariaHidden: true }),
-                            ),
-                        ),
-                    );
-                }),
+            {
+                hidden: () => !data.isLoading || data.approvals.length,
+                className: "al-card-row",
+            },
+            t.div({ className: "skeleton-loader" }),
         ),
+        // Empty state
+        t.div(
+            {
+                hidden: () => data.isLoading || data.approvals.length,
+                className: "al-card-row al-empty-state",
+            },
+            t.div(
+                { className: "al-empty-icon-wrap al-empty-icon-success" },
+                t.i({ className: "ri-check-line", ariaHidden: true }),
+            ),
+            t.div({ className: "al-empty-title" }, "All caught up"),
+            t.div(
+                { className: "al-empty-hint" },
+                "Pending approvals will appear here when an automation requires manual review.",
+            ),
+        ),
+        // Approval rows
+        () =>
+            data.approvals.map((approval) => {
+                return t.div(
+                    { className: () => `al-card-row ${data.isLoading ? "al-faded" : ""}` },
+                    // Icon block
+                    t.div(
+                        { className: "al-icon-block al-icon-amber" },
+                        t.i({ className: "ri-shield-check-line", ariaHidden: true }),
+                    ),
+                    // Content
+                    t.div(
+                        { className: "al-row-content" },
+                        t.div(
+                            { className: "al-row-top" },
+                            t.span({ className: "al-row-name txt-code" }, () => approval.id),
+                            t.span({ className: "al-badge al-badge-amber" }, "Pending"),
+                            () =>
+                                approval.role ? t.span({ className: "al-badge al-badge-muted" }, approval.role) : null,
+                            () =>
+                                approval.assignee
+                                    ? t.span({ className: "al-badge al-badge-muted" }, approval.assignee)
+                                    : null,
+                        ),
+                        t.div(
+                            { className: "al-row-meta" },
+                            () => `Run ${approval.runRef || "N/A"}`,
+                            t.span({ className: "al-meta-dot" }, "·"),
+                            () => `Step ${Number(approval.stepIndex || 0) + 1}`,
+                        ),
+                    ),
+                    // Actions
+                    t.div(
+                        { className: "al-row-actions" },
+                        t.button(
+                            {
+                                type: "button",
+                                className: () =>
+                                    `al-action-btn al-action-success ${data.isResolving[approval.id] ? "loading" : ""}`,
+                                disabled: () => data.isLoading || !!data.isResolving[approval.id],
+                                ariaLabel: app.attrs.tooltip("Approve"),
+                                onclick: () => confirmDecision(approval, "approved"),
+                            },
+                            t.i({ className: "ri-check-line", ariaHidden: true }),
+                        ),
+                        t.button(
+                            {
+                                type: "button",
+                                className: () =>
+                                    `al-action-btn al-action-danger ${data.isResolving[approval.id] ? "loading" : ""}`,
+                                disabled: () => data.isLoading || !!data.isResolving[approval.id],
+                                ariaLabel: app.attrs.tooltip("Reject"),
+                                onclick: () => confirmDecision(approval, "rejected"),
+                            },
+                            t.i({ className: "ri-close-line", ariaHidden: true }),
+                        ),
+                    ),
+                );
+            }),
     );
 }

@@ -238,64 +238,76 @@ export function pageAutomationUpsert(route) {
     function renderAutomationForm() {
         return [
             t.div(
-                { className: "flex gap-10 flex-wrap m-b-base" },
+                { className: "flex gap-10 flex-wrap m-b-base align-items-center" },
                 t.div(
                     { className: "content block" },
-                    t.h3({ className: "m-b-xs" }, () => data.title),
+                    t.h3({ className: "m-b-xs automation-page-title" }, () => data.title),
                     t.div(
-                        { className: "txt-sm txt-hint" },
+                        { className: "txt-sm txt-hint automation-page-desc" },
                         "Build, validate, preview, and publish automation workflows from one page.",
                     ),
                 ),
                 t.div({ className: "m-l-auto" }),
-                () => {
-                    if (isNew) {
-                        return null;
-                    }
+                t.div(
+                    { className: "flex gap-5 flex-wrap" },
+                    () => {
+                        if (isNew) {
+                            return null;
+                        }
 
-                    return t.button(
-                        {
-                            type: "button",
-                            className: "btn secondary transparent",
-                            disabled: () => data.isSaving,
-                            onclick: openDryRunModal,
-                        },
-                        t.i({ className: "ri-play-circle-line", ariaHidden: true }),
-                        t.span({ className: "txt" }, "Dry-run"),
-                    );
-                },
-                () => {
-                    if (isNew) {
-                        return null;
-                    }
+                        return t.button(
+                            {
+                                type: "button",
+                                className: "btn secondary transparent pill",
+                                disabled: () => data.isSaving,
+                                onclick: openDryRunModal,
+                            },
+                            t.i({ className: "ri-play-circle-line", ariaHidden: true }),
+                            t.span({ className: "txt" }, "Dry-run"),
+                        );
+                    },
+                    () => {
+                        if (isNew) {
+                            return null;
+                        }
 
-                    return t.button(
-                        {
-                            type: "button",
-                            className: "btn secondary transparent",
-                            disabled: () => data.isSaving,
-                            onclick: exportTemplate,
-                        },
-                        t.i({ className: "ri-file-upload-line", ariaHidden: true }),
-                        t.span({ className: "txt" }, "Export template"),
-                    );
-                },
-                () => {
-                    if (isNew) {
-                        return null;
-                    }
+                        return t.button(
+                            {
+                                type: "button",
+                                className: "btn secondary transparent pill",
+                                disabled: () => data.isSaving,
+                                onclick: exportTemplate,
+                            },
+                            t.i({ className: "ri-file-upload-line", ariaHidden: true }),
+                            t.span({ className: "txt" }, "Export"),
+                        );
+                    },
+                    () => {
+                        if (isNew) {
+                            return null;
+                        }
 
-                    return t.button(
+                        return t.button(
+                            {
+                                type: "button",
+                                className: "btn secondary transparent pill",
+                                disabled: () => data.isSaving,
+                                onclick: openRunsModal,
+                            },
+                            t.i({ className: "ri-history-line", ariaHidden: true }),
+                            t.span({ className: "txt" }, "Recent runs"),
+                        );
+                    },
+                    t.button(
                         {
-                            type: "button",
-                            className: "btn secondary transparent",
-                            disabled: () => data.isSaving,
-                            onclick: openRunsModal,
+                            type: "submit",
+                            "html-form": formId,
+                            className: () => `btn pill ${data.isSaving ? "loading" : ""}`,
+                            disabled: () => !data.canSave,
                         },
-                        t.i({ className: "ri-history-line", ariaHidden: true }),
-                        t.span({ className: "txt" }, "Recent runs"),
-                    );
-                },
+                        t.span({ className: "txt" }, () => data.submitLabel),
+                    ),
+                ),
             ),
             t.form(
                 {
@@ -308,199 +320,169 @@ export function pageAutomationUpsert(route) {
                     },
                 },
                 t.div(
-                    { className: "grid" },
+                    { className: "automation-builder-card automation-config-card m-b-base" },
                     t.div(
-                        { className: "col-md-8" },
+                        { className: "grid" },
                         t.div(
-                            { className: "field" },
-                            t.label({ htmlFor: formId + "_name" }, "Name"),
-                            t.input({
-                                id: formId + "_name",
-                                name: "name",
-                                type: "text",
-                                required: true,
-                                maxlength: 255,
-                                value: () => data.form.name,
-                                oninput: (e) => (data.form.name = e.target.value),
-                            }),
-                        ),
-                        () => fieldError(app.store.errors?.name),
-                    ),
-                    t.div(
-                        { className: "col-md-4" },
-                        t.div(
-                            { className: "field m-t-lg" },
-                            t.input({
-                                id: formId + "_active",
-                                name: "active",
-                                type: "checkbox",
-                                className: "switch",
-                                checked: () => data.form.active,
-                                onchange: (e) => (data.form.active = e.target.checked),
-                            }),
-                            t.label({ htmlFor: formId + "_active" }, t.span({ className: "txt" }, "Active")),
-                        ),
-                    ),
-                    t.div(
-                        { className: "col-md-6" },
-                        t.div(
-                            { className: "field" },
-                            t.label({ htmlFor: formId + "_trigger" }, "Trigger"),
-                            app.components.select({
-                                id: formId + "_trigger",
-                                name: "triggerType",
-                                value: () => data.form.triggerType,
-                                options: automationTriggerOptions,
-                                onchange: (selected) => setTriggerType(selected?.[0]?.value || "manual"),
-                            }),
-                        ),
-                        () => fieldError(app.store.errors?.triggerType),
-                    ),
-                    t.div(
-                        {
-                            className: "col-md-6",
-                            hidden: () => !data.isRecordTrigger && !data.isI18nTrigger,
-                        },
-                        t.div(
-                            { className: "field" },
-                            t.label({ htmlFor: formId + "_collectionRef" }, "Target collection"),
-                            app.components.select({
-                                id: formId + "_collectionRef",
-                                name: "collectionRef",
-                                value: () => data.form.collectionRef,
-                                options: () => collectionOptions(data.form.collectionRef),
-                                placeholder: "- Select collection -",
-                                onchange: (selected) => {
-                                    data.form.collectionRef = selected?.[0]?.value || "";
-                                },
-                            }),
-                        ),
-                        () => fieldError(app.store.errors?.collectionRef),
-                    ),
-                    t.div(
-                        {
-                            className: "col-md-6",
-                            hidden: () => !data.isCronTrigger,
-                        },
-                        t.div(
-                            { className: "field" },
-                            t.label({ htmlFor: formId + "_cronExpr" }, "Cron expression"),
-                            t.input({
-                                id: formId + "_cronExpr",
-                                name: "cronExpr",
-                                type: "text",
-                                placeholder: "0 * * * *",
-                                value: () => data.form.cronExpr,
-                                oninput: (e) => (data.form.cronExpr = e.target.value),
-                            }),
-                        ),
-                        t.div({ className: "field-help" }, "Use standard cron syntax for scheduled automations."),
-                        () => fieldError(app.store.errors?.cronExpr),
-                    ),
-                    t.div(
-                        {
-                            className: "col-lg-12",
-                            hidden: () => !data.isWebhookTrigger,
-                        },
-                        t.div(
-                            { className: "field" },
-                            t.label(null, "Webhook endpoint"),
-                            () => {
-                                if (!data.automation?.id) {
-                                    return t.div(
-                                        { className: "txt-sm txt-hint" },
-                                        "Save the automation first to generate its stable webhook endpoint.",
-                                    );
-                                }
-
-                                return t.div(
-                                    { className: "flex gap-10 flex-wrap p-10" },
-                                    t.code(null, webhookURL(data.automation.id)),
-                                    app.components.copyButton(() => webhookURL(data.automation.id)),
-                                );
-                            },
-                        ),
-                        t.div(
-                            { className: "field-help" },
-                            "Send a POST request to this endpoint. Templates can read incoming request values.",
-                        ),
-                    ),
-                    t.div(
-                        { className: "col-lg-12" },
-                        t.div(
-                            { className: "field" },
-                            t.label({ htmlFor: formId + "_notes" }, "Notes"),
-                            t.textarea({
-                                id: formId + "_notes",
-                                name: "notes",
-                                rows: 3,
-                                placeholder: "Optional internal notes for operators.",
-                                value: () => data.form.notes,
-                                oninput: (e) => (data.form.notes = e.target.value),
-                            }),
-                        ),
-                        () => fieldError(app.store.errors?.notes),
-                    ),
-                    t.div(
-                        { className: "col-lg-12" },
-                        t.div(
-                            { className: "m-b-sm" },
-                            t.div({ className: "txt-bold" }, "Workflow steps"),
+                            { className: "col-md-8" },
                             t.div(
-                                { className: "txt-sm txt-hint" },
-                                "Templates support ",
-                                t.code(null, "{{trigger.*}}"),
-                                ", ",
-                                t.code(null, "{{request.*}}"),
-                                ", ",
-                                t.code(null, "{{record.*}}"),
-                                ", ",
-                                t.code(null, "{{steps[0].output.*}}"),
-                                ", and ",
-                                t.code(null, "{{prevStep.output.*}}"),
-                                ".",
+                                { className: "field" },
+                                t.label({ htmlFor: formId + "_name", className: "automation-field-label" }, "Name"),
+                                t.input({
+                                    id: formId + "_name",
+                                    name: "name",
+                                    type: "text",
+                                    required: true,
+                                    maxlength: 255,
+                                    value: () => data.form.name,
+                                    oninput: (e) => (data.form.name = e.target.value),
+                                }),
+                            ),
+                            () => fieldError(app.store.errors?.name),
+                        ),
+                        t.div(
+                            { className: "col-md-4" },
+                            t.div(
+                                { className: "field m-t-lg" },
+                                t.input({
+                                    id: formId + "_active",
+                                    name: "active",
+                                    type: "checkbox",
+                                    className: "switch",
+                                    checked: () => data.form.active,
+                                    onchange: (e) => (data.form.active = e.target.checked),
+                                }),
+                                t.label(
+                                    { htmlFor: formId + "_active", className: "automation-field-label" },
+                                    t.span({ className: "txt" }, "Active"),
+                                ),
                             ),
                         ),
-                        stepEditor({
-                            steps: () => data.form.steps,
-                            errors: () => app.store.errors?.steps,
-                            triggerType: () => data.form.triggerType,
-                            triggerCollectionRef: () => data.form.collectionRef,
-                            onchange: (steps) => {
-                                data.form.steps = steps;
+                        t.div(
+                            { className: "col-md-6" },
+                            t.div(
+                                { className: "field" },
+                                t.label(
+                                    { htmlFor: formId + "_trigger", className: "automation-field-label" },
+                                    "Trigger",
+                                ),
+                                app.components.select({
+                                    id: formId + "_trigger",
+                                    name: "triggerType",
+                                    value: () => data.form.triggerType,
+                                    options: automationTriggerOptions,
+                                    onchange: (selected) => setTriggerType(selected?.[0]?.value || "manual"),
+                                }),
+                            ),
+                            () => fieldError(app.store.errors?.triggerType),
+                        ),
+                        t.div(
+                            {
+                                className: "col-md-6",
+                                hidden: () => !data.isRecordTrigger && !data.isI18nTrigger,
                             },
-                        }),
+                            t.div(
+                                { className: "field" },
+                                t.label(
+                                    { htmlFor: formId + "_collectionRef", className: "automation-field-label" },
+                                    "Target collection",
+                                ),
+                                app.components.select({
+                                    id: formId + "_collectionRef",
+                                    name: "collectionRef",
+                                    value: () => data.form.collectionRef,
+                                    options: () => collectionOptions(data.form.collectionRef),
+                                    placeholder: "- Select collection -",
+                                    onchange: (selected) => {
+                                        data.form.collectionRef = selected?.[0]?.value || "";
+                                    },
+                                }),
+                            ),
+                            () => fieldError(app.store.errors?.collectionRef),
+                        ),
+                        t.div(
+                            {
+                                className: "col-md-6",
+                                hidden: () => !data.isCronTrigger,
+                            },
+                            t.div(
+                                { className: "field" },
+                                t.label(
+                                    { htmlFor: formId + "_cronExpr", className: "automation-field-label" },
+                                    "Cron expression",
+                                ),
+                                t.input({
+                                    id: formId + "_cronExpr",
+                                    name: "cronExpr",
+                                    type: "text",
+                                    placeholder: "0 * * * *",
+                                    value: () => data.form.cronExpr,
+                                    oninput: (e) => (data.form.cronExpr = e.target.value),
+                                }),
+                            ),
+                            t.div(
+                                { className: "field-help automation-field-desc" },
+                                "Use standard cron syntax for scheduled automations.",
+                            ),
+                            () => fieldError(app.store.errors?.cronExpr),
+                        ),
+                        t.div(
+                            {
+                                className: "col-lg-12",
+                                hidden: () => !data.isWebhookTrigger,
+                            },
+                            t.div(
+                                { className: "field" },
+                                t.label({ className: "automation-field-label" }, "Webhook endpoint"),
+                                () => {
+                                    if (!data.automation?.id) {
+                                        return t.div(
+                                            { className: "txt-sm txt-hint automation-field-desc" },
+                                            "Save the automation first to generate its stable webhook endpoint.",
+                                        );
+                                    }
+
+                                    return t.div(
+                                        { className: "flex gap-10 flex-wrap p-10" },
+                                        t.code(null, webhookURL(data.automation.id)),
+                                        app.components.copyButton(() => webhookURL(data.automation.id)),
+                                    );
+                                },
+                            ),
+                            t.div(
+                                { className: "field-help automation-field-desc" },
+                                "Send a POST request to this endpoint. Templates can read incoming request values.",
+                            ),
+                        ),
+                        t.div(
+                            { className: "col-lg-12" },
+                            t.div(
+                                { className: "field" },
+                                t.label({ htmlFor: formId + "_notes", className: "automation-field-label" }, "Notes"),
+                                t.textarea({
+                                    id: formId + "_notes",
+                                    name: "notes",
+                                    rows: 2,
+                                    placeholder: "Optional internal notes for operators.",
+                                    value: () => data.form.notes,
+                                    oninput: (e) => (data.form.notes = e.target.value),
+                                }),
+                            ),
+                            () => fieldError(app.store.errors?.notes),
+                        ),
                     ),
                 ),
-            ),
-            t.div(
-                { className: "automation-page-actions" },
-                t.a(
-                    {
-                        href: "#/automations",
-                        className: "btn transparent m-r-auto",
-                    },
-                    t.span({ className: "txt" }, "Cancel"),
-                ),
-                () => {
-                    const rawErrors = JSON.stringify(app.store.errors);
-                    if (rawErrors == "" || rawErrors == "null" || rawErrors == "{}" || rawErrors == "[]") {
-                        return;
-                    }
-
-                    return t.i({
-                        className: "ri-alert-line txt-danger",
-                        ariaDescription: app.attrs.tooltip(() => "Raw error:\n" + rawErrors),
-                    });
-                },
-                t.button(
-                    {
-                        type: "submit",
-                        "html-form": formId,
-                        className: () => `btn ${data.isSaving ? "loading" : ""}`,
-                        disabled: () => !data.canSave,
-                    },
-                    t.span({ className: "txt" }, () => data.submitLabel),
+                t.div(
+                    { className: "automation-builder-workspace" },
+                    stepEditor({
+                        steps: () => data.form.steps,
+                        errors: () => app.store.errors?.steps,
+                        triggerType: () => data.form.triggerType,
+                        triggerCollectionRef: () => data.form.collectionRef,
+                        onchange: (steps) => {
+                            data.form.steps = steps;
+                        },
+                    }),
                 ),
             ),
         ];

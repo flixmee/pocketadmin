@@ -176,18 +176,20 @@ State:
     - Live drag feedback now relies only on the dragged node placeholder plus overlay preview.
     - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
   - Now:
-    - User reported `wait.delay` step set to 5 seconds does not continue running.
-    - Root cause found: wait delay created a waiting workflow state with `expires`, but automatic resume polling was not wired; only manual `ResumeExpiredAutomationWorkflowStates()` existed.
-    - Added `core/automation_delay_scheduler.go`, a bootstrap-started 1-second scheduler that calls `ResumeExpiredAutomationWorkflowStates()` and stops on terminate/rebootstrap.
-    - Added `TestAutomationWaitDelayAutoResume` regression coverage.
-    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationWaitDelayAutoResume|TestAutomationWaitWebhookResume|TestAutomationWorkflowStateCheckpointsSynchronousRun'`; passed.
-    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation'`; passed.
+    - User asked why `startAutomationDelayScheduler` keeps running `ResumeExpiredAutomationWorkflowStates` on an interval.
+    - Found root cause: scheduler intentionally created a bootstrap-started `time.NewTicker(automationDelaySchedulerInterval)` and called `ResumeExpiredAutomationWorkflowStates()` immediately plus every second until terminate/rebootstrap, even when no delay wait states existed.
+    - Replaced the always-on ticker with a wakeable one-shot timer scheduler that runs once, sleeps until the next waiting workflow-state expiry, and sleeps indefinitely when no expiring states exist.
+    - Added `wakeAutomationDelayScheduler` and call it after saving a `wait.delay` state so new delays reschedule the timer immediately.
+    - Added `FindNextWaitingWorkflowStateExpiry` helper to locate the next pending delay expiry.
+    - Fixed scheduler stop lifecycle to wait for the scheduler goroutine to exit before bootstrap reset/terminate continues, avoiding cleanup races with DB queries.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationWaitDelayAutoResume|TestAutomationWorkflowState|TestAutomationWaitWebhookResume'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation'`; passed.
   - Next:
-    - User can retest a 5-second wait delay; run should move from waiting to success after the scheduler poll following expiry.
+    - User can retest delay waits; scheduler should no longer poll every second while idle.
 
 Open questions (UNCONFIRMED if needed):
 
-- Automatic `wait.delay` resume scheduler cadence is 1 second.
+- Automatic `wait.delay` resume scheduler now uses a one-shot timer until the next known expiry; it falls back to 1 second only after resume/lookup errors or already-due retry cases.
 - UNCONFIRMED: external connector provider credentials and real AI provider integration. For Platform Phases 7-10, use non-OAuth connector primitives and fake/injected AI provider seams by default.
 - UNCONFIRMED: full draft/published workflow editing lifecycle beyond snapshot publishing.
 - UNCONFIRMED: exact Visual Builder interaction depth beyond the implemented foundation, such as true drag-and-drop graph edges or AI-assisted workflow generation.
@@ -196,6 +198,11 @@ Open questions (UNCONFIRMED if needed):
 Working set (files/ids/commands):
 
 - `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_workflow_state_model.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_workflow_runtime.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_delay_scheduler.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_wait.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/apis/automation.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/FUTURE_AUTOMATION_PLATFORM_PLAN.md`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/AUTOMATION_PLAN.md`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/cmd/i18n.go`

@@ -460,23 +460,21 @@ export function stepEditor(propsArg = {}) {
         t.div(
             { className: "automation-builder-toolbar" },
             t.div(
-                { className: "tabs-header equal-width" },
+                { className: "automation-mode-switcher" },
                 t.button(
                     {
                         type: "button",
-                        className: () => data.mode === "visual" ? "active" : "",
+                        className: () => `automation-mode-btn ${data.mode === "visual" ? "active" : ""}`,
                         onclick: () => (data.mode = "visual"),
                     },
-                    t.i({ className: "ri-node-tree", ariaHidden: true }),
                     t.span({ className: "txt" }, "Visual builder"),
                 ),
                 t.button(
                     {
                         type: "button",
-                        className: () => data.mode === "structured" ? "active" : "",
+                        className: () => `automation-mode-btn ${data.mode === "structured" ? "active" : ""}`,
                         onclick: () => (data.mode = "structured"),
                     },
-                    t.i({ className: "ri-list-check-3", ariaHidden: true }),
                     t.span({ className: "txt" }, "Structured editor"),
                 ),
             ),
@@ -718,9 +716,34 @@ function renderStructuredStepList(options) {
 }
 
 function renderVisualBuilder(options) {
+    let contextMenuIndex = null;
+    const contextMenu = t.div(
+        {
+            className: "dropdown sm popover",
+            popover: "auto",
+            style:
+                "margin: 0; position: fixed; inset: auto; background: var(--surfaceColor); border: 1px solid var(--surfaceAlt2Color); border-radius: var(--borderRadius); box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 5px; z-index: 9999; min-width: 140px;",
+        },
+        t.button(
+            {
+                type: "button",
+                className: "dropdown-item txt-danger",
+                onclick: () => {
+                    if (contextMenuIndex) {
+                        options.removeStep(contextMenuIndex);
+                    }
+                    if (contextMenu.hidePopover) contextMenu.hidePopover();
+                },
+            },
+            t.i({ className: "ri-delete-bin-line" }),
+            t.span({ className: "txt" }, "Delete step"),
+        ),
+    );
+
     const selectedStep = options.steps.find((step) => step.__id === options.selectedStepId) || options.steps[0] || null;
     return t.div(
         { className: "automation-n8n-builder" },
+        contextMenu,
         renderActionPalette(options),
         t.div(
             { className: "automation-builder-canvas" },
@@ -767,6 +790,20 @@ function renderVisualBuilder(options) {
                                             options.dragStepId === step.__id ? "dragging" : ""
                                         }`,
                                     onpointerdown: (e) => options.beginNodePointerDrag(e, step.__id),
+                                    oncontextmenu: (e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        contextMenuIndex = step.__id;
+                                        contextMenu.style.left = `${e.clientX}px`;
+                                        contextMenu.style.top = `${e.clientY}px`;
+                                        if (contextMenu.showPopover) {
+                                            setTimeout(() => {
+                                                try {
+                                                    contextMenu.showPopover();
+                                                } catch (_) {}
+                                            }, 100);
+                                        }
+                                    },
                                     onclick: (e) => {
                                         if (options.isClickSuppressed(step.__id)) {
                                             e.preventDefault();
@@ -788,18 +825,21 @@ function renderVisualBuilder(options) {
                                 ),
                                 t.div(
                                     { className: "content block txt-left" },
+                                    t.div({ className: "automation-node-title m-b-5" }, () => stepTypeLabel(step.type)),
                                     t.div(
-                                        { className: "flex gap-5 flex-wrap" },
-                                        t.span({ className: "label" }, `Step ${index + 1}`),
-                                        t.span(
-                                            {
-                                                className: () => `label ${validation.length ? "warning" : "success"}`,
-                                            },
-                                            validation.length ? `${validation.length} issue(s)` : "Valid",
-                                        ),
+                                        { className: "automation-node-desc txt-ellipsis" },
+                                        () => summarizeStep(step),
                                     ),
-                                    t.div({ className: "txt-bold m-t-5" }, () => stepTypeLabel(step.type)),
-                                    t.div({ className: "txt-sm txt-hint txt-ellipsis" }, () => summarizeStep(step)),
+                                ),
+                                t.div(
+                                    { className: "automation-node-badges" },
+                                    t.span({ className: "label" }, `Step ${index + 1}`),
+                                    t.span(
+                                        {
+                                            className: () => `label ${validation.length ? "warning" : "success"}`,
+                                        },
+                                        validation.length ? `${validation.length} issue(s)` : "Valid",
+                                    ),
                                 ),
                                 t.span({ className: "automation-builder-port input-port" }),
                                 t.span({ className: "automation-builder-port output-port" }),
@@ -842,11 +882,14 @@ function renderActionPalette(options) {
                                 className: "automation-builder-palette-action",
                                 onclick: () => options.addStep(option.value),
                             },
-                            t.i({ className: option.icon || "ri-add-line", ariaHidden: true }),
+                            t.div(
+                                { className: "automation-palette-icon-wrap" },
+                                t.i({ className: option.icon || "ri-add-line", ariaHidden: true }),
+                            ),
                             t.div(
                                 { className: "content block txt-left" },
-                                t.div({ className: "txt-bold" }, option.label),
-                                t.div({ className: "txt-xs txt-hint" }, option.category || "step"),
+                                t.div({ className: "automation-node-title" }, option.label),
+                                t.div({ className: "automation-node-meta" }, option.category || "step"),
                             ),
                         )
                     ),
@@ -863,8 +906,8 @@ function renderTriggerNode(options) {
         t.div({ className: "automation-builder-node-icon" }, t.i({ className: "ri-flashlight-line" })),
         t.div(
             { className: "content block" },
-            t.div({ className: "txt-bold" }, "Trigger"),
-            t.div({ className: "txt-sm txt-hint" }, () => options.triggerType || "manual"),
+            t.div({ className: "automation-node-title m-b-5" }, "Trigger"),
+            t.div({ className: "automation-node-desc" }, () => options.triggerType || "manual"),
         ),
         t.span({ className: "automation-builder-port output-port" }),
     );

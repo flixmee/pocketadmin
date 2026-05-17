@@ -104,10 +104,7 @@ func automationTemplateExport(e *core.RequestEvent) error {
 }
 
 func automationWorkflowStatesList(e *core.RequestEvent) error {
-	states := []*core.WorkflowState{}
-	err := e.App.RecordQuery(core.CollectionNameWorkflowState).
-		OrderBy("updated DESC").
-		All(&states)
+	states, err := e.App.FindAllWorkflowStates()
 	if err != nil {
 		return e.BadRequestError("Failed to load workflow states.", err)
 	}

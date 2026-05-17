@@ -15,6 +15,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/mailer"
 	"github.com/pocketbase/pocketbase/tools/store"
 	"github.com/pocketbase/pocketbase/tools/subscriptions"
+	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 // App defines the main PocketBase app interface.
@@ -618,8 +619,20 @@ type App interface {
 	// FindWorkflowStateById returns a single WorkflowState model by id.
 	FindWorkflowStateById(id string) (*WorkflowState, error)
 
+	// FindWorkflowStateByRunRef returns a single WorkflowState model by its automation run id.
+	FindWorkflowStateByRunRef(runId string) (*WorkflowState, error)
+
 	// FindWorkflowStateByResumeToken returns a waiting WorkflowState model by resume token.
 	FindWorkflowStateByResumeToken(token string) (*WorkflowState, error)
+
+	// FindAllWorkflowStates returns all WorkflowState models ordered by last update.
+	FindAllWorkflowStates() ([]*WorkflowState, error)
+
+	// FindAllExpiredWaitingWorkflowStates returns waiting WorkflowState models with an expired wait deadline.
+	FindAllExpiredWaitingWorkflowStates(now types.DateTime) ([]*WorkflowState, error)
+
+	// FindNextWaitingWorkflowStateExpiry returns the closest pending delay expiry.
+	FindNextWaitingWorkflowStateExpiry(now types.DateTime) (types.DateTime, error)
 
 	// FindApprovalById returns a single Approval model by id.
 	FindApprovalById(id string) (*Approval, error)

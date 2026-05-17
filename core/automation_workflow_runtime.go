@@ -75,47 +75,7 @@ func persistAutomationWorkflowCheckpoint(app App, state *WorkflowState, run *Aut
 }
 
 func findAutomationWorkflowStateByRun(app App, runId string) (*WorkflowState, error) {
-	result := &WorkflowState{}
-	err := app.RecordQuery(CollectionNameWorkflowState).
-		AndWhere(dbx.HashExp{"runRef": runId}).
-		Limit(1).
-		One(result)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-// FindWorkflowStateById returns a single WorkflowState model by id.
-func (app *BaseApp) FindWorkflowStateById(id string) (*WorkflowState, error) {
-	result := &WorkflowState{}
-	err := app.RecordQuery(CollectionNameWorkflowState).
-		AndWhere(dbx.HashExp{"id": id}).
-		Limit(1).
-		One(result)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-// FindWorkflowStateByResumeToken returns a waiting workflow state by resume token.
-func (app *BaseApp) FindWorkflowStateByResumeToken(token string) (*WorkflowState, error) {
-	result := &WorkflowState{}
-	err := app.RecordQuery(CollectionNameWorkflowState).
-		AndWhere(dbx.HashExp{
-			"resumeToken": strings.TrimSpace(token),
-			"status":      WorkflowStateStatusWaiting,
-		}).
-		Limit(1).
-		One(result)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return app.FindWorkflowStateByRunRef(runId)
 }
 
 // ResumeAutomationWorkflowState resumes a waiting workflow from its stored state.
@@ -279,12 +239,7 @@ func (app *BaseApp) FindApprovalById(id string) (*Approval, error) {
 
 // ResumeExpiredAutomationWorkflowStates resumes delay waits whose expiration has passed.
 func (app *BaseApp) ResumeExpiredAutomationWorkflowStates() error {
-	states := []*WorkflowState{}
-	now := types.NowDateTime()
-	err := app.RecordQuery(CollectionNameWorkflowState).
-		AndWhere(dbx.HashExp{"status": WorkflowStateStatusWaiting}).
-		AndWhere(dbx.NewExp("[[expires]] != '' AND [[expires]] <= {:now}", dbx.Params{"now": now.String()})).
-		All(&states)
+	states, err := app.FindAllExpiredWaitingWorkflowStates(types.NowDateTime())
 	if err != nil {
 		return err
 	}

@@ -1619,11 +1619,7 @@ func decodeAutomationRunInput(t *testing.T, run *core.AutomationRun) map[string]
 func findWorkflowStateByRunForTest(t *testing.T, app *tests.TestApp, runId string) *core.WorkflowState {
 	t.Helper()
 
-	state := &core.WorkflowState{}
-	err := app.RecordQuery(core.CollectionNameWorkflowState).
-		AndWhere(dbx.HashExp{"runRef": runId}).
-		Limit(1).
-		One(state)
+	state, err := app.FindWorkflowStateByRunRef(runId)
 	if err != nil {
 		t.Fatalf("Failed to load workflow state: %v", err)
 	}

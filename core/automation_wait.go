@@ -98,6 +98,9 @@ func executeAutomationWaitStep(ctx *automationExecutionContext, step map[string]
 	if err := ctx.App.Save(ctx.State); err != nil {
 		return automationStepStatusFailed, nil, err
 	}
+	if !expires.IsZero() {
+		wakeAutomationDelayScheduler(ctx.App)
+	}
 	if err := ctx.App.Save(ctx.Run); err != nil {
 		return automationStepStatusFailed, nil, err
 	}

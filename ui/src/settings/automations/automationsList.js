@@ -159,10 +159,89 @@ export function automationsList(propsArg = {}) {
         openAutomationRunsModal(automation);
     }
 
+    // More menu popover for a row
+    function showMoreMenu(e, automation) {
+        e.stopPropagation();
+
+        // Close any existing more-menu
+        document.querySelectorAll(".al-more-menu").forEach((el) => el.remove());
+
+        const menu = t.div(
+            { className: "al-more-menu" },
+            t.button(
+                {
+                    type: "button",
+                    className: "al-more-menu-item",
+                    onclick: () => {
+                        menu.remove();
+                        toggleAutomation(automation);
+                    },
+                },
+                t.i({ className: () => automation.active ? "ri-pause-line" : "ri-play-line", ariaHidden: true }),
+                t.span(null, () => automation.active ? "Disable" : "Enable"),
+            ),
+            t.button(
+                {
+                    type: "button",
+                    className: "al-more-menu-item",
+                    onclick: () => {
+                        menu.remove();
+                        openRunsModal(automation);
+                    },
+                },
+                t.i({ className: "ri-history-line", ariaHidden: true }),
+                t.span(null, "Recent runs"),
+            ),
+            t.button(
+                {
+                    type: "button",
+                    className: "al-more-menu-item",
+                    onclick: () => {
+                        menu.remove();
+                        publishAutomation(automation);
+                    },
+                },
+                t.i({ className: "ri-upload-cloud-line", ariaHidden: true }),
+                t.span(null, "Publish version"),
+            ),
+            t.hr({ className: "al-more-menu-divider" }),
+            t.button(
+                {
+                    type: "button",
+                    className: "al-more-menu-item danger",
+                    onclick: () => {
+                        menu.remove();
+                        confirmDelete(automation);
+                    },
+                },
+                t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                t.span(null, "Delete"),
+            ),
+        );
+
+        document.body.appendChild(menu);
+
+        // Position near the button
+        const btnRect = e.currentTarget.getBoundingClientRect();
+        menu.style.top = (btnRect.bottom + 4) + "px";
+        menu.style.left = Math.max(0, btnRect.right - 180) + "px";
+
+        // Close on outside click (next tick)
+        setTimeout(() => {
+            function onBodyClick(evt) {
+                if (!menu.contains(evt.target)) {
+                    menu.remove();
+                    document.removeEventListener("click", onBodyClick, true);
+                }
+            }
+            document.addEventListener("click", onBodyClick, true);
+        }, 0);
+    }
+
     return t.div(
         {
             pbEvent: "automationsList",
-            className: "list automations-list",
+            className: "al-card-list",
             onmount: () => {
                 loadAutomations();
                 watchers.push(
@@ -175,201 +254,167 @@ export function automationsList(propsArg = {}) {
                 watchers.forEach((w) => w?.unwatch());
             },
         },
+        // Loading skeleton
         t.div(
-            { className: "list-content" },
-            t.div(
-                {
-                    hidden: () => !data.isLoading || data.automations.length,
-                    className: "list-item",
-                },
-                t.div({ className: "skeleton-loader" }),
-            ),
-            t.div(
-                {
-                    hidden: () => data.isLoading || data.automations.length,
-                    className: "list-item",
-                },
-                t.div(
-                    { className: "content block txt-hint" },
-                    "No automations defined yet. Create one to start wiring record, webhook, cron, or manual workflows.",
-                ),
-            ),
-            () => {
-                return data.automations.map((automation) => {
-                    return t.div(
-                        { className: () => `list-item ${data.isLoading ? "faded" : ""}` },
-                        t.i({
-                            className: () => `ri-git-branch-line ${automation.active ? "txt-success" : "txt-hint"}`,
-                            ariaHidden: true,
-                        }),
-                        t.div(
-                            { className: "content block" },
-                            t.div(
-                                { className: "flex flex-wrap gap-5" },
-                                t.span({
-                                    className: "txt-bold txt-ellipsis",
-                                    title: () => automation.name,
-                                    textContent: () => automation.name,
-                                }),
-                                t.span(
-                                    { className: () => `label ${automation.active ? "success" : ""}` },
-                                    () => automation.active ? "Active" : "Inactive",
-                                ),
-                                t.span(
-                                    { className: () => `label ${runStatusClass(automation.lastRunStatus)}` },
-                                    () => formatRunStatus(automation.lastRunStatus),
-                                ),
-                            ),
-                            t.div(
-                                { className: "txt-sm txt-hint m-t-5" },
-                                t.span(
-                                    { className: "txt-code" },
-                                    () => triggerLabels[automation.triggerType] || automation.triggerType,
-                                ),
-                                () => {
-                                    const scope = describeAutomationScope(automation);
-                                    if (!scope) {
-                                        return null;
-                                    }
-
-                                    return [
-                                        t.span(null, " • "),
-                                        t.span(null, scope),
-                                    ];
-                                },
-                                t.span(null, " • "),
-                                t.span(
-                                    null,
-                                    () => `${Array.isArray(automation.steps) ? automation.steps.length : 0} step(s)`,
-                                ),
-                            ),
-                            () => {
-                                if (!automation.notes) {
-                                    return null;
-                                }
-
-                                return t.div(
-                                    {
-                                        className: "txt-sm txt-hint m-t-5 txt-ellipsis",
-                                        title: () => automation.notes,
-                                    },
-                                    automation.notes,
-                                );
-                            },
-                        ),
-                        t.div(
-                            { className: "content block min-width" },
-                            t.div(
-                                { className: "txt-sm txt-hint txt-right" },
-                                "Last run",
-                            ),
-                            () => {
-                                if (!automation.lastRunAt) {
-                                    return t.div({ className: "txt-sm txt-hint txt-right" }, "Never");
-                                }
-
-                                return app.components.formattedDate({
-                                    value: automation.lastRunAt,
-                                    short: true,
-                                });
-                            },
-                        ),
-                        t.nav(
-                            {
-                                hidden: () => data.isLoading,
-                                className: "actions autohide",
-                            },
-                            t.button(
-                                {
-                                    type: "button",
-                                    ariaLabel: app.attrs.tooltip("Edit"),
-                                    className: "btn sm circle secondary transparent",
-                                    disabled: () => isBusy(automation),
-                                    onclick: () => openEditModal(automation),
-                                },
-                                t.i({ className: "ri-pencil-line", ariaHidden: true }),
-                            ),
-                            t.button(
-                                {
-                                    type: "button",
-                                    ariaLabel: app.attrs.tooltip(automation.active ? "Disable" : "Enable"),
-                                    className: () =>
-                                        `btn sm circle secondary transparent ${
-                                            data.isToggling[automation.id] ? "loading" : ""
-                                        }`,
-                                    disabled: () => isBusy(automation),
-                                    onclick: () => toggleAutomation(automation),
-                                },
-                                t.i({
-                                    className: () => automation.active ? "ri-pause-line" : "ri-play-line",
-                                    ariaHidden: true,
-                                }),
-                            ),
-                            t.button(
-                                {
-                                    type: "button",
-                                    ariaLabel: app.attrs.tooltip("Run now"),
-                                    className: () =>
-                                        `btn sm circle secondary transparent ${
-                                            data.isRunning[automation.id] ? "loading" : ""
-                                        }`,
-                                    disabled: () => isBusy(automation),
-                                    onclick: () => runAutomation(automation),
-                                },
-                                t.i({ className: "ri-flashlight-line", ariaHidden: true }),
-                            ),
-                            t.button(
-                                {
-                                    type: "button",
-                                    ariaLabel: app.attrs.tooltip("Recent runs"),
-                                    className: "btn sm circle secondary transparent",
-                                    disabled: () => isBusy(automation),
-                                    onclick: () => openRunsModal(automation),
-                                },
-                                t.i({ className: "ri-history-line", ariaHidden: true }),
-                            ),
-                            t.button(
-                                {
-                                    type: "button",
-                                    ariaLabel: app.attrs.tooltip("Publish version"),
-                                    className: () =>
-                                        `btn sm circle secondary transparent ${
-                                            data.isPublishing[automation.id] ? "loading" : ""
-                                        }`,
-                                    disabled: () => isBusy(automation),
-                                    onclick: () => publishAutomation(automation),
-                                },
-                                t.i({ className: "ri-upload-cloud-line", ariaHidden: true }),
-                            ),
-                            t.button(
-                                {
-                                    type: "button",
-                                    ariaLabel: app.attrs.tooltip("Delete"),
-                                    className: () =>
-                                        `btn sm circle secondary transparent ${
-                                            data.isDeleting[automation.id] ? "loading" : ""
-                                        }`,
-                                    disabled: () => isBusy(automation),
-                                    onclick: () => confirmDelete(automation),
-                                },
-                                t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
-                            ),
-                        ),
-                    );
-                });
+            {
+                hidden: () => !data.isLoading || data.automations.length,
+                className: "al-card-row",
             },
+            t.div({ className: "skeleton-loader" }),
         ),
+        // Empty state
         t.div(
-            { className: "list-item" },
+            {
+                hidden: () => data.isLoading || data.automations.length,
+                className: "al-card-row al-empty-state",
+            },
+            t.div(
+                { className: "al-empty-icon-wrap" },
+                t.i({ className: "ri-flashlight-line", ariaHidden: true }),
+            ),
+            t.div({ className: "al-empty-title" }, "No automations yet"),
+            t.div(
+                { className: "al-empty-hint" },
+                "Create one to start wiring record, webhook, cron, or manual workflows.",
+            ),
+        ),
+        // Automation rows
+        () => {
+            return data.automations.map((automation) => {
+                return t.div(
+                    { className: () => `al-card-row ${data.isLoading ? "al-faded" : ""}` },
+                    // Icon block
+                    t.div(
+                        { className: "al-icon-block" },
+                        t.i({ className: "ri-flashlight-line", ariaHidden: true }),
+                    ),
+                    // Content
+                    t.div(
+                        { className: "al-row-content" },
+                        t.div(
+                            { className: "al-row-top" },
+                            t.span({
+                                className: "al-row-name",
+                                title: () => automation.name,
+                                textContent: () => automation.name,
+                            }),
+                            // Status badges
+                            t.span(
+                                {
+                                    className: () =>
+                                        `al-badge ${automation.active ? "al-badge-indigo" : "al-badge-muted"}`,
+                                },
+                                () => automation.active ? "Active" : "Inactive",
+                            ),
+                            t.span(
+                                { className: () => `al-badge ${badgeClass(automation.lastRunStatus)}` },
+                                () => formatRunStatus(automation.lastRunStatus),
+                            ),
+                        ),
+                        t.div(
+                            { className: "al-row-meta" },
+                            t.span(
+                                null,
+                                () => triggerLabels[automation.triggerType] || automation.triggerType,
+                            ),
+                            t.span({ className: "al-meta-dot" }, "·"),
+                            t.span(
+                                null,
+                                () => `${Array.isArray(automation.steps) ? automation.steps.length : 0} step(s)`,
+                            ),
+                            () => {
+                                const scope = describeAutomationScope(automation);
+                                if (!scope) return null;
+                                return t.span(null, t.span({ className: "al-meta-dot" }, "·"), t.span(null, scope));
+                            },
+                        ),
+                    ),
+                    // Last run
+                    t.div(
+                        { className: "al-last-run" },
+                        t.div({ className: "al-last-run-label" }, "Last run"),
+                        () => {
+                            if (!automation.lastRunAt) {
+                                return t.div({ className: "al-last-run-value" }, "Never");
+                            }
+                            const d = new Date(automation.lastRunAt);
+                            const dateStr = d.toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                            });
+                            const timeStr = d.toLocaleTimeString("en-US", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                                hour12: false,
+                                timeZoneName: "short",
+                            });
+                            return t.div(
+                                null,
+                                t.div({ className: "al-last-run-value" }, dateStr),
+                                t.div({ className: "al-last-run-time" }, timeStr),
+                            );
+                        },
+                    ),
+                    // Row actions
+                    t.div(
+                        {
+                            hidden: () => data.isLoading,
+                            className: "al-row-actions",
+                        },
+                        t.button(
+                            {
+                                type: "button",
+                                ariaLabel: app.attrs.tooltip("Run now"),
+                                className: () => `al-action-btn ${data.isRunning[automation.id] ? "loading" : ""}`,
+                                disabled: () => isBusy(automation),
+                                onclick: (e) => {
+                                    e.stopPropagation();
+                                    runAutomation(automation);
+                                },
+                            },
+                            t.i({ className: "ri-play-fill", ariaHidden: true }),
+                        ),
+                        t.button(
+                            {
+                                type: "button",
+                                ariaLabel: app.attrs.tooltip("Edit"),
+                                className: "al-action-btn",
+                                disabled: () => isBusy(automation),
+                                onclick: (e) => {
+                                    e.stopPropagation();
+                                    openEditModal(automation);
+                                },
+                            },
+                            t.i({ className: "ri-pencil-line", ariaHidden: true }),
+                        ),
+                        t.button(
+                            {
+                                type: "button",
+                                ariaLabel: app.attrs.tooltip("More"),
+                                className: "al-action-btn",
+                                disabled: () => isBusy(automation),
+                                onclick: (e) => showMoreMenu(e, automation),
+                            },
+                            t.i({ className: "ri-more-2-fill", ariaHidden: true }),
+                        ),
+                    ),
+                );
+            });
+        },
+        // Create button footer row
+        t.div(
+            { className: "al-card-row al-create-row" },
             t.button(
                 {
                     type: "button",
-                    className: () => `btn secondary block ${data.isLoading ? "loading" : ""}`,
+                    className: () => `al-create-btn ${data.isLoading ? "loading" : ""}`,
                     disabled: () => data.isLoading,
                     onclick: openCreateModal,
                 },
                 t.i({ className: "ri-add-line", ariaHidden: true }),
-                t.span({ className: "txt" }, "Create automation"),
+                t.span(null, "Create automation"),
             ),
         ),
     );
@@ -433,16 +478,16 @@ function formatRunStatus(status) {
     return status;
 }
 
-function runStatusClass(status) {
+function badgeClass(status) {
     if (status === "success") {
-        return "success";
+        return "al-badge-green";
     }
     if (status === "failed") {
-        return "danger";
+        return "al-badge-red";
     }
     if (status === "queued" || status === "running" || status === "waiting") {
-        return "warning";
+        return "al-badge-amber";
     }
 
-    return "";
+    return "al-badge-muted";
 }

@@ -2,8 +2,11 @@ package core
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"strings"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
@@ -138,4 +141,95 @@ func (m *WorkflowState) Created() types.DateTime {
 
 func (m *WorkflowState) Updated() types.DateTime {
 	return m.GetDateTime("updated")
+}
+
+// FindWorkflowStateById returns a single WorkflowState model by id.
+func (app *BaseApp) FindWorkflowStateById(id string) (*WorkflowState, error) {
+	result := &WorkflowState{}
+	err := app.RecordQuery(CollectionNameWorkflowState).
+		AndWhere(dbx.HashExp{"id": id}).
+		Limit(1).
+		One(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// FindWorkflowStateByRunRef returns a single WorkflowState model by its automation run id.
+func (app *BaseApp) FindWorkflowStateByRunRef(runId string) (*WorkflowState, error) {
+	result := &WorkflowState{}
+	err := app.RecordQuery(CollectionNameWorkflowState).
+		AndWhere(dbx.HashExp{"runRef": runId}).
+		Limit(1).
+		One(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// FindWorkflowStateByResumeToken returns a waiting WorkflowState model by resume token.
+func (app *BaseApp) FindWorkflowStateByResumeToken(token string) (*WorkflowState, error) {
+	result := &WorkflowState{}
+	err := app.RecordQuery(CollectionNameWorkflowState).
+		AndWhere(dbx.HashExp{
+			"resumeToken": strings.TrimSpace(token),
+			"status":      WorkflowStateStatusWaiting,
+		}).
+		Limit(1).
+		One(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// FindAllWorkflowStates returns all WorkflowState models ordered by last update.
+func (app *BaseApp) FindAllWorkflowStates() ([]*WorkflowState, error) {
+	result := []*WorkflowState{}
+	err := app.RecordQuery(CollectionNameWorkflowState).
+		OrderBy("updated DESC").
+		All(&result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// FindAllExpiredWaitingWorkflowStates returns waiting WorkflowState models with an expired wait deadline.
+func (app *BaseApp) FindAllExpiredWaitingWorkflowStates(now types.DateTime) ([]*WorkflowState, error) {
+	result := []*WorkflowState{}
+	err := app.RecordQuery(CollectionNameWorkflowState).
+		AndWhere(dbx.HashExp{"status": WorkflowStateStatusWaiting}).
+		AndWhere(dbx.NewExp("[[expires]] != '' AND [[expires]] <= {:now}", dbx.Params{"now": now.String()})).
+		All(&result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// FindNextWaitingWorkflowStateExpiry returns the closest pending delay expiry.
+func (app *BaseApp) FindNextWaitingWorkflowStateExpiry(now types.DateTime) (types.DateTime, error) {
+	result := &WorkflowState{}
+	err := app.RecordQuery(CollectionNameWorkflowState).
+		AndWhere(dbx.HashExp{"status": WorkflowStateStatusWaiting}).
+		AndWhere(dbx.NewExp("[[expires]] != '' AND [[expires]] > {:now}", dbx.Params{"now": now.String()})).
+		OrderBy("expires ASC").
+		Limit(1).
+		One(result)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return types.DateTime{}, nil
+		}
+		return types.DateTime{}, err
+	}
+
+	return result.Expires(), nil
 }

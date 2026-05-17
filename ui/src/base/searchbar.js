@@ -93,7 +93,7 @@ window.app.components.searchbar = function(propsArg = {}) {
             app.components.codeEditor({
                 singleLine: true,
                 language: "pbrule",
-                className: () => props.historyKey ? "p-l-5" : "p-l-20",
+                className: () => props.historyKey ? "p-l-5" : "p-l-40",
                 placeholder: () => props.placeholder,
                 disabled: () => props.disabled,
                 value: () => local.value,

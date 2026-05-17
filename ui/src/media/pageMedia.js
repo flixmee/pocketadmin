@@ -188,7 +188,6 @@ export function pageMedia(route) {
                     onclick: () => openFolder(null),
                 },
                 t.i({ className: "ri-home-5-line", ariaHidden: true }),
-                t.span({ className: "media-breadcrumb-text" }, "Root library"),
             ),
         ];
 
@@ -711,6 +710,214 @@ export function pageMedia(route) {
         await runUpload(() => uploadDropData(event.dataTransfer));
     }
 
+    function renderItemCard(item) {
+        return t.div(
+            {
+                rid: item.id,
+                className: () =>
+                    `list-item highlight media-item media-item-${item.kind} media-item-${data.viewMode} ${
+                        data.bulkSelected[item.id] ? "media-item-selected" : ""
+                    }`,
+                onclick: (e) => queueItemSelect(item, e),
+                ondblclick: () => handleItemDoubleClick(item),
+            },
+            t.div(
+                {
+                    className: "media-item-menu",
+                    onclick: (e) => e.stopPropagation(),
+                    ondblclick: (e) => e.stopPropagation(),
+                },
+                t.button(
+                    {
+                        type: "button",
+                        className: "btn sm circle transparent secondary",
+                        title: "More actions",
+                        "html-popovertarget": `${uniqueId}_item_menu_${item.id}`,
+                    },
+                    t.i({ className: "ri-more-2-line", ariaHidden: true }),
+                ),
+                t.div(
+                    {
+                        id: `${uniqueId}_item_menu_${item.id}`,
+                        className: "dropdown left sm",
+                        popover: "auto",
+                    },
+                    (el) => {
+                        if (item.kind === "folder") {
+                            return [
+                                t.button(
+                                    {
+                                        type: "button",
+                                        className: "dropdown-item",
+                                        disabled: () => isDeletingItem(item),
+                                        onclick: () => {
+                                            openFolder(item);
+                                            el.hidePopover();
+                                        },
+                                    },
+                                    t.i({ className: "ri-folder-open-line", ariaHidden: true }),
+                                    t.span({ className: "txt" }, "Open"),
+                                ),
+                                t.button(
+                                    {
+                                        type: "button",
+                                        className: "dropdown-item",
+                                        disabled: () => isDeletingItem(item),
+                                        onclick: () => {
+                                            app.modals.openMediaFolderUpsert(item, "", {
+                                                onsave: () => refresh(),
+                                            });
+                                            el.hidePopover();
+                                        },
+                                    },
+                                    t.i({ className: "ri-edit-line", ariaHidden: true }),
+                                    t.span({ className: "txt" }, "Rename"),
+                                ),
+                                t.button(
+                                    {
+                                        type: "button",
+                                        className: () => `dropdown-item ${isDeletingItem(item) ? "loading" : ""}`,
+                                        disabled: () => isDeletingItem(item),
+                                        onclick: () => {
+                                            confirmDeleteItem(item);
+                                            el.hidePopover();
+                                        },
+                                    },
+                                    t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                                    t.span({ className: "txt" }, "Delete"),
+                                ),
+                            ];
+                        }
+
+                        return [
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "dropdown-item",
+                                    disabled: () => isDeletingItem(item),
+                                    onclick: () => {
+                                        previewFile(item);
+                                        el.hidePopover();
+                                    },
+                                },
+                                t.i({ className: "ri-eye-line", ariaHidden: true }),
+                                t.span({ className: "txt" }, "Preview"),
+                            ),
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: () => `dropdown-item ${isDeletingItem(item) ? "loading" : ""}`,
+                                    disabled: () => isDeletingItem(item),
+                                    onclick: () => {
+                                        confirmDeleteItem(item);
+                                        el.hidePopover();
+                                    },
+                                },
+                                t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                                t.span({ className: "txt" }, "Delete"),
+                            ),
+                        ];
+                    },
+                ),
+            ),
+            t.div({ className: "content gap-10" }, () => {
+                if (item.kind === "folder") {
+                    if (data.viewMode === "grid") {
+                        return [
+                            t.div(
+                                { className: "media-folder-thumb-area" },
+                                t.i({ className: "ri-folder-open-line", ariaHidden: true }),
+                            ),
+                            t.div(
+                                { className: "media-folder-link" },
+                                t.span({ className: "txt" }, item.name),
+                            ),
+                        ];
+                    }
+                    return [
+                        t.div(
+                            { className: "media-folder-thumb-area-list" },
+                            t.i({ className: "ri-folder-2-line", ariaHidden: true }),
+                        ),
+                        t.div(
+                            { className: "media-file-meta" },
+                            t.div({ className: "txt" }, item.name),
+                            t.small({ className: "txt-hint" }, "Directory"),
+                        ),
+                    ];
+                }
+
+                if (data.viewMode === "grid") {
+                    return [
+                        t.div(
+                            { className: "media-thumb-wrapper" },
+                            app.components.recordFileThumb({
+                                record: item,
+                                filename: item.file,
+                                extraClasses: "sm",
+                            }),
+                            t.div(
+                                { className: "media-item-badge media-thumb-badge" },
+                                getFileTypeBadge(item),
+                            ),
+                        ),
+                        t.div(
+                            { className: "media-file-meta" },
+                            t.div({ className: "txt" }, item.name),
+                            t.small(
+                                { className: "txt-hint" },
+                                `${app.utils.formattedFileSize(item.size || 0)} \u2022 ${item.mime || "file"}`,
+                            ),
+                        ),
+                    ];
+                }
+
+                return [
+                    t.div(
+                        { className: "media-thumb-wrapper-list" },
+                        app.components.recordFileThumb({
+                            record: item,
+                            filename: item.file,
+                            extraClasses: "sm",
+                        }),
+                    ),
+                    t.div(
+                        { className: "media-file-meta" },
+                        t.div(
+                            { className: "media-item-badge" },
+                            getFileTypeBadge(item),
+                        ),
+                        t.div({ className: "txt" }, item.name),
+                        t.small(
+                            { className: "txt-hint" },
+                            `${app.utils.formattedFileSize(item.size || 0)} \u2022 ${item.mime || "file"}`,
+                        ),
+                    ),
+                ];
+            }),
+        );
+    }
+
+    function renderDropCard() {
+        return t.button(
+            {
+                type: "button",
+                className: () => `media-drop-card ${data.viewMode === "list" ? "media-drop-card-list" : ""}`,
+                onclick: () =>
+                    app.modals.openMediaUpload({
+                        parentId: data.currentFolderId || "",
+                        oncomplete: ({ uploaded }) => {
+                            if (uploaded) {
+                                refresh();
+                            }
+                        },
+                    }),
+            },
+            t.i({ className: "ri-upload-cloud-2-line", ariaHidden: true }),
+            t.span(null, "Drop files here"),
+        );
+    }
+
     return t.div(
         {
             pbEvent: "pageMedia",
@@ -759,7 +966,7 @@ export function pageMedia(route) {
                         className: "page-header-secondary-btns media-header-secondary-btns",
                     },
                     t.div(
-                        { className: "btn-group media-view-toggle" },
+                        { className: "media-view-toggle" },
                         t.button(
                             {
                                 type: "button",
@@ -806,7 +1013,7 @@ export function pageMedia(route) {
                     t.button(
                         {
                             type: "button",
-                            className: "btn",
+                            className: "btn media-btn-upload",
                             disabled: () => data.isBulkDeleting,
                             onclick: () =>
                                 app.modals.openMediaUpload({
@@ -824,10 +1031,11 @@ export function pageMedia(route) {
                 ),
             ),
             t.div(
-                {},
+                { className: "media-search-bar" },
+                t.i({ className: "ri-search-line media-search-icon", ariaHidden: true }),
                 app.components.searchbar({
                     className: "media-searchbar",
-                    placeholder: "Search media by name...",
+                    placeholder: "Search media by name, type, or size\u2026",
                     value: () => data.search,
                     onsubmit: (value) => (data.search = value),
                 }),
@@ -846,204 +1054,73 @@ export function pageMedia(route) {
                 },
                 t.h6({ className: "txt" }, "Media collection is not loaded yet."),
             ),
-            t.div(
-                {
-                    className: () => `media-browser list media-browser-${data.viewMode}`,
-                },
-                () => {
-                    if (!data.collection) {
-                        return;
-                    }
+            () => {
+                if (!data.collection) {
+                    return;
+                }
 
-                    if (data.isLoading) {
-                        return t.div(
-                            { className: "block txt-center p-base" },
-                            t.span({ className: "loader lg" }),
-                        );
-                    }
+                if (data.isLoading) {
+                    return t.div(
+                        { className: "block txt-center p-base" },
+                        t.span({ className: "loader lg" }),
+                    );
+                }
 
-                    if (!data.items.length) {
-                        return t.div(
-                            { className: "media-empty block txt-center p-base" },
-                            t.div({ className: "media-empty-eyebrow" }, "No items"),
-                            t.h6({ className: "txt" }, "This folder is empty."),
-                            t.p(
-                                { className: "txt-hint" },
-                                "Upload files or create a new folder to populate this view.",
-                            ),
-                        );
-                    }
+                if (!data.items.length) {
+                    return t.div(
+                        { className: "media-empty block txt-center p-base" },
+                        t.div({ className: "media-empty-eyebrow" }, "No items"),
+                        t.h6({ className: "txt" }, "This folder is empty."),
+                        t.p(
+                            { className: "txt-hint" },
+                            "Upload files or create a new folder to populate this view.",
+                        ),
+                    );
+                }
 
-                    return data.items.map((item) =>
+                const folders = data.items.filter((i) => i.kind === "folder");
+                const files = data.items.filter((i) => i.kind !== "folder");
+                const sections = [];
+
+                if (folders.length) {
+                    sections.push(
+                        t.div(
+                            { className: "media-section-label" },
+                            "Folders",
+                        ),
+                        t.div(
+                            { className: () => `media-browser list media-browser-${data.viewMode}` },
+                            ...folders.map((item) => renderItemCard(item)),
+                        ),
+                    );
+                }
+
+                if (files.length) {
+                    sections.push(
+                        t.div(
+                            { className: "media-section-label", style: folders.length ? "margin-top: 20px;" : "" },
+                            "Files",
+                        ),
+                        t.div(
+                            { className: () => `media-browser list media-browser-${data.viewMode}` },
+                            ...files.map((item) => renderItemCard(item)),
+                            renderDropCard(),
+                        ),
+                    );
+                } else {
+                    sections.push(
                         t.div(
                             {
-                                rid: item.id,
-                                className: () =>
-                                    `list-item highlight media-item media-item-${item.kind} media-item-${data.viewMode} ${
-                                        data.bulkSelected[item.id] ? "media-item-selected" : ""
-                                    }`,
-                                onclick: (e) => queueItemSelect(item, e),
-                                ondblclick: () => handleItemDoubleClick(item),
+                                className: () => `media-browser list media-browser-${data.viewMode}`,
+                                style: "margin-top: 12px;",
                             },
-                            t.div(
-                                {
-                                    className: "media-item-menu",
-                                    onclick: (e) => e.stopPropagation(),
-                                    ondblclick: (e) => e.stopPropagation(),
-                                },
-                                t.button(
-                                    {
-                                        type: "button",
-                                        className: "btn sm circle transparent secondary",
-                                        title: "More actions",
-                                        "html-popovertarget": `${uniqueId}_item_menu_${item.id}`,
-                                    },
-                                    t.i({ className: "ri-more-2-line", ariaHidden: true }),
-                                ),
-                                t.div(
-                                    {
-                                        id: `${uniqueId}_item_menu_${item.id}`,
-                                        className: "dropdown left sm",
-                                        popover: "auto",
-                                    },
-                                    (el) => {
-                                        if (item.kind === "folder") {
-                                            return [
-                                                t.button(
-                                                    {
-                                                        type: "button",
-                                                        className: "dropdown-item",
-                                                        disabled: () => isDeletingItem(item),
-                                                        onclick: () => {
-                                                            openFolder(item);
-                                                            el.hidePopover();
-                                                        },
-                                                    },
-                                                    t.i({
-                                                        className: "ri-folder-open-line",
-                                                        ariaHidden: true,
-                                                    }),
-                                                    t.span({ className: "txt" }, "Open"),
-                                                ),
-                                                t.button(
-                                                    {
-                                                        type: "button",
-                                                        className: "dropdown-item",
-                                                        disabled: () => isDeletingItem(item),
-                                                        onclick: () => {
-                                                            app.modals.openMediaFolderUpsert(item, "", {
-                                                                onsave: () => refresh(),
-                                                            });
-                                                            el.hidePopover();
-                                                        },
-                                                    },
-                                                    t.i({ className: "ri-edit-line", ariaHidden: true }),
-                                                    t.span({ className: "txt" }, "Rename"),
-                                                ),
-                                                t.button(
-                                                    {
-                                                        type: "button",
-                                                        className: () =>
-                                                            `dropdown-item ${isDeletingItem(item) ? "loading" : ""}`,
-                                                        disabled: () => isDeletingItem(item),
-                                                        onclick: () => {
-                                                            confirmDeleteItem(item);
-                                                            el.hidePopover();
-                                                        },
-                                                    },
-                                                    t.i({
-                                                        className: "ri-delete-bin-7-line",
-                                                        ariaHidden: true,
-                                                    }),
-                                                    t.span({ className: "txt" }, "Delete"),
-                                                ),
-                                            ];
-                                        }
-
-                                        return [
-                                            t.button(
-                                                {
-                                                    type: "button",
-                                                    className: "dropdown-item",
-                                                    disabled: () => isDeletingItem(item),
-                                                    onclick: () => {
-                                                        previewFile(item);
-                                                        el.hidePopover();
-                                                    },
-                                                },
-                                                t.i({ className: "ri-eye-line", ariaHidden: true }),
-                                                t.span({ className: "txt" }, "Preview"),
-                                            ),
-                                            t.button(
-                                                {
-                                                    type: "button",
-                                                    className: () =>
-                                                        `dropdown-item ${isDeletingItem(item) ? "loading" : ""}`,
-                                                    disabled: () => isDeletingItem(item),
-                                                    onclick: () => {
-                                                        confirmDeleteItem(item);
-                                                        el.hidePopover();
-                                                    },
-                                                },
-                                                t.i({
-                                                    className: "ri-delete-bin-7-line",
-                                                    ariaHidden: true,
-                                                }),
-                                                t.span({ className: "txt" }, "Delete"),
-                                            ),
-                                        ];
-                                    },
-                                ),
-                            ),
-                            t.div({ className: "content gap-10" }, () => {
-                                if (item.kind === "folder") {
-                                    return [
-                                        t.div(
-                                            { className: "media-folder-link" },
-                                            t.i({
-                                                className: () =>
-                                                    data.viewMode === "grid"
-                                                        ? "ri-folder-open-line"
-                                                        : "ri-folder-2-line",
-                                                ariaHidden: true,
-                                            }),
-                                            t.span({ className: "txt" }, item.name),
-                                        ),
-                                        t.div(
-                                            { className: "media-file-meta" },
-                                            t.div(
-                                                { className: "media-item-badge" },
-                                                getFileTypeBadge(item),
-                                            ),
-                                            t.small({ className: "txt-hint" }, "Directory"),
-                                        ),
-                                    ];
-                                }
-
-                                return [
-                                    app.components.recordFileThumb({
-                                        record: item,
-                                        filename: item.file,
-                                        extraClasses: "sm",
-                                    }),
-                                    t.div(
-                                        { className: "media-file-meta" },
-                                        t.div(
-                                            { className: "media-item-badge" },
-                                            getFileTypeBadge(item),
-                                        ),
-                                        t.div({ className: "txt" }, item.name),
-                                        t.small(
-                                            { className: "txt-hint" },
-                                            `${app.utils.formattedFileSize(item.size || 0)} • ${item.mime || "file"}`,
-                                        ),
-                                    ),
-                                ];
-                            }),
-                        )
+                            renderDropCard(),
+                        ),
                     );
-                },
-            ),
+                }
+
+                return t.div({ className: "media-sections" }, ...sections);
+            },
             t.div(
                 {
                     className: "media-dropzone-overlay",

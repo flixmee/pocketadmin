@@ -31,29 +31,58 @@ export function pageAutomationsSettings() {
             ),
             t.div(
                 { className: "wrapper m-b-base" },
+                // Automation definitions section
                 t.div(
-                    { className: "flex gap-10 m-b-sm" },
-                    t.div({ className: "txt-lg" }, "Automation definitions"),
-                    app.components.refreshButton({
-                        className: "btn sm transparent secondary circle",
-                        onclick: resetAutomationsList,
-                    }),
-                ),
-                t.p(
-                    { className: "txt-sm txt-hint m-b-sm" },
-                    "Manage superuser automations, toggle them on or off, trigger manual runs, and expose webhook endpoints. ",
-                    "The editor now uses structured step forms for supported triggers and actions.",
+                    { className: "al-section-header" },
+                    t.div(
+                        { className: "al-section-header-left" },
+                        t.div(
+                            { className: "al-section-title-row" },
+                            t.div({ className: "txt-lg" }, "Automation definitions"),
+                            t.i({
+                                className: "ri-refresh-line al-section-refresh-icon",
+                                ariaHidden: true,
+                                title: "Refresh",
+                                onclick: resetAutomationsList,
+                            }),
+                        ),
+                        t.div(
+                            { className: "al-section-desc" },
+                            "Manage workflows, toggle them on or off, and trigger manual runs.",
+                        ),
+                    ),
+                    t.a(
+                        {
+                            href: "#/automations/new",
+                            className: "al-section-action",
+                        },
+                        "Manage",
+                        t.i({ className: "ri-arrow-right-s-line", ariaHidden: true }),
+                    ),
                 ),
                 automationsList({
                     reset: () => data.resetList,
                 }),
+                // Pending approvals section
                 t.div(
-                    { className: "flex gap-10 m-t-base m-b-sm" },
-                    t.div({ className: "txt-lg" }, "Pending approvals"),
-                    app.components.refreshButton({
-                        className: "btn sm transparent secondary circle",
-                        onclick: resetAutomationsList,
-                    }),
+                    { className: "al-section-header m-t-base" },
+                    t.div(
+                        { className: "al-section-header-left" },
+                        t.div(
+                            { className: "al-section-title-row" },
+                            t.div({ className: "txt-lg" }, "Pending approvals"),
+                            t.i({
+                                className: "ri-refresh-line al-section-refresh-icon",
+                                ariaHidden: true,
+                                title: "Refresh",
+                                onclick: resetAutomationsList,
+                            }),
+                        ),
+                        t.div(
+                            { className: "al-section-desc" },
+                            "Review and resolve automation steps that require manual approval.",
+                        ),
+                    ),
                 ),
                 automationApprovalsList({
                     reset: () => data.resetList,
