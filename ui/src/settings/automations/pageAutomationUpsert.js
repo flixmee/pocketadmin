@@ -168,6 +168,29 @@ export function pageAutomationUpsert(route) {
         openAutomationDryRunModal(data.automation);
     }
 
+    async function exportTemplate() {
+        if (!data.automation?.id || data.isSaving) {
+            return;
+        }
+
+        data.isSaving = true;
+        try {
+            await app.pb.send(`/api/automations/${data.automation.id}/export-template`, {
+                method: "POST",
+                body: {
+                    name: data.form.name,
+                    description: data.form.notes,
+                },
+            });
+            app.toasts.success("Workflow template exported.");
+        } catch (err) {
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+            }
+        }
+        data.isSaving = false;
+    }
+
     return t.div(
         {
             pbEvent: "pageAutomationUpsert",
@@ -239,6 +262,22 @@ export function pageAutomationUpsert(route) {
                         },
                         t.i({ className: "ri-play-circle-line", ariaHidden: true }),
                         t.span({ className: "txt" }, "Dry-run"),
+                    );
+                },
+                () => {
+                    if (isNew) {
+                        return null;
+                    }
+
+                    return t.button(
+                        {
+                            type: "button",
+                            className: "btn secondary transparent",
+                            disabled: () => data.isSaving,
+                            onclick: exportTemplate,
+                        },
+                        t.i({ className: "ri-file-upload-line", ariaHidden: true }),
+                        t.span({ className: "txt" }, "Export template"),
                     );
                 },
                 () => {

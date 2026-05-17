@@ -302,6 +302,72 @@
     background: transparent;
 }
 
+.automation-graphical-config,
+.automation-config-section,
+.automation-config-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.automation-config-section {
+    padding: 10px;
+    border: 1px solid var(--surfaceAlt2Color);
+    border-radius: var(--borderRadius);
+    background: var(--surfaceAlt1Color);
+}
+
+.automation-config-row {
+    display: grid;
+    grid-template-columns: 34px minmax(120px, 1fr) minmax(130px, 0.8fr) minmax(160px, 1.2fr) 34px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--surfaceAlt2Color);
+    border-radius: var(--borderRadius);
+    background: var(--surfaceColor);
+}
+
+.automation-config-row.compact {
+    grid-template-columns: 34px minmax(160px, 1fr) 34px;
+}
+
+.automation-config-row.schema {
+    grid-template-columns: 34px minmax(120px, 1fr) minmax(130px, 0.8fr) minmax(120px, 0.8fr) 34px;
+}
+
+.automation-config-row.drag-over {
+    border-color: var(--primaryColor);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primaryColor) 18%, transparent);
+}
+
+.automation-config-drag {
+    cursor: grab;
+}
+
+.automation-config-row:active .automation-config-drag {
+    cursor: grabbing;
+}
+
+.automation-generated-config {
+    padding: 10px;
+    border: 1px dashed var(--surfaceAlt2Color);
+    border-radius: var(--borderRadius);
+    background: var(--surfaceColor);
+}
+
+@media (max-width: 760px) {
+    .automation-config-row,
+    .automation-config-row.compact,
+    .automation-config-row.schema {
+        grid-template-columns: 34px minmax(0, 1fr) 34px;
+    }
+
+    .automation-config-row > :not(.automation-config-drag):not(.txt-danger) {
+        grid-column: 2;
+    }
+}
+
 .automation-builder-drawer-footer {
     gap: 10px;
 }

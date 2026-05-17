@@ -161,6 +161,21 @@ func TestAutomationCollectionsExist(t *testing.T) {
 				"updated",
 			},
 		},
+		{
+			name: core.CollectionNameWorkflowTemplates,
+			expectedFields: []string{
+				"id",
+				"name",
+				"description",
+				"package",
+				"requiredCapabilities",
+				"requiredConnectors",
+				"requiredCollections",
+				"active",
+				"created",
+				"updated",
+			},
+		},
 	}
 
 	for _, s := range scenarios {

@@ -60,6 +60,28 @@ const mappingTokenGroups = [
     },
 ];
 
+const valueTypeOptions = [
+    { value: "text", label: "Text" },
+    { value: "number", label: "Number" },
+    { value: "boolean", label: "Boolean" },
+    { value: "template", label: "Template" },
+];
+
+const schemaTypeOptions = [
+    { value: "string", label: "Text" },
+    { value: "number", label: "Number" },
+    { value: "integer", label: "Integer" },
+    { value: "boolean", label: "Boolean" },
+    { value: "array", label: "List" },
+    { value: "object", label: "Object" },
+];
+
+const waitDurationUnitOptions = [
+    { value: "s", label: "Seconds" },
+    { value: "m", label: "Minutes" },
+    { value: "h", label: "Hours" },
+];
+
 export function stepEditor(propsArg = {}) {
     const props = store({
         steps: [],
@@ -134,10 +156,7 @@ export function stepEditor(propsArg = {}) {
 
     function addCapabilityStep(capabilityKey, insertIndex = -1) {
         const nextStep = createReactiveEditorStep("capability");
-        nextStep.configText = stringifyJSONObject({
-            capability: capabilityKey,
-            input: {},
-        });
+        nextStep.capability = capabilityKey;
         data.expandedById[nextStep.__id] = true;
         data.selectedStepId = nextStep.__id;
         data.drawerOpen = true;
@@ -518,6 +537,7 @@ export function stepEditor(propsArg = {}) {
                     toggleExpanded,
                     isExpanded,
                     selectedStepId: data.selectedStepId,
+                    schemas: data.schemas,
                 })
                 : null,
     );
@@ -571,7 +591,7 @@ function renderStepForm(step, error, context = {}) {
         case "ai.classify":
         case "ai.generate":
         case "ai.summarize":
-            return genericJSONStepForm({ step, error });
+            return genericJSONStepForm({ step, error, context });
         default:
             return t.div({ className: "txt-sm txt-danger" }, `Unsupported step type "${step.type}".`);
     }
@@ -662,6 +682,7 @@ function renderStructuredStepList(options) {
                                 renderStepForm(step, stepError, {
                                     triggerType: options.triggerType,
                                     triggerCollectionRef: options.triggerCollectionRef,
+                                    schemas: options.schemas,
                                 }),
                         ),
                     ),
@@ -1065,6 +1086,7 @@ function renderStepEditModal(step, options) {
                         renderStepForm(step, stepError, {
                             triggerType: options.triggerType,
                             triggerCollectionRef: options.triggerCollectionRef,
+                            schemas: options.schemas,
                         }),
                 );
             },
@@ -1453,21 +1475,70 @@ function createEditorStep(type, rawStep = {}) {
                 bodyText: stringifyLooseValue(rawStep.body),
             };
         case "capability":
+            return createCapabilityStep(base, rawStep);
         case "wait.delay":
+            return createWaitDelayStep(base, rawStep);
         case "wait.webhook":
         case "wait.event":
+            return createWaitKeyStep(base, rawStep);
         case "wait.approval":
+            return createWaitApprovalStep(base, rawStep);
         case "ai.extract":
         case "ai.classify":
         case "ai.generate":
         case "ai.summarize":
-            return {
-                ...base,
-                configText: stringifyJSONObject(stepConfigWithoutType(rawStep), "{}"),
-            };
+            return createAIStep(base, rawStep);
         default:
             return createEditorStep("condition", { __id: base.__id });
     }
+}
+
+function createCapabilityStep(base, rawStep = {}) {
+    return {
+        ...base,
+        capability: toString(rawStep.capability || rawStep.key),
+        connectorRef: toString(rawStep.connectorRef),
+        requiredScopes: normalizeStringArray(rawStep.requiredScopes),
+        inputRows: objectToConfigRows(rawStep.input),
+    };
+}
+
+function createWaitDelayStep(base, rawStep = {}) {
+    const parsed = parseDurationParts(rawStep.duration);
+    return {
+        ...base,
+        durationValue: parsed.value,
+        durationUnit: parsed.unit,
+    };
+}
+
+function createWaitKeyStep(base, rawStep = {}) {
+    return {
+        ...base,
+        key: toString(rawStep.key || rawStep.event),
+    };
+}
+
+function createWaitApprovalStep(base, rawStep = {}) {
+    return {
+        ...base,
+        assignee: toString(rawStep.assignee),
+        role: toString(rawStep.role),
+        comment: toString(rawStep.comment),
+    };
+}
+
+function createAIStep(base, rawStep = {}) {
+    return {
+        ...base,
+        model: toString(rawStep.model),
+        inputText: stringifyLooseValue(rawStep.input),
+        labels: normalizeStringArray(rawStep.labels).map((label) => ({
+            __id: app.utils.randomString(),
+            value: label,
+        })),
+        schemaRows: schemaToRows(rawStep.schema),
+    };
 }
 
 function createReactiveEditorStep(type, rawStep = {}) {
@@ -1491,58 +1562,634 @@ function buildStepPayload(step, index) {
         case "response":
             return buildResponsePayload(step, index);
         case "capability":
+            return buildCapabilityPayload(step, index);
         case "wait.delay":
+            return buildWaitDelayPayload(step, index);
         case "wait.webhook":
         case "wait.event":
+            return buildWaitKeyPayload(step, index);
         case "wait.approval":
+            return buildWaitApprovalPayload(step, index);
         case "ai.extract":
         case "ai.classify":
         case "ai.generate":
         case "ai.summarize":
-            return buildGenericJSONPayload(step, index);
+            return buildAIPayload(step, index);
         default:
             throw new Error(`Step ${index + 1}: unsupported step type "${step.type}".`);
     }
 }
 
-function genericJSONStepForm({ step }) {
+function genericJSONStepForm({ step, context = {} }) {
+    switch (step.type) {
+        case "capability":
+            return capabilityStepForm(step, context);
+        case "wait.delay":
+            return waitDelayStepForm(step);
+        case "wait.webhook":
+        case "wait.event":
+            return waitKeyStepForm(step);
+        case "wait.approval":
+            return waitApprovalStepForm(step);
+        case "ai.extract":
+        case "ai.classify":
+        case "ai.generate":
+        case "ai.summarize":
+            return aiStepForm(step);
+        default:
+            return t.div({ className: "txt-sm txt-danger" }, `Unsupported step type "${step.type}".`);
+    }
+}
+
+function capabilityStepForm(step, context) {
     return t.div(
-        { className: "grid" },
+        { className: "automation-graphical-config" },
         t.div(
-            { className: "col-12" },
+            { className: "grid" },
             t.div(
-                { className: "field" },
-                t.label({ htmlFor: `${step.__id}_config` }, "Configuration JSON"),
-                t.textarea({
-                    id: `${step.__id}_config`,
-                    rows: 8,
-                    value: () => step.configText || "{}",
-                    oninput: (e) => {
-                        step.configText = e.target.value;
-                    },
-                }),
+                { className: "col-md-7" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_capability` }, "Capability"),
+                    app.components.select({
+                        id: `${step.__id}_capability`,
+                        value: () => step.capability,
+                        options: () => capabilitySelectOptions(context.schemas, step.capability),
+                        placeholder: "- Select capability -",
+                        onchange: (selected) => (step.capability = selected?.[0]?.value || ""),
+                    }),
+                ),
+            ),
+            t.div(
+                { className: "col-md-5" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_connector` }, "Connector ID"),
+                    t.input({
+                        id: `${step.__id}_connector`,
+                        type: "text",
+                        placeholder: "Optional connector",
+                        value: () => step.connectorRef,
+                        oninput: (e) => (step.connectorRef = e.target.value),
+                    }),
+                ),
             ),
         ),
+        editableStringList({
+            title: "Required scopes",
+            emptyText: "No extra scopes required.",
+            addLabel: "Add scope",
+            rows: () => step.requiredScopes,
+            add: () => step.requiredScopes.push(""),
+            remove: (index) => step.requiredScopes.splice(index, 1),
+            move: (from, to) => moveArrayItem(step.requiredScopes, from, to),
+            renderValue: (scope, index) =>
+                t.input({
+                    type: "text",
+                    placeholder: "scope:name",
+                    value: () => step.requiredScopes[index],
+                    oninput: (e) => (step.requiredScopes[index] = e.target.value),
+                }),
+        }),
+        objectRowsEditor({
+            title: "Input fields",
+            emptyText: "No input fields configured.",
+            rows: () => step.inputRows,
+            add: () => step.inputRows.push(createConfigRow()),
+            remove: (index) => step.inputRows.splice(index, 1),
+            move: (from, to) => moveArrayItem(step.inputRows, from, to),
+        }),
+        generatedConfigPreview(step),
     );
 }
 
-function buildGenericJSONPayload(step, index) {
-    const config = parseJSONObject(step.configText, `Step ${index + 1}: configuration`);
+function waitDelayStepForm(step) {
+    return t.div(
+        { className: "automation-graphical-config" },
+        t.div(
+            { className: "grid" },
+            t.div(
+                { className: "col-md-6" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_duration_value` }, "Delay amount"),
+                    t.input({
+                        id: `${step.__id}_duration_value`,
+                        type: "number",
+                        min: "1",
+                        step: "1",
+                        value: () => step.durationValue,
+                        oninput: (e) => (step.durationValue = e.target.value),
+                    }),
+                ),
+            ),
+            t.div(
+                { className: "col-md-6" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_duration_unit` }, "Unit"),
+                    app.components.select({
+                        id: `${step.__id}_duration_unit`,
+                        value: () => step.durationUnit,
+                        options: waitDurationUnitOptions,
+                        onchange: (selected) => (step.durationUnit = selected?.[0]?.value || "m"),
+                    }),
+                ),
+            ),
+        ),
+        generatedConfigPreview(step),
+    );
+}
+
+function waitKeyStepForm(step) {
+    const label = step.type === "wait.event" ? "Event name" : "Webhook key";
+    const placeholder = step.type === "wait.event" ? "invoice.paid" : "payment_completed";
+    return t.div(
+        { className: "automation-graphical-config" },
+        t.div(
+            { className: "field" },
+            t.label({ htmlFor: `${step.__id}_key` }, label),
+            t.input({
+                id: `${step.__id}_key`,
+                type: "text",
+                placeholder,
+                value: () => step.key,
+                oninput: (e) => (step.key = e.target.value),
+            }),
+        ),
+        generatedConfigPreview(step),
+    );
+}
+
+function waitApprovalStepForm(step) {
+    return t.div(
+        { className: "automation-graphical-config" },
+        t.div(
+            { className: "grid" },
+            t.div(
+                { className: "col-md-6" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_assignee` }, "Assignee"),
+                    t.input({
+                        id: `${step.__id}_assignee`,
+                        type: "text",
+                        placeholder: "user@example.com",
+                        value: () => step.assignee,
+                        oninput: (e) => (step.assignee = e.target.value),
+                    }),
+                ),
+            ),
+            t.div(
+                { className: "col-md-6" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_role` }, "Role"),
+                    t.input({
+                        id: `${step.__id}_role`,
+                        type: "text",
+                        placeholder: "manager",
+                        value: () => step.role,
+                        oninput: (e) => (step.role = e.target.value),
+                    }),
+                ),
+            ),
+            t.div(
+                { className: "col-12" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_approval_comment` }, "Approval note"),
+                    t.input({
+                        id: `${step.__id}_approval_comment`,
+                        type: "text",
+                        placeholder: "Optional note for approvers",
+                        value: () => step.comment,
+                        oninput: (e) => (step.comment = e.target.value),
+                    }),
+                ),
+            ),
+        ),
+        generatedConfigPreview(step),
+    );
+}
+
+function aiStepForm(step) {
+    return t.div(
+        { className: "automation-graphical-config" },
+        t.div(
+            { className: "grid" },
+            t.div(
+                { className: "col-md-5" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_model` }, "Model"),
+                    t.input({
+                        id: `${step.__id}_model`,
+                        type: "text",
+                        placeholder: "Default",
+                        value: () => step.model,
+                        oninput: (e) => (step.model = e.target.value),
+                    }),
+                ),
+            ),
+            t.div(
+                { className: "col-md-7" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_input` }, "Input"),
+                    t.input({
+                        id: `${step.__id}_input`,
+                        type: "text",
+                        placeholder: "{{record.description}}",
+                        value: () => step.inputText,
+                        oninput: (e) => (step.inputText = e.target.value),
+                    }),
+                ),
+            ),
+        ),
+        () =>
+            step.type === "ai.classify"
+                ? editableStringList({
+                    title: "Classification labels",
+                    emptyText: "Add at least one label.",
+                    addLabel: "Add label",
+                    rows: () => step.labels,
+                    add: () => step.labels.push({ __id: app.utils.randomString(), value: "" }),
+                    remove: (index) => step.labels.splice(index, 1),
+                    move: (from, to) => moveArrayItem(step.labels, from, to),
+                    renderValue: (row) =>
+                        t.input({
+                            type: "text",
+                            placeholder: "approved",
+                            value: () => row.value,
+                            oninput: (e) => (row.value = e.target.value),
+                        }),
+                })
+                : null,
+        schemaRowsEditor(step),
+        generatedConfigPreview(step),
+    );
+}
+
+function objectRowsEditor(options) {
+    return t.div(
+        { className: "automation-config-section" },
+        t.div(
+            { className: "flex gap-5 flex-wrap m-b-xs" },
+            t.div({ className: "txt-bold" }, options.title),
+            t.button(
+                {
+                    type: "button",
+                    className: "btn sm secondary transparent m-l-auto",
+                    onclick: options.add,
+                },
+                t.i({ className: "ri-add-line", ariaHidden: true }),
+                t.span({ className: "txt" }, "Add field"),
+            ),
+        ),
+        () => {
+            const rows = options.rows();
+            if (!rows.length) {
+                return t.div({ className: "txt-sm txt-hint" }, options.emptyText);
+            }
+
+            return t.div(
+                { className: "automation-config-rows" },
+                ...rows.map((row, index) =>
+                    t.div(
+                        dragRowAttrs({
+                            id: row.__id,
+                            index,
+                            move: options.move,
+                            className: "automation-config-row",
+                        }),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn sm secondary transparent circle automation-config-drag",
+                                ariaLabel: app.attrs.tooltip("Drag to reorder"),
+                            },
+                            t.i({ className: "ri-draggable", ariaHidden: true }),
+                        ),
+                        t.input({
+                            type: "text",
+                            placeholder: "Field",
+                            value: () => row.key,
+                            oninput: (e) => (row.key = e.target.value),
+                        }),
+                        app.components.select({
+                            value: () => row.valueType,
+                            options: valueTypeOptions,
+                            onchange: (selected) => (row.valueType = selected?.[0]?.value || "text"),
+                        }),
+                        valueControl(row),
+                        removeRowButton(() => options.remove(index)),
+                    )
+                ),
+            );
+        },
+    );
+}
+
+function editableStringList(options) {
+    return t.div(
+        { className: "automation-config-section" },
+        t.div(
+            { className: "flex gap-5 flex-wrap m-b-xs" },
+            t.div({ className: "txt-bold" }, options.title),
+            t.button(
+                {
+                    type: "button",
+                    className: "btn sm secondary transparent m-l-auto",
+                    onclick: options.add,
+                },
+                t.i({ className: "ri-add-line", ariaHidden: true }),
+                t.span({ className: "txt" }, options.addLabel),
+            ),
+        ),
+        () => {
+            const rows = options.rows();
+            if (!rows.length) {
+                return t.div({ className: "txt-sm txt-hint" }, options.emptyText);
+            }
+
+            return t.div(
+                { className: "automation-config-rows" },
+                ...rows.map((row, index) =>
+                    t.div(
+                        dragRowAttrs({
+                            id: row.__id || `${index}_${row}`,
+                            index,
+                            move: options.move,
+                            className: "automation-config-row compact",
+                        }),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn sm secondary transparent circle automation-config-drag",
+                                ariaLabel: app.attrs.tooltip("Drag to reorder"),
+                            },
+                            t.i({ className: "ri-draggable", ariaHidden: true }),
+                        ),
+                        options.renderValue(row, index),
+                        removeRowButton(() => options.remove(index)),
+                    )
+                ),
+            );
+        },
+    );
+}
+
+function schemaRowsEditor(step) {
+    return t.div(
+        { className: "automation-config-section" },
+        t.div(
+            { className: "flex gap-5 flex-wrap m-b-xs" },
+            t.div({ className: "txt-bold" }, "Output schema"),
+            t.button(
+                {
+                    type: "button",
+                    className: "btn sm secondary transparent m-l-auto",
+                    onclick: () => step.schemaRows.push(createSchemaRow()),
+                },
+                t.i({ className: "ri-add-line", ariaHidden: true }),
+                t.span({ className: "txt" }, "Add property"),
+            ),
+        ),
+        () => {
+            if (!step.schemaRows.length) {
+                return t.div({ className: "txt-sm txt-hint" }, "No typed output properties required.");
+            }
+
+            return t.div(
+                { className: "automation-config-rows" },
+                ...step.schemaRows.map((row, index) =>
+                    t.div(
+                        dragRowAttrs({
+                            id: row.__id,
+                            index,
+                            move: (from, to) => moveArrayItem(step.schemaRows, from, to),
+                            className: "automation-config-row schema",
+                        }),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn sm secondary transparent circle automation-config-drag",
+                                ariaLabel: app.attrs.tooltip("Drag to reorder"),
+                            },
+                            t.i({ className: "ri-draggable", ariaHidden: true }),
+                        ),
+                        t.input({
+                            type: "text",
+                            placeholder: "Property",
+                            value: () => row.key,
+                            oninput: (e) => (row.key = e.target.value),
+                        }),
+                        app.components.select({
+                            value: () => row.type,
+                            options: schemaTypeOptions,
+                            onchange: (selected) => (row.type = selected?.[0]?.value || "string"),
+                        }),
+                        t.div(
+                            { className: "field checkbox-field" },
+                            t.input({
+                                id: `${row.__id}_required`,
+                                type: "checkbox",
+                                className: "switch",
+                                checked: () => row.required,
+                                onchange: (e) => (row.required = e.target.checked),
+                            }),
+                            t.label({ htmlFor: `${row.__id}_required` }, t.span({ className: "txt" }, "Required")),
+                        ),
+                        removeRowButton(() => step.schemaRows.splice(index, 1)),
+                    )
+                ),
+            );
+        },
+    );
+}
+
+function valueControl(row) {
+    if (row.valueType === "boolean") {
+        return app.components.select({
+            value: () => row.valueText,
+            options: [
+                { value: "true", label: "True" },
+                { value: "false", label: "False" },
+            ],
+            onchange: (selected) => (row.valueText = selected?.[0]?.value || "false"),
+        });
+    }
+
+    return t.input({
+        type: row.valueType === "number" ? "number" : "text",
+        placeholder: row.valueType === "template" ? "{{record.field}}" : "Value",
+        value: () => row.valueText,
+        oninput: (e) => (row.valueText = e.target.value),
+    });
+}
+
+function removeRowButton(onclick) {
+    return t.button(
+        {
+            type: "button",
+            className: "btn sm secondary transparent circle txt-danger",
+            ariaLabel: app.attrs.tooltip("Remove"),
+            onclick,
+        },
+        t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+    );
+}
+
+function dragRowAttrs({ id, index, move, className }) {
     return {
-        type: step.type,
-        ...config,
+        rid: id,
+        className,
+        draggable: true,
+        "html-data-row-index": index,
+        ondragstart: (e) => {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", String(index));
+        },
+        ondragover: (e) => {
+            e.preventDefault();
+            e.currentTarget.classList.add("drag-over");
+        },
+        ondragleave: (e) => e.currentTarget.classList.remove("drag-over"),
+        ondrop: (e) => {
+            e.preventDefault();
+            e.currentTarget.classList.remove("drag-over");
+            const from = Number(e.dataTransfer.getData("text/plain"));
+            if (Number.isInteger(from) && from !== index) {
+                move(from, index);
+            }
+        },
+        ondragend: (e) => e.currentTarget.classList.remove("drag-over"),
     };
 }
 
-function stepConfigWithoutType(rawStep = {}) {
-    const result = {};
-    for (const key in rawStep || {}) {
-        if (key === "type" || key === "__id") {
-            continue;
-        }
-        result[key] = rawStep[key];
+function generatedConfigPreview(step) {
+    return t.div(
+        { className: "automation-generated-config" },
+        t.div({ className: "txt-xs txt-hint m-b-xs" }, "Generated configuration"),
+        app.components.codeBlock({
+            language: "js",
+            value: () => stringifyJSONObject(generatedStepConfig(step), "{}"),
+        }),
+    );
+}
+
+function buildCapabilityPayload(step, index) {
+    const capability = step.capability.trim();
+    if (!capability) {
+        throw new Error(`Step ${index + 1}: capability key is required.`);
     }
-    return result;
+
+    const payload = {
+        type: "capability",
+        capability,
+    };
+    const connectorRef = step.connectorRef.trim();
+    if (connectorRef) {
+        payload.connectorRef = connectorRef;
+    }
+    const requiredScopes = normalizeStringArray(step.requiredScopes);
+    if (requiredScopes.length) {
+        payload.requiredScopes = requiredScopes;
+    }
+
+    const input = configRowsToObject(step.inputRows);
+    if (Object.keys(input).length) {
+        payload.input = input;
+    }
+
+    return payload;
+}
+
+function buildWaitDelayPayload(step, index) {
+    const durationValue = Number(step.durationValue);
+    if (!Number.isFinite(durationValue) || durationValue <= 0) {
+        throw new Error(`Step ${index + 1}: wait duration must be greater than zero.`);
+    }
+
+    return {
+        type: "wait.delay",
+        duration: `${durationValue}${step.durationUnit || "m"}`,
+    };
+}
+
+function buildWaitKeyPayload(step, index) {
+    const key = step.key.trim();
+    if (!key) {
+        throw new Error(`Step ${index + 1}: wait key is required.`);
+    }
+
+    return {
+        type: step.type,
+        key,
+    };
+}
+
+function buildWaitApprovalPayload(step, index) {
+    const assignee = step.assignee.trim();
+    const role = step.role.trim();
+    if (!assignee && !role) {
+        throw new Error(`Step ${index + 1}: approval wait requires an assignee or role.`);
+    }
+
+    const payload = { type: "wait.approval" };
+    if (assignee) {
+        payload.assignee = assignee;
+    }
+    if (role) {
+        payload.role = role;
+    }
+    if (step.comment.trim()) {
+        payload.comment = step.comment.trim();
+    }
+
+    return payload;
+}
+
+function buildAIPayload(step, index) {
+    const input = parseLooseValue(step.inputText);
+    if (input === "" || input === undefined || input === null) {
+        throw new Error(`Step ${index + 1}: AI input is required.`);
+    }
+
+    const payload = {
+        type: step.type,
+        input,
+    };
+    if (step.model.trim()) {
+        payload.model = step.model.trim();
+    }
+
+    if (step.type === "ai.classify") {
+        const labels = step.labels.map((row) => toString(row.value).trim()).filter(Boolean);
+        if (!labels.length) {
+            throw new Error(`Step ${index + 1}: AI classify requires at least one label.`);
+        }
+        payload.labels = labels;
+    }
+
+    const schema = schemaRowsToObject(step.schemaRows);
+    if (schema) {
+        payload.schema = schema;
+    }
+
+    return payload;
+}
+
+function generatedStepConfig(step) {
+    try {
+        const payload = buildStepPayload(step, 0);
+        const config = { ...payload };
+        delete config.type;
+        return config;
+    } catch (_) {
+        return {};
+    }
 }
 
 function buildConditionPayload(step, index) {
@@ -1763,9 +2410,28 @@ function summarizeStep(step) {
             return `Delete record in ${step.collection || "collection"}`;
         case "response":
             return `Return webhook response ${step.statusCodeText || "200"}`;
+        case "capability":
+            return step.capability ? `Run ${step.capability}` : "Choose a capability";
+        case "wait.delay":
+            return `Wait ${step.durationValue || "1"} ${durationUnitLabel(step.durationUnit)}`;
+        case "wait.webhook":
+            return `Wait for webhook ${step.key || "key"}`;
+        case "wait.event":
+            return `Wait for event ${step.key || "event"}`;
+        case "wait.approval":
+            return `Approval by ${step.assignee || step.role || "assignee or role"}`;
+        case "ai.extract":
+        case "ai.classify":
+        case "ai.generate":
+        case "ai.summarize":
+            return step.inputText ? `Use ${step.inputText}` : "Configure AI input";
         default:
             return step.type || "Step";
     }
+}
+
+function durationUnitLabel(unit) {
+    return waitDurationUnitOptions.find((option) => option.value === unit)?.label.toLowerCase() || "minutes";
 }
 
 function clientValidateStep(step) {
@@ -1834,7 +2500,6 @@ function clientValidateStep(step) {
         case "ai.classify":
         case "ai.generate":
         case "ai.summarize":
-            validateJSONObject(step.configText, "Configuration JSON", messages);
             validateGenericStepConfig(step, messages);
             break;
     }
@@ -1870,38 +2535,28 @@ function validateOptionalNumber(raw, label, messages) {
 }
 
 function validateGenericStepConfig(step, messages) {
-    let config;
-    try {
-        config = parseJSONObject(step.configText || "{}", "Configuration JSON");
-    } catch (_) {
-        return;
-    }
-
     switch (step.type) {
         case "capability":
-            if (!String(config.capability || config.key || "").trim()) {
+            if (!step.capability?.trim()) {
                 messages.push("Capability key is required.");
             }
-            if (
-                config.input !== undefined
-                && (!config.input || typeof config.input !== "object" || Array.isArray(config.input))
-            ) {
-                messages.push("Capability input must be a JSON object.");
-            }
+            validateConfigRows(step.inputRows, "Capability input", messages);
             break;
         case "wait.delay":
-            if (!String(config.duration || "").trim()) {
+            if (!String(step.durationValue || "").trim()) {
                 messages.push("Wait duration is required.");
+            } else if (!Number.isFinite(Number(step.durationValue)) || Number(step.durationValue) <= 0) {
+                messages.push("Wait duration must be greater than zero.");
             }
             break;
         case "wait.webhook":
         case "wait.event":
-            if (!String(config.key || config.event || "").trim()) {
+            if (!step.key?.trim()) {
                 messages.push("Wait key is required.");
             }
             break;
         case "wait.approval":
-            if (!String(config.assignee || config.role || "").trim()) {
+            if (!step.assignee?.trim() && !step.role?.trim()) {
                 messages.push("Approval assignee or role is required.");
             }
             break;
@@ -1909,13 +2564,48 @@ function validateGenericStepConfig(step, messages) {
         case "ai.classify":
         case "ai.generate":
         case "ai.summarize":
-            if (config.input === undefined || config.input === null || config.input === "") {
+            if (!step.inputText?.trim()) {
                 messages.push("AI input is required.");
             }
-            if (step.type === "ai.classify" && (!Array.isArray(config.labels) || !config.labels.length)) {
+            if (step.type === "ai.classify" && !step.labels.some((row) => row.value?.trim())) {
                 messages.push("AI classify labels are required.");
             }
+            validateSchemaRows(step.schemaRows, messages);
             break;
+    }
+}
+
+function validateConfigRows(rows, label, messages) {
+    const seen = new Set();
+    for (const row of rows || []) {
+        const key = row.key?.trim();
+        if (!key && row.valueText?.trim()) {
+            messages.push(`${label} field name is required.`);
+        }
+        if (!key) {
+            continue;
+        }
+        if (seen.has(key)) {
+            messages.push(`${label} field "${key}" is duplicated.`);
+        }
+        seen.add(key);
+        if (row.valueType === "number" && (!Number.isFinite(Number(row.valueText)) || row.valueText === "")) {
+            messages.push(`${label} field "${key}" must be a number.`);
+        }
+    }
+}
+
+function validateSchemaRows(rows, messages) {
+    const seen = new Set();
+    for (const row of rows || []) {
+        const key = row.key?.trim();
+        if (!key) {
+            continue;
+        }
+        if (seen.has(key)) {
+            messages.push(`Output schema property "${key}" is duplicated.`);
+        }
+        seen.add(key);
     }
 }
 
@@ -2087,6 +2777,169 @@ function parseStringList(raw) {
 
 function firstStringListValue(raw) {
     return parseStringList(raw || "")[0] || "";
+}
+
+function objectToConfigRows(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return [];
+    }
+
+    return Object.keys(value).map((key) => {
+        const row = createConfigRow();
+        row.key = key;
+        const item = value[key];
+        if (typeof item === "number") {
+            row.valueType = "number";
+            row.valueText = String(item);
+        } else if (typeof item === "boolean") {
+            row.valueType = "boolean";
+            row.valueText = item ? "true" : "false";
+        } else if (typeof item === "string" && item.includes("{{")) {
+            row.valueType = "template";
+            row.valueText = item;
+        } else {
+            row.valueType = "text";
+            row.valueText = item === undefined || item === null ? "" : String(item);
+        }
+        return row;
+    });
+}
+
+function createConfigRow() {
+    return {
+        __id: app.utils.randomString(),
+        key: "",
+        valueType: "text",
+        valueText: "",
+    };
+}
+
+function configRowsToObject(rows = []) {
+    const result = {};
+    for (const row of rows) {
+        const key = toString(row.key).trim();
+        if (!key) {
+            continue;
+        }
+        result[key] = configRowValue(row);
+    }
+    return result;
+}
+
+function configRowValue(row) {
+    switch (row.valueType) {
+        case "number": {
+            const value = Number(row.valueText);
+            return Number.isFinite(value) ? value : 0;
+        }
+        case "boolean":
+            return row.valueText === "true";
+        case "template":
+        case "text":
+        default:
+            return toString(row.valueText);
+    }
+}
+
+function parseDurationParts(duration) {
+    const raw = toString(duration).trim();
+    const match = raw.match(/^(\d+(?:\.\d+)?)(ms|s|m|h|d)?$/);
+    if (!match) {
+        return { value: raw ? raw.replace(/[^\d.]/g, "") || "1" : "1", unit: "m" };
+    }
+
+    if (match[2] === "d") {
+        return {
+            value: String(Number(match[1] || "1") * 24),
+            unit: "h",
+        };
+    }
+
+    return {
+        value: match[1] || "1",
+        unit: match[2] === "ms" ? "s" : match[2] || "m",
+    };
+}
+
+function schemaToRows(schema) {
+    const properties = schema?.properties;
+    if (!properties || typeof properties !== "object" || Array.isArray(properties)) {
+        return [];
+    }
+
+    const required = Array.isArray(schema.required) ? schema.required.map((item) => toString(item)) : [];
+    return Object.keys(properties).map((key) => {
+        const prop = properties[key] || {};
+        return {
+            __id: app.utils.randomString(),
+            key,
+            type: toString(prop.type) || "string",
+            required: required.includes(key),
+        };
+    });
+}
+
+function createSchemaRow() {
+    return {
+        __id: app.utils.randomString(),
+        key: "",
+        type: "string",
+        required: false,
+    };
+}
+
+function schemaRowsToObject(rows = []) {
+    const properties = {};
+    const required = [];
+    for (const row of rows) {
+        const key = toString(row.key).trim();
+        if (!key) {
+            continue;
+        }
+
+        properties[key] = { type: row.type || "string" };
+        if (row.required) {
+            required.push(key);
+        }
+    }
+
+    if (!Object.keys(properties).length) {
+        return null;
+    }
+
+    const schema = {
+        type: "object",
+        properties,
+    };
+    if (required.length) {
+        schema.required = required;
+    }
+
+    return schema;
+}
+
+function moveArrayItem(items, from, to) {
+    if (!Array.isArray(items) || from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) {
+        return;
+    }
+
+    const [item] = items.splice(from, 1);
+    items.splice(to, 0, item);
+}
+
+function capabilitySelectOptions(schemas, selectedValue = "") {
+    const capabilities = Object.values(schemas?.capabilities || {})
+        .map((capability) => ({
+            value: capability.key,
+            label: `${capability.key} (${capability.category || "capability"})`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+    if (selectedValue && !capabilities.find((option) => option.value === selectedValue)) {
+        capabilities.unshift({ value: selectedValue, label: selectedValue });
+    }
+
+    return capabilities;
 }
 
 function toString(value) {

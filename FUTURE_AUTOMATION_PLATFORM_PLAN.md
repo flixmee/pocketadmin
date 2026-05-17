@@ -1366,6 +1366,12 @@ Make workflow edits safe for production use.
 
 Let users test workflows before publishing and debug failures without side effects.
 
+### Implementation status
+
+- Backend dry-run execution exists for saved automations.
+- Existing run payloads can now be replayed into dry-run mode without creating new `_automationRuns` rows or executing side effects.
+- Admin run history exposes both real rerun and dry-run replay preview actions.
+
 ### Deliverables
 
 - Add dry-run execution mode.
@@ -1396,6 +1402,12 @@ Let users test workflows before publishing and debug failures without side effec
 
 Build the no-code workflow experience after runtime contracts are mature.
 
+### Implementation status
+
+- Admin UI includes a visual builder/list hybrid with the structured editor kept as fallback.
+- The builder uses schema discovery, capability browsing, trigger/template token hints, inline validation surfacing, and the existing dry-run modal.
+- This phase remains extensible for deeper graph edges and richer mapping widgets, but the MVP no-code workflow surface is in place.
+
 ### Deliverables
 
 - Replace or augment the structured step editor with:
@@ -1424,6 +1436,13 @@ Build the no-code workflow experience after runtime contracts are mature.
 ### Goal
 
 Enable reusable workflows after versioning, capabilities, connectors, and simulation exist.
+
+### Implementation status
+
+- Added organization-local `_workflowTemplates` foundation.
+- Automations can be exported into a versioned workflow-template package with required capability, connector, and collection metadata.
+- Template packages can be imported and installed as inactive automations after dependency checks.
+- Public marketplace discovery remains intentionally deferred.
 
 ### Deliverables
 

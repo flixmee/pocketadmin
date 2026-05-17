@@ -176,16 +176,22 @@ State:
     - Live drag feedback now relies only on the dragged node placeholder plus overlay preview.
     - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
   - Now:
-    - `automation-builder-drop-slot` removal is complete and build-verified.
+    - User reported `wait.delay` step set to 5 seconds does not continue running.
+    - Root cause found: wait delay created a waiting workflow state with `expires`, but automatic resume polling was not wired; only manual `ResumeExpiredAutomationWorkflowStates()` existed.
+    - Added `core/automation_delay_scheduler.go`, a bootstrap-started 1-second scheduler that calls `ResumeExpiredAutomationWorkflowStates()` and stops on terminate/rebootstrap.
+    - Added `TestAutomationWaitDelayAutoResume` regression coverage.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationWaitDelayAutoResume|TestAutomationWaitWebhookResume|TestAutomationWorkflowStateCheckpointsSynchronousRun'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation'`; passed.
   - Next:
-    - User can retest visual builder drag without drop-slot elements.
+    - User can retest a 5-second wait delay; run should move from waiting to success after the scheduler poll following expiry.
 
 Open questions (UNCONFIRMED if needed):
 
-- UNCONFIRMED: scheduler wiring cadence for automatic delay resume; MVP exposes `ResumeExpiredAutomationWorkflowStates`.
+- Automatic `wait.delay` resume scheduler cadence is 1 second.
 - UNCONFIRMED: external connector provider credentials and real AI provider integration. For Platform Phases 7-10, use non-OAuth connector primitives and fake/injected AI provider seams by default.
 - UNCONFIRMED: full draft/published workflow editing lifecycle beyond snapshot publishing.
 - UNCONFIRMED: exact Visual Builder interaction depth beyond the implemented foundation, such as true drag-and-drop graph edges or AI-assisted workflow generation.
+- UNCONFIRMED: full public marketplace/package trust model; current Phase 13 scope is organization-local templates only.
 
 Working set (files/ids/commands):
 
@@ -209,10 +215,13 @@ Working set (files/ids/commands):
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_schema.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_model.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_http.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_delay_scheduler.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_policy.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_run_model.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner_test.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_template_model.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_template_package.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_steps.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_templates.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_validate.go`
@@ -220,6 +229,7 @@ Working set (files/ids/commands):
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/collection_query_test.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1777000000_capabilities.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1778000000_automation_policy_audit.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1781000000_workflow_templates.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/migrations/1776000001_translation_jobs.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationUpsertModal.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationsList.js`

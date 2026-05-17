@@ -585,6 +585,9 @@ type App interface {
 	// RunAutomationFromRun reruns the specified stored automation run using its saved trigger payload.
 	RunAutomationFromRun(runID string) error
 
+	// RunAutomationDryRunFromRun previews a stored automation run using its saved trigger payload.
+	RunAutomationDryRunFromRun(runID string) (*AutomationDryRunResult, error)
+
 	// RunAutomationWebhook runs the specified active webhook automation.
 	RunAutomationWebhook(automationID string, request *AutomationWebhookRequest) (*AutomationWebhookResponse, error)
 
@@ -602,6 +605,15 @@ type App interface {
 
 	// ResumeExpiredAutomationWorkflowStates resumes delay waits whose expiration has passed.
 	ResumeExpiredAutomationWorkflowStates() error
+
+	// ExportAutomationTemplate stores a reusable workflow template from an automation.
+	ExportAutomationTemplate(automationID string, options WorkflowTemplateExportOptions) (*WorkflowTemplate, error)
+
+	// ImportWorkflowTemplatePackage stores an imported workflow template package.
+	ImportWorkflowTemplatePackage(pkg WorkflowTemplatePackage) (*WorkflowTemplate, error)
+
+	// InstallWorkflowTemplate creates an automation from a stored workflow template.
+	InstallWorkflowTemplate(templateID string, options WorkflowTemplateInstallOptions) (*WorkflowTemplateInstallResult, error)
 
 	// FindWorkflowStateById returns a single WorkflowState model by id.
 	FindWorkflowStateById(id string) (*WorkflowState, error)

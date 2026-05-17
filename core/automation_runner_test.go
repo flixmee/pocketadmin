@@ -969,6 +969,113 @@ func TestAutomationDryRunPreviewsSideEffects(t *testing.T) {
 	}
 }
 
+func TestAutomationDryRunFromRunReplaysSavedPayloadWithoutSideEffects(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	httpCalls := 0
+	app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+		httpCalls++
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+		}, nil
+	}))
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerManual)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"http","method":"POST","url":"https://example.com/{{trigger.type}}","body":{"run":"{{run.id}}"}}
+	]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatalf("Failed to create automation: %v", err)
+	}
+
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatalf("Expected automation run to succeed, got %v", err)
+	}
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if httpCalls != 1 {
+		t.Fatalf("Expected original run to call HTTP once, got %d", httpCalls)
+	}
+
+	result, err := app.RunAutomationDryRunFromRun(runs[0].Id)
+	if err != nil {
+		t.Fatalf("Expected dry-run replay to succeed, got %v", err)
+	}
+	if result.TriggerType != core.AutomationTriggerManual {
+		t.Fatalf("Expected manual trigger replay, got %q", result.TriggerType)
+	}
+	if len(result.StepResults) != 1 {
+		t.Fatalf("Expected 1 dry-run step result, got %d", len(result.StepResults))
+	}
+	if httpCalls != 1 {
+		t.Fatalf("Expected dry-run replay not to call HTTP, got %d calls", httpCalls)
+	}
+}
+
+func TestWorkflowTemplateExportImportInstallRoundtrip(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetName("Template source")
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerManual)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"capability","capability":"record.create","input":{"collection":"demo2","data":{"title":"templated"}}}
+	]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatalf("Failed to create automation: %v", err)
+	}
+
+	template, err := app.ExportAutomationTemplate(automation.Id, core.WorkflowTemplateExportOptions{
+		Name:        "Create demo2 record",
+		Description: "Roundtrip template",
+	})
+	if err != nil {
+		t.Fatalf("Expected template export to succeed, got %v", err)
+	}
+
+	var pkg core.WorkflowTemplatePackage
+	if err := json.Unmarshal([]byte(template.Package().String()), &pkg); err != nil {
+		t.Fatalf("Failed to decode template package: %v", err)
+	}
+	if pkg.PackageVersion != core.WorkflowTemplatePackageVersion {
+		t.Fatalf("Expected package version %q, got %q", core.WorkflowTemplatePackageVersion, pkg.PackageVersion)
+	}
+	if len(pkg.RequiredCapabilities) != 1 || pkg.RequiredCapabilities[0] != core.AutomationCapabilityRecordCreate {
+		t.Fatalf("Unexpected required capabilities: %#v", pkg.RequiredCapabilities)
+	}
+	if len(pkg.RequiredCollections) != 1 || pkg.RequiredCollections[0] != "demo2" {
+		t.Fatalf("Unexpected required collections: %#v", pkg.RequiredCollections)
+	}
+
+	imported, err := app.ImportWorkflowTemplatePackage(pkg)
+	if err != nil {
+		t.Fatalf("Expected template import to succeed, got %v", err)
+	}
+	installed, err := app.InstallWorkflowTemplate(imported.Id, core.WorkflowTemplateInstallOptions{Name: "Installed template"})
+	if err != nil {
+		t.Fatalf("Expected template install to succeed, got %v", err)
+	}
+	if installed.Automation == nil || installed.Automation.Name() != "Installed template" {
+		t.Fatalf("Unexpected installed automation: %#v", installed.Automation)
+	}
+	if installed.Automation.Active() {
+		t.Fatal("Expected installed automation to be inactive by default")
+	}
+}
+
 func TestAutomationMailStepSendsMessageWithRecordAttachments(t *testing.T) {
 	t.Parallel()
 
@@ -1643,6 +1750,58 @@ func TestAutomationWaitWebhookResume(t *testing.T) {
 	resumedRun, err := app.FindAutomationRunById(runs[0].Id)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if resumedRun.Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful resumed run, got %q (%s)", resumedRun.Status(), resumedRun.Error())
+	}
+	results := decodeStepResults(t, resumedRun)
+	if len(results) != 2 {
+		t.Fatalf("Expected 2 step results, got %d", len(results))
+	}
+}
+
+func TestAutomationWaitDelayAutoResume(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"wait.delay","duration":"100ms"},
+		{"type":"condition","path":"trigger.type","op":"eq","value":"manual"}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusWaiting {
+		t.Fatalf("Expected waiting run, got %q", runs[0].Status())
+	}
+
+	var resumedRun *core.AutomationRun
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		run, err := app.FindAutomationRunById(runs[0].Id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if run.Status() == core.AutomationRunStatusSuccess || run.Status() == core.AutomationRunStatusFailed {
+			resumedRun = run
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if resumedRun == nil {
+		t.Fatal("Expected wait.delay run to resume automatically")
 	}
 	if resumedRun.Status() != core.AutomationRunStatusSuccess {
 		t.Fatalf("Expected successful resumed run, got %q (%s)", resumedRun.Status(), resumedRun.Error())

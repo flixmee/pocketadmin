@@ -5,11 +5,17 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/pocketbase/pocketbase/tools/cron"
 	"github.com/pocketbase/pocketbase/tools/hook"
 	"github.com/pocketbase/pocketbase/tools/types"
+)
+
+const (
+	StoreKeyAutomationDelaySchedulerStop = "pbAppAutomationDelaySchedulerStop"
+	automationDelaySchedulerInterval     = time.Second
 )
 
 var (
@@ -109,6 +115,8 @@ func (app *BaseApp) registerAutomationHooks() {
 
 	app.OnBootstrap().Bind(&hook.Handler[*BootstrapEvent]{
 		Func: func(e *BootstrapEvent) error {
+			stopAutomationDelayScheduler(e.App)
+
 			if err := e.Next(); err != nil {
 				return err
 			}
@@ -117,7 +125,17 @@ func (app *BaseApp) registerAutomationHooks() {
 				return fmt.Errorf("failed to load automation registry: %w", err)
 			}
 
+			startAutomationDelayScheduler(e.App)
+
 			return nil
+		},
+		Priority: 100,
+	})
+
+	app.OnTerminate().Bind(&hook.Handler[*TerminateEvent]{
+		Func: func(e *TerminateEvent) error {
+			stopAutomationDelayScheduler(e.App)
+			return e.Next()
 		},
 		Priority: 100,
 	})

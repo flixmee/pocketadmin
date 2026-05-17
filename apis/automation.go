@@ -36,6 +36,9 @@ func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 	subGroup := rg.Group("/automations").Bind(RequireSuperuserAuth())
 	subGroup.GET("", automationsList)
 	subGroup.GET("/schemas", automationSchemas)
+	subGroup.GET("/templates", automationTemplatesList)
+	subGroup.POST("/templates/import", automationTemplateImport)
+	subGroup.POST("/templates/{templateId}/install", automationTemplateInstall)
 	subGroup.GET("/workflow-states", automationWorkflowStatesList)
 	subGroup.POST("/workflow-states/{id}/resume", automationWorkflowStateResume)
 	subGroup.GET("/approvals", automationApprovalsList)
@@ -45,8 +48,10 @@ func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 	subGroup.PATCH("/{id}", automationUpdate)
 	subGroup.DELETE("/{id}", automationDelete)
 	subGroup.POST("/{id}/publish", automationPublish)
+	subGroup.POST("/{id}/export-template", automationTemplateExport)
 	subGroup.POST("/{id}/run", automationRun)
 	subGroup.POST("/{id}/dry-run", automationDryRun)
+	subGroup.POST("/{id}/runs/{runId}/dry-run", automationRunDryRun)
 	subGroup.POST("/{id}/runs/{runId}/rerun", automationRunRerun)
 	subGroup.GET("/{id}/runs", automationRunsList)
 	subGroup.DELETE("/{id}/runs", automationRunsClear)
@@ -72,6 +77,29 @@ func automationPublish(e *core.RequestEvent) error {
 
 	return execAfterSuccessTx(true, e.App, func() error {
 		return e.JSON(http.StatusOK, version)
+	})
+}
+
+func automationTemplateExport(e *core.RequestEvent) error {
+	automation, err := findAutomationForAPI(e.App, e.Request.PathValue("id"))
+	if err != nil {
+		return automationAPIError(e, "export template", err)
+	}
+
+	body := core.WorkflowTemplateExportOptions{}
+	if e.Request.Body != nil {
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Failed to load workflow template export options.", err)
+		}
+	}
+
+	template, err := e.App.ExportAutomationTemplate(automation.Id, body)
+	if err != nil {
+		return e.BadRequestError("Failed to export workflow template.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, template)
 	})
 }
 
@@ -155,6 +183,57 @@ func automationApprovalDecision(e *core.RequestEvent) error {
 func automationSchemas(e *core.RequestEvent) error {
 	return execAfterSuccessTx(true, e.App, func() error {
 		return e.JSON(http.StatusOK, core.AutomationSchemas())
+	})
+}
+
+func automationTemplatesList(e *core.RequestEvent) error {
+	templates := []*core.WorkflowTemplate{}
+	err := e.App.RecordQuery(core.CollectionNameWorkflowTemplates).
+		OrderBy("created DESC").
+		All(&templates)
+	if err != nil {
+		return e.BadRequestError("Failed to load workflow templates.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, templates)
+	})
+}
+
+func automationTemplateImport(e *core.RequestEvent) error {
+	body := core.WorkflowTemplatePackage{}
+	if err := e.BindBody(&body); err != nil {
+		return e.BadRequestError("Failed to load workflow template package.", err)
+	}
+
+	template, err := e.App.ImportWorkflowTemplatePackage(body)
+	if err != nil {
+		return e.BadRequestError("Failed to import workflow template.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, template)
+	})
+}
+
+func automationTemplateInstall(e *core.RequestEvent) error {
+	body := core.WorkflowTemplateInstallOptions{}
+	if e.Request.Body != nil {
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Failed to load workflow template install options.", err)
+		}
+	}
+
+	result, err := e.App.InstallWorkflowTemplate(e.Request.PathValue("templateId"), body)
+	if result != nil && err != nil {
+		return e.BadRequestError("Workflow template dependencies are missing.", err)
+	}
+	if err != nil {
+		return e.BadRequestError("Failed to install workflow template.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, result)
 	})
 }
 
@@ -286,6 +365,33 @@ func automationDryRun(e *core.RequestEvent) error {
 	}
 
 	return e.BadRequestError("Failed to dry-run automation.", nil)
+}
+
+func automationRunDryRun(e *core.RequestEvent) error {
+	automation, err := findAutomationForAPI(e.App, e.Request.PathValue("id"))
+	if err != nil {
+		return automationAPIError(e, "dry-run run", err)
+	}
+
+	run, err := findAutomationRunForAPI(e.App, e.Request.PathValue("runId"))
+	if err != nil {
+		return automationRunAPIError(e, "dry-run", err)
+	}
+	if run.AutomationRef() != automation.Id {
+		return e.NotFoundError("Missing or invalid automation run.", sql.ErrNoRows)
+	}
+
+	result, err := e.App.RunAutomationDryRunFromRun(run.Id)
+	if result != nil {
+		return execAfterSuccessTx(true, e.App, func() error {
+			return e.JSON(http.StatusOK, result)
+		})
+	}
+	if err != nil {
+		return e.BadRequestError("Failed to dry-run automation run.", err)
+	}
+
+	return e.BadRequestError("Failed to dry-run automation run.", nil)
 }
 
 func automationRunRerun(e *core.RequestEvent) error {

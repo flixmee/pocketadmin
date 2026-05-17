@@ -244,6 +244,30 @@ func (app *BaseApp) RunAutomationFromRun(runID string) error {
 	return runAutomation(app, automation, payload)
 }
 
+// RunAutomationDryRunFromRun previews a stored automation run using its saved trigger payload.
+func (app *BaseApp) RunAutomationDryRunFromRun(runID string) (*AutomationDryRunResult, error) {
+	run, err := app.FindAutomationRunById(runID)
+	if err != nil {
+		return nil, err
+	}
+
+	payload, err := decodeAutomationRunPayload(run)
+	if err != nil {
+		return nil, err
+	}
+
+	input := map[string]any{}
+	inputRaw, err := toJSONRaw(payload)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(inputRaw.String()), &input); err != nil {
+		return nil, err
+	}
+
+	return app.RunAutomationDryRun(run.AutomationRef(), input)
+}
+
 // RunAutomationDryRun previews the specified automation without persisting a run
 // or executing side-effecting steps such as HTTP, mail, or record writes.
 func (app *BaseApp) RunAutomationDryRun(automationID string, input map[string]any) (*AutomationDryRunResult, error) {
@@ -689,6 +713,7 @@ func shouldSkipAutomationTriggerCollection(collectionName string) bool {
 		CollectionNameApprovals,
 		CollectionNameAutomationEvents,
 		CollectionNameWorkflowVersions,
+		CollectionNameWorkflowTemplates,
 		CollectionNameLocales,
 		CollectionNameI18nGroups,
 		CollectionNameTranslationJobs:

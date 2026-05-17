@@ -1,5 +1,5 @@
-export function openAutomationDryRunModal(automation) {
-    const modal = automationDryRunModal(automation);
+export function openAutomationDryRunModal(automation, options = {}) {
+    const modal = automationDryRunModal(automation, options);
     if (!modal) {
         return;
     }
@@ -8,7 +8,7 @@ export function openAutomationDryRunModal(automation) {
     app.modals.open(modal);
 }
 
-function automationDryRunModal(automation) {
+function automationDryRunModal(automation, options) {
     if (!automation?.id) {
         app.toasts.error("Save the automation before running a preview.");
         return;
@@ -18,7 +18,7 @@ function automationDryRunModal(automation) {
 
     const data = store({
         isRunning: false,
-        inputText: "{}",
+        inputText: options.input ? stringifyJSON(options.input) : "{}",
         result: null,
         get prettyResult() {
             return stringifyJSON(data.result || {});
@@ -45,7 +45,7 @@ function automationDryRunModal(automation) {
         data.result = null;
 
         try {
-            data.result = await app.pb.send(`/api/automations/${automation.id}/dry-run`, {
+            data.result = await app.pb.send(dryRunEndpoint(automation, options), {
                 method: "POST",
                 body: input,
             });
@@ -66,7 +66,7 @@ function automationDryRunModal(automation) {
         },
         t.header(
             { className: "modal-header" },
-            t.h5(null, "Dry-run preview"),
+            t.h5(null, options.title || "Dry-run preview"),
         ),
         t.div(
             { className: "modal-content" },
@@ -172,6 +172,14 @@ function automationDryRunModal(automation) {
     );
 
     return modal;
+}
+
+function dryRunEndpoint(automation, options) {
+    if (options.runId) {
+        return `/api/automations/${automation.id}/runs/${options.runId}/dry-run`;
+    }
+
+    return `/api/automations/${automation.id}/dry-run`;
 }
 
 function parseJSONObject(raw) {

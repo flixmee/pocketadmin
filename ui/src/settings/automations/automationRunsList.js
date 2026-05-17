@@ -1,3 +1,4 @@
+import { openAutomationDryRunModal } from "./automationDryRunModal";
 import { openAutomationRunPreviewModal } from "./automationRunPreviewModal";
 
 const defaultRunsPageSize = 20;
@@ -100,6 +101,18 @@ function automationRunsModal(automation, settings) {
         }
 
         delete data.isReplaying[run.id];
+    }
+
+    function previewAutomationRun(run) {
+        if (!automation?.id || !run?.id || isRunBusy(run)) {
+            return;
+        }
+
+        openAutomationDryRunModal(automation, {
+            runId: run.id,
+            input: run.input,
+            title: `Replay preview ${run.id}`,
+        });
     }
 
     async function clearAutomationRuns() {
@@ -267,6 +280,16 @@ function automationRunsModal(automation, settings) {
                                         onclick: () => rerunAutomationRun(run),
                                     },
                                     t.i({ className: "ri-repeat-line", ariaHidden: true }),
+                                ),
+                                t.button(
+                                    {
+                                        type: "button",
+                                        className: "btn sm circle secondary transparent",
+                                        disabled: () => isRunBusy(run),
+                                        ariaLabel: app.attrs.tooltip("Dry-run this trigger payload"),
+                                        onclick: () => previewAutomationRun(run),
+                                    },
+                                    t.i({ className: "ri-play-circle-line", ariaHidden: true }),
                                 ),
                                 t.button(
                                     {
