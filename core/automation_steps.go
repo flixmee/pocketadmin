@@ -25,6 +25,10 @@ const (
 	automationConditionOpNotStartsWith = "notStartsWith"
 	automationConditionOpNotEndsWith   = "notEndsWith"
 	automationConditionOpContains      = "contains"
+
+	automationTemplateAppKey            = "__automationApp"
+	automationTemplateRecordModelKey    = "__automationRecordModel"
+	automationTemplateOriginalRecordKey = "__automationOriginalRecordModel"
 )
 
 type automationExecutionContext struct {
@@ -57,13 +61,16 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 				"request":        payload.Request,
 				"i18n":           payload.I18n,
 			},
-			"request":        payload.Request,
-			"i18n":           payload.I18n,
-			"record":         payload.Record,
-			"recordOriginal": payload.RecordOriginal,
-			"automation":     automationTemplateRecordData(automation.Record),
-			"run":            automationTemplateRecordData(run.Record),
-			"steps":          []any{},
+			"request":                           payload.Request,
+			"i18n":                              payload.I18n,
+			"record":                            payload.Record,
+			"recordOriginal":                    payload.RecordOriginal,
+			"automation":                        automationTemplateRecordData(automation.Record),
+			"run":                               automationTemplateRecordData(run.Record),
+			"steps":                             []any{},
+			automationTemplateAppKey:            app,
+			automationTemplateRecordModelKey:    payload.triggerRecord,
+			automationTemplateOriginalRecordKey: payload.originalRecord,
 		},
 	}
 }

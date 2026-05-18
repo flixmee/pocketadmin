@@ -615,6 +615,97 @@ func TestAutomationRunReplayUsesStoredWebhookPayload(t *testing.T) {
 	}
 }
 
+func TestAutomationTemplateResolvesRecordRelationPath(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.FindCollectionByNameOrId("demo5")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var gotBody map[string]any
+	app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(body, &gotBody); err != nil {
+			return nil, err
+		}
+
+		return &http.Response{
+			StatusCode: http.StatusNoContent,
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header:     make(http.Header),
+		}, nil
+	}))
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerRecordUpdate)
+	automation.SetCollectionRef(collection.Id)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"http",
+			"method":"POST",
+			"url":"https://example.com/relation",
+			"body":{
+				"relId":"{{record.rel_one}}",
+				"relTitle":"{{record.rel_one.title}}",
+				"firstRelManyTitle":"{{record.rel_many.0.title}}"
+			}
+		}
+	]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	record, err := app.FindRecordById(collection.Id, "qjeql998mtp1azp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.Set("total", record.GetFloat("total")+1)
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+	if gotBody["relId"] != "i9naidtvr6qsgb4" {
+		t.Fatalf("Expected raw relation id to be preserved, got %#v", gotBody["relId"])
+	}
+	if gotBody["relTitle"] != "test2" {
+		t.Fatalf("Expected single relation title, got %#v", gotBody["relTitle"])
+	}
+	if gotBody["firstRelManyTitle"] != "test1" {
+		t.Fatalf("Expected first multiple relation title, got %#v", gotBody["firstRelManyTitle"])
+	}
+
+	gotBody = nil
+	if err := app.RunAutomationFromRun(runs[0].Id); err != nil {
+		t.Fatalf("Expected replayed relation run to succeed, got %v", err)
+	}
+	replayedRuns := waitForCompletedAutomationRuns(t, app, automation, 2)
+	if replayedRuns[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful replay run, got %q: %s", replayedRuns[0].Status(), replayedRuns[0].Error())
+	}
+	if gotBody["relId"] != "i9naidtvr6qsgb4" {
+		t.Fatalf("Expected replay raw relation id to be preserved, got %#v", gotBody["relId"])
+	}
+	if gotBody["relTitle"] != "test2" {
+		t.Fatalf("Expected replay single relation title, got %#v", gotBody["relTitle"])
+	}
+	if gotBody["firstRelManyTitle"] != "test1" {
+		t.Fatalf("Expected replay first multiple relation title, got %#v", gotBody["firstRelManyTitle"])
+	}
+}
+
 func TestAutomationHTTPStepExecutesRequest(t *testing.T) {
 	t.Parallel()
 

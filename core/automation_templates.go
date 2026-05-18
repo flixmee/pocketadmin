@@ -15,6 +15,7 @@ var (
 	automationTemplatePattern      = regexp.MustCompile(`\{\{\s*(.*?)\s*\}\}`)
 	automationWholeTemplatePattern = regexp.MustCompile(`^\s*\{\{\s*(.*?)\s*\}\}\s*$`)
 	automationTemplateRootPattern  = regexp.MustCompile(`^[a-zA-Z_$][a-zA-Z0-9_$]*`)
+	automationTemplatePathPattern  = regexp.MustCompile(`^[a-zA-Z_$][a-zA-Z0-9_$]*(\.[a-zA-Z_$][a-zA-Z0-9_$]*|\.[0-9]+)*$`)
 )
 
 const automationTemplateExpressionTimeout = 500 * time.Millisecond
@@ -101,8 +102,17 @@ func evalAutomationTemplateExpression(expression string, ctx map[string]any) (an
 		return nil, fmt.Errorf("empty automation template expression")
 	}
 
+	if automationTemplatePathPattern.MatchString(expression) {
+		if resolved, ok := resolveAutomationTemplatePath(ctx, expression); ok {
+			return resolved, nil
+		}
+	}
+
 	vm := goja.New()
 	for key, value := range ctx {
+		if strings.HasPrefix(key, "__") {
+			continue
+		}
 		if err := vm.Set(key, value); err != nil {
 			return nil, fmt.Errorf("failed to initialize automation template root %q: %w", key, err)
 		}
@@ -131,8 +141,20 @@ func resolveAutomationTemplatePath(ctx map[string]any, path string) (any, bool) 
 	}
 
 	parts := strings.Split(path, ".")
-	var current any = ctx
+	if len(parts) > 1 {
+		switch parts[0] {
+		case "record":
+			return resolveAutomationRecordTemplatePath(ctx, automationTemplateRecordModelKey, parts[1:])
+		case "recordOriginal":
+			return resolveAutomationRecordTemplatePath(ctx, automationTemplateOriginalRecordKey, parts[1:])
+		}
+	}
 
+	return resolveAutomationGenericTemplatePath(ctx, parts)
+}
+
+func resolveAutomationGenericTemplatePath(root any, parts []string) (any, bool) {
+	var current any = root
 	for _, part := range parts {
 		switch value := current.(type) {
 		case map[string]any:
@@ -153,6 +175,147 @@ func resolveAutomationTemplatePath(ctx map[string]any, path string) (any, bool) 
 	}
 
 	return current, true
+}
+
+func resolveAutomationRecordTemplatePath(ctx map[string]any, modelKey string, parts []string) (any, bool) {
+	var rootName string
+	switch modelKey {
+	case automationTemplateRecordModelKey:
+		rootName = "record"
+	case automationTemplateOriginalRecordKey:
+		rootName = "recordOriginal"
+	default:
+		return nil, false
+	}
+
+	root, ok := ctx[rootName]
+	if !ok {
+		return nil, false
+	}
+
+	record, _ := ctx[modelKey].(*Record)
+	app, _ := ctx[automationTemplateAppKey].(App)
+	if record == nil && app != nil {
+		record = resolveAutomationTemplateRecordModel(app, ctx, rootName, root)
+	}
+
+	var current any = root
+	currentRecord := record
+
+	for i, part := range parts {
+		if currentRecord != nil && app != nil && i < len(parts)-1 {
+			if relField, ok := currentRecord.Collection().Fields.GetByName(part).(*RelationField); ok {
+				relValue, relRecord, found := resolveAutomationRelationTemplateValue(app, currentRecord, relField)
+				if !found {
+					return nil, false
+				}
+				current = relValue
+				currentRecord = relRecord
+				continue
+			}
+		}
+
+		switch value := current.(type) {
+		case map[string]any:
+			next, ok := value[part]
+			if !ok {
+				return nil, false
+			}
+			current = next
+			currentRecord = nil
+		case []any:
+			index, err := strconv.Atoi(part)
+			if err != nil || index < 0 || index >= len(value) {
+				return nil, false
+			}
+			current = value[index]
+			currentRecord = nil
+		default:
+			return nil, false
+		}
+	}
+
+	return current, true
+}
+
+func resolveAutomationTemplateRecordModel(app App, ctx map[string]any, rootName string, root any) *Record {
+	rootData, ok := root.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	id := toString(rootData["id"])
+	if id == "" {
+		return nil
+	}
+
+	collectionId := ""
+	if trigger, _ := ctx["trigger"].(map[string]any); trigger != nil {
+		collectionId = toString(trigger["collectionId"])
+	}
+	if collectionId == "" {
+		if collectionName := toString(rootData["collectionName"]); collectionName != "" {
+			collectionId = collectionName
+		}
+	}
+	if collectionId == "" {
+		collectionId = toString(rootData["collectionId"])
+	}
+	if collectionId == "" && rootName == "recordOriginal" {
+		if recordData, _ := ctx["record"].(map[string]any); recordData != nil {
+			collectionId = toString(recordData["collectionId"])
+		}
+	}
+	if collectionId == "" {
+		return nil
+	}
+
+	record, err := app.FindRecordById(collectionId, id)
+	if err != nil {
+		return nil
+	}
+
+	return record
+}
+
+func resolveAutomationRelationTemplateValue(app App, record *Record, field *RelationField) (any, *Record, bool) {
+	if field.IsMultiple() {
+		ids := record.GetStringSlice(field.GetName())
+		if len(ids) == 0 {
+			return []any{}, nil, true
+		}
+
+		records, err := app.FindRecordsByIds(field.CollectionId, ids)
+		if err != nil {
+			return nil, nil, false
+		}
+
+		byId := make(map[string]*Record, len(records))
+		for _, relRecord := range records {
+			byId[relRecord.Id] = relRecord
+		}
+
+		result := make([]any, 0, len(ids))
+		for _, id := range ids {
+			if relRecord := byId[id]; relRecord != nil {
+				result = append(result, automationTemplateRecordData(relRecord))
+			}
+		}
+
+		return result, nil, true
+	}
+
+	id := record.GetString(field.GetName())
+	if id == "" {
+		return nil, nil, false
+	}
+
+	records, err := app.FindRecordsByIds(field.CollectionId, []string{id})
+	if err != nil || len(records) == 0 {
+		return nil, nil, false
+	}
+
+	return automationTemplateRecordData(records[0]), records[0], true
 }
 
 func validateAutomationTemplateRoots(value any) error {

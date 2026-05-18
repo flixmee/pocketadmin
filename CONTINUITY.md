@@ -1,5 +1,6 @@
 Goal (incl. success criteria):
 
+- Support automation `{{ }}` templates resolving relation field paths, e.g. `{{ record.user.email }}`, while preserving existing raw relation ID templates.
 - Implement Platform Phases 7-10 from `FUTURE_AUTOMATION_PLATFORM_PLAN.md`.
 - Success: add connector foundation, internal event bus MVP, AI runtime MVP, and workflow versioning/publish flow foundation with focused tests while preserving existing automation behavior.
 
@@ -175,20 +176,25 @@ State:
     - Removed `renderCanvasDropSlot`, drop-slot DOM usage, `dragOverIndex` state, pointer-over slot targeting, and all `.automation-builder-drop-*` CSS.
     - Live drag feedback now relies only on the dragged node placeholder plus overlay preview.
     - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User requested automation templates inside `{{ }}` support relation fields, e.g. `{{ record.user.email }}`.
+    - Inspected automation template rendering and found `record` currently comes from `record.FieldsData()`, leaving relation fields as raw IDs.
+    - Implementing relation-aware simple path resolution for automation templates while preserving `{{ record.relationField }}` raw ID behavior.
+    - Added relation-aware simple path template resolution for `record` and `recordOriginal` using hidden runtime record/app context; hidden context is not exposed to Goja expressions.
+    - Added focused automation runner coverage for raw relation ID preservation and single/multiple relation field access.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationTemplateResolvesRecordRelationPath|TestAutomation'`; passed after approval for Go toolchain/cache downloads.
+    - User reported runtime still failed with `automation template expression "record.user.email" resolved to undefined`.
+    - Root cause: relation path resolution still failed when the live trigger `*Record` model was not attached to template context, causing fallback to Goja against the raw relation ID string.
+    - Added fallback record-model reconstruction from template payload `trigger.collectionId` plus `record.id`, so stored/replayed payloads can still resolve relation fields.
+    - Extended relation template test to replay a stored run, covering payloads without the live trigger record model.
+    - Reran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationTemplateResolvesRecordRelationPath|TestAutomation'`; passed.
   - Now:
-    - User asked why `startAutomationDelayScheduler` keeps running `ResumeExpiredAutomationWorkflowStates` on an interval.
-    - Found root cause: scheduler intentionally created a bootstrap-started `time.NewTicker(automationDelaySchedulerInterval)` and called `ResumeExpiredAutomationWorkflowStates()` immediately plus every second until terminate/rebootstrap, even when no delay wait states existed.
-    - Replaced the always-on ticker with a wakeable one-shot timer scheduler that runs once, sleeps until the next waiting workflow-state expiry, and sleeps indefinitely when no expiring states exist.
-    - Added `wakeAutomationDelayScheduler` and call it after saving a `wait.delay` state so new delays reschedule the timer immediately.
-    - Added `FindNextWaitingWorkflowStateExpiry` helper to locate the next pending delay expiry.
-    - Fixed scheduler stop lifecycle to wait for the scheduler goroutine to exit before bootstrap reset/terminate continues, avoiding cleanup races with DB queries.
-    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationWaitDelayAutoResume|TestAutomationWorkflowState|TestAutomationWaitWebhookResume'`; passed.
-    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./apis -run 'TestAutomation'`; passed.
+    - Ready for user review.
   - Next:
-    - User can retest delay waits; scheduler should no longer poll every second while idle.
+    - Optional: extend relation traversal to complex JavaScript expressions if needed.
 
 Open questions (UNCONFIRMED if needed):
 
+- UNCONFIRMED: whether complex JavaScript expressions such as `{{ record.user.email || "" }}` need relation traversal, or whether simple path templates are sufficient.
 - Automatic `wait.delay` resume scheduler now uses a one-shot timer until the next known expiry; it falls back to 1 second only after resume/lookup errors or already-due retry cases.
 - UNCONFIRMED: external connector provider credentials and real AI provider integration. For Platform Phases 7-10, use non-OAuth connector primitives and fake/injected AI provider seams by default.
 - UNCONFIRMED: full draft/published workflow editing lifecycle beyond snapshot publishing.
@@ -197,6 +203,9 @@ Open questions (UNCONFIRMED if needed):
 
 Working set (files/ids/commands):
 
+- `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_templates.go`
+- `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_steps.go`
+- `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_runner_test.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_workflow_state_model.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_workflow_runtime.go`
