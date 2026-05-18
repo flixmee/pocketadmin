@@ -40,12 +40,14 @@ export function mailStepForm(propsArg = {}) {
             t.div(
                 { className: "field" },
                 t.label({ htmlFor: `${props.step.__id}_subject` }, "Subject"),
-                t.input({
+                app.components.automationInput({
                     id: `${props.step.__id}_subject`,
-                    type: "text",
+                    singleLine: true,
                     placeholder: "Order {{record.id}} is ready",
                     value: () => props.step.subject,
-                    oninput: (e) => (props.step.subject = e.target.value),
+                    triggerType: () => props.triggerType,
+                    triggerCollectionRef: () => props.triggerCollectionRef,
+                    oninput: (value) => (props.step.subject = value),
                 }),
             ),
         ),
@@ -54,12 +56,14 @@ export function mailStepForm(propsArg = {}) {
             t.div(
                 { className: "field" },
                 t.label({ htmlFor: `${props.step.__id}_text` }, "Text body"),
-                t.textarea({
+                app.components.automationInput({
                     id: `${props.step.__id}_text`,
-                    rows: 8,
+                    className: "pre-wrap",
                     placeholder: "Your order {{record.id}} is ready.",
                     value: () => props.step.text,
-                    oninput: (e) => (props.step.text = e.target.value),
+                    triggerType: () => props.triggerType,
+                    triggerCollectionRef: () => props.triggerCollectionRef,
+                    oninput: (value) => (props.step.text = value),
                 }),
             ),
         ),
@@ -68,12 +72,15 @@ export function mailStepForm(propsArg = {}) {
             t.div(
                 { className: "field" },
                 t.label({ htmlFor: `${props.step.__id}_html` }, "HTML body"),
-                t.textarea({
+                app.components.automationInput({
                     id: `${props.step.__id}_html`,
-                    rows: 8,
+                    className: "txt-code pre-wrap",
+                    language: "html",
                     placeholder: "<p>Your order <strong>{{record.id}}</strong> is ready.</p>",
                     value: () => props.step.html,
-                    oninput: (e) => (props.step.html = e.target.value),
+                    triggerType: () => props.triggerType,
+                    triggerCollectionRef: () => props.triggerCollectionRef,
+                    oninput: (value) => (props.step.html = value),
                 }),
             ),
         ),
@@ -165,12 +172,14 @@ export function mailStepForm(propsArg = {}) {
             t.div(
                 { className: "field" },
                 t.label({ htmlFor: `${props.step.__id}_${key}` }, label),
-                t.textarea({
+                app.components.automationInput({
                     id: `${props.step.__id}_${key}`,
-                    rows: 3,
+                    className: "pre-wrap",
                     placeholder,
                     value: () => props.step[key + "Text"],
-                    oninput: (e) => (props.step[key + "Text"] = e.target.value),
+                    triggerType: () => props.triggerType,
+                    triggerCollectionRef: () => props.triggerCollectionRef,
+                    oninput: (value) => (props.step[key + "Text"] = value),
                 }),
             ),
             t.div(

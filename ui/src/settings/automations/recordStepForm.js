@@ -2,6 +2,8 @@ export function recordStepForm(propsArg = {}) {
     const props = store({
         step: null,
         error: null,
+        triggerType: "",
+        triggerCollectionRef: "",
     });
 
     const watchers = app.utils.extendStore(props, propsArg);
@@ -68,12 +70,14 @@ export function recordStepForm(propsArg = {}) {
                 t.div(
                     { className: "field" },
                     t.label({ htmlFor: `${props.step.__id}_id` }, "Record ID"),
-                    t.input({
+                    app.components.automationInput({
                         id: `${props.step.__id}_id`,
-                        type: "text",
+                        singleLine: true,
                         placeholder: "{{record.id}}",
                         value: () => props.step.id,
-                        oninput: (e) => (props.step.id = e.target.value),
+                        triggerType: () => props.triggerType,
+                        triggerCollectionRef: () => props.triggerCollectionRef,
+                        oninput: (value) => (props.step.id = value),
                     }),
                 ),
             ),
@@ -85,12 +89,14 @@ export function recordStepForm(propsArg = {}) {
                 t.div(
                     { className: "field" },
                     t.label({ htmlFor: `${props.step.__id}_filter` }, "Filter"),
-                    t.input({
+                    app.components.automationInput({
                         id: `${props.step.__id}_filter`,
-                        type: "text",
+                        singleLine: true,
                         placeholder: `status = "pending"`,
                         value: () => props.step.filter,
-                        oninput: (e) => (props.step.filter = e.target.value),
+                        triggerType: () => props.triggerType,
+                        triggerCollectionRef: () => props.triggerCollectionRef,
+                        oninput: (value) => (props.step.filter = value),
                     }),
                 ),
             ),
@@ -102,11 +108,13 @@ export function recordStepForm(propsArg = {}) {
                 t.div(
                     { className: "field" },
                     t.label({ htmlFor: `${props.step.__id}_data` }, "Data JSON"),
-                    app.components.codeEditor({
+                    app.components.automationInput({
                         id: `${props.step.__id}_data`,
                         className: "txt-code",
                         language: "js",
                         value: () => props.step.dataText,
+                        triggerType: () => props.triggerType,
+                        triggerCollectionRef: () => props.triggerCollectionRef,
                         placeholder: () => defaultPlaceholder(props.step.collection),
                         oninput: (value) => (props.step.dataText = value),
                     }),

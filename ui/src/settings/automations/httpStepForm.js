@@ -10,6 +10,8 @@ export function httpStepForm(propsArg = {}) {
     const props = store({
         step: null,
         error: null,
+        triggerType: "",
+        triggerCollectionRef: "",
     });
 
     const watchers = app.utils.extendStore(props, propsArg);
@@ -41,12 +43,14 @@ export function httpStepForm(propsArg = {}) {
             t.div(
                 { className: "field" },
                 t.label({ htmlFor: `${props.step.__id}_url` }, "URL"),
-                t.input({
+                app.components.automationInput({
                     id: `${props.step.__id}_url`,
-                    type: "url",
+                    singleLine: true,
                     placeholder: "https://example.com/hooks",
                     value: () => props.step.url,
-                    oninput: (e) => (props.step.url = e.target.value),
+                    triggerType: () => props.triggerType,
+                    triggerCollectionRef: () => props.triggerCollectionRef,
+                    oninput: (value) => (props.step.url = value),
                 }),
             ),
         ),
@@ -72,11 +76,13 @@ export function httpStepForm(propsArg = {}) {
             t.div(
                 { className: "field" },
                 t.label({ htmlFor: `${props.step.__id}_headers` }, "Headers JSON"),
-                app.components.codeEditor({
+                app.components.automationInput({
                     id: `${props.step.__id}_headers`,
                     className: "txt-code",
                     language: "js",
                     value: () => props.step.headersText,
+                    triggerType: () => props.triggerType,
+                    triggerCollectionRef: () => props.triggerCollectionRef,
                     placeholder: `{\n  "X-Automation": "{{trigger.type}}"\n}`,
                     oninput: (value) => (props.step.headersText = value),
                 }),
@@ -88,11 +94,13 @@ export function httpStepForm(propsArg = {}) {
             t.div(
                 { className: "field" },
                 t.label({ htmlFor: `${props.step.__id}_body` }, "Body"),
-                app.components.codeEditor({
+                app.components.automationInput({
                     id: `${props.step.__id}_body`,
                     className: "txt-code",
                     language: "js",
                     value: () => props.step.bodyText,
+                    triggerType: () => props.triggerType,
+                    triggerCollectionRef: () => props.triggerCollectionRef,
                     placeholder: `{\n  "automation": "{{automation.name}}",\n  "recordId": "{{record.id}}"\n}`,
                     oninput: (value) => (props.step.bodyText = value),
                 }),

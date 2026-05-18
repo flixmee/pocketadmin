@@ -14,6 +14,8 @@ export function conditionStepForm(propsArg = {}) {
     const props = store({
         step: null,
         error: null,
+        triggerType: "",
+        triggerCollectionRef: "",
     });
 
     const watchers = app.utils.extendStore(props, propsArg);
@@ -75,11 +77,13 @@ export function conditionStepForm(propsArg = {}) {
                 t.div(
                     { className: "field" },
                     t.label({ htmlFor: `${props.step.__id}_value` }, "Expected value"),
-                    app.components.codeEditor({
+                    app.components.automationInput({
                         id: `${props.step.__id}_value`,
                         className: "txt-code",
                         language: "js",
                         value: () => props.step.valueText,
+                        triggerType: () => props.triggerType,
+                        triggerCollectionRef: () => props.triggerCollectionRef,
                         placeholder: props.step.op === "in"
                             ? `["pending", "active"]`
                             : `approved`,

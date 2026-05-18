@@ -2,6 +2,8 @@ export function responseStepForm(propsArg = {}) {
     const props = store({
         step: null,
         error: null,
+        triggerType: "",
+        triggerCollectionRef: "",
     });
 
     const watchers = app.utils.extendStore(props, propsArg);
@@ -35,11 +37,13 @@ export function responseStepForm(propsArg = {}) {
             t.div(
                 { className: "field" },
                 t.label({ htmlFor: `${props.step.__id}_headers` }, "Headers JSON"),
-                app.components.codeEditor({
+                app.components.automationInput({
                     id: `${props.step.__id}_headers`,
                     className: "txt-code",
                     language: "js",
                     value: () => props.step.headersText,
+                    triggerType: () => props.triggerType,
+                    triggerCollectionRef: () => props.triggerCollectionRef,
                     placeholder: `{\n  "X-Automation": "{{automation.name}}"\n}`,
                     oninput: (value) => (props.step.headersText = value),
                 }),
@@ -51,11 +55,13 @@ export function responseStepForm(propsArg = {}) {
             t.div(
                 { className: "field" },
                 t.label({ htmlFor: `${props.step.__id}_body` }, "Body"),
-                app.components.codeEditor({
+                app.components.automationInput({
                     id: `${props.step.__id}_body`,
                     className: "txt-code",
                     language: "js",
                     value: () => props.step.bodyText,
+                    triggerType: () => props.triggerType,
+                    triggerCollectionRef: () => props.triggerCollectionRef,
                     placeholder: `{\n  "ok": true,\n  "result": "{{prevStep.output.id}}"\n}`,
                     oninput: (value) => (props.step.bodyText = value),
                 }),

@@ -1,5 +1,6 @@
 Goal (incl. success criteria):
 
+- Add an admin UI `AutomationInput` based on `CodeEditor` that autocompletes supported automation data mappings when the user types `{{`.
 - Support automation `{{ }}` templates resolving relation field paths, e.g. `{{ record.user.email }}`, while preserving existing raw relation ID templates.
 - Implement Platform Phases 7-10 from `FUTURE_AUTOMATION_PLATFORM_PLAN.md`.
 - Success: add connector foundation, internal event bus MVP, AI runtime MVP, and workflow versioning/publish flow foundation with focused tests while preserving existing automation behavior.
@@ -187,10 +188,15 @@ State:
     - Added fallback record-model reconstruction from template payload `trigger.collectionId` plus `record.id`, so stored/replayed payloads can still resolve relation fields.
     - Extended relation template test to replay a stored run, covering payloads without the live trigger record model.
     - Reran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationTemplateResolvesRecordRelationPath|TestAutomation'`; passed.
+    - User requested cloning `CodeEditor` to `AutomationInput` with data mapping autocomplete on `{{`.
+    - Added `app.components.automationInput` backed by `codeEditor`, with shared automation mapping token generation/autocomplete for trigger, record/relation fields, webhook, i18n, run, and step tokens.
+    - Reused the shared mapping token groups in the automation builder Data mapping palette.
+    - Replaced automation template-capable fields in condition, HTTP, mail, record, response, wait, AI, and capability template inputs with `automationInput`.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
   - Now:
     - Ready for user review.
   - Next:
-    - Optional: extend relation traversal to complex JavaScript expressions if needed.
+    - Optional: manually verify the autocomplete dropdown in the browser for representative trigger types.
 
 Open questions (UNCONFIRMED if needed):
 
@@ -203,6 +209,15 @@ Open questions (UNCONFIRMED if needed):
 
 Working set (files/ids/commands):
 
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/base/codeEditor.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/base/automationInput.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/stepEditor.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/conditionStepForm.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/httpStepForm.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/mailStepForm.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/recordStepForm.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/responseStepForm.js`
+- `cd ui && npm run build`
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_templates.go`
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_steps.go`
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_runner_test.go`

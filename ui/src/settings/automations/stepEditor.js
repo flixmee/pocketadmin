@@ -29,37 +29,6 @@ const stepTypeOptions = [
     { value: "ai.summarize", label: "AI summarize", icon: "ri-file-reduce-line", category: "ai" },
 ];
 
-const mappingTokenGroups = [
-    {
-        title: "Trigger",
-        tokens: ["{{trigger.type}}", "{{automation.id}}", "{{run.id}}"],
-    },
-    {
-        title: "Record",
-        tokens: ["{{record.id}}", "{{record.*}}", "{{recordOriginal.*}}"],
-        triggerTypes: ["record.create", "record.update", "record.delete"],
-    },
-    {
-        title: "Webhook",
-        tokens: ["{{request.method}}", "{{request.headers.*}}", "{{request.query.*}}", "{{request.body.*}}"],
-        triggerTypes: ["webhook"],
-    },
-    {
-        title: "i18n",
-        tokens: ["{{i18n.locale}}", "{{i18n.sourceLocale}}", "{{i18n.jobId}}"],
-        triggerTypes: [
-            "i18n.translation_missing",
-            "i18n.locale_published",
-            "i18n.translation_updated",
-            "i18n.ai_translation_finished",
-        ],
-    },
-    {
-        title: "Steps",
-        tokens: ["{{prevStep.output.*}}", "{{steps[0].output.*}}"],
-    },
-];
-
 const valueTypeOptions = [
     { value: "text", label: "Text" },
     { value: "number", label: "Number" },
@@ -564,9 +533,9 @@ export function buildAutomationStepsPayload(steps) {
 function renderStepForm(step, error, context = {}) {
     switch (step.type) {
         case "condition":
-            return conditionStepForm({ step, error });
+            return conditionStepForm({ step, error, ...context });
         case "http":
-            return httpStepForm({ step, error });
+            return httpStepForm({ step, error, ...context });
         case "mail.send":
             return mailStepForm({
                 step,
@@ -577,9 +546,9 @@ function renderStepForm(step, error, context = {}) {
         case "record.create":
         case "record.update":
         case "record.delete":
-            return recordStepForm({ step, error });
+            return recordStepForm({ step, error, ...context });
         case "response":
-            return responseStepForm({ step, error });
+            return responseStepForm({ step, error, ...context });
         case "capability":
         case "wait.delay":
         case "wait.webhook":
@@ -895,8 +864,6 @@ function renderActionPalette(options) {
                     ),
                 ),
         ),
-        renderMappingPalette(options.triggerType),
-        renderCapabilityBrowser(options),
     );
 }
 
@@ -1169,7 +1136,7 @@ function renderDrawerMappingTab(options) {
             { className: "txt-sm txt-hint m-b-sm" },
             "Copy a token and paste it into any text or JSON field in the Settings tab.",
         ),
-        renderMappingPalette(options.triggerType),
+        renderMappingPalette(options),
     );
 }
 
@@ -1218,7 +1185,7 @@ function renderServerStepError(stepError) {
     );
 }
 
-function renderMappingPalette(triggerType) {
+function renderMappingPalette(options) {
     return t.div(
         { className: "automation-builder-card" },
         t.div({ className: "txt-bold m-b-xs" }, "Data mapping"),
@@ -1231,8 +1198,11 @@ function renderMappingPalette(triggerType) {
             () =>
                 t.div(
                     { className: "automation-token-groups-inner" },
-                    ...mappingTokenGroups
-                        .filter((group) => !group.triggerTypes || group.triggerTypes.includes(triggerType))
+                    ...app.utils.automationMappingTokenGroups({
+                        triggerType: () => options.triggerType,
+                        triggerCollectionRef: () => options.triggerCollectionRef,
+                        steps: () => options.steps,
+                    })
                         .map((group) =>
                             t.div(
                                 { className: "automation-token-group" },
@@ -1631,14 +1601,14 @@ function genericJSONStepForm({ step, context = {} }) {
             return waitDelayStepForm(step);
         case "wait.webhook":
         case "wait.event":
-            return waitKeyStepForm(step);
+            return waitKeyStepForm(step, context);
         case "wait.approval":
-            return waitApprovalStepForm(step);
+            return waitApprovalStepForm(step, context);
         case "ai.extract":
         case "ai.classify":
         case "ai.generate":
         case "ai.summarize":
-            return aiStepForm(step);
+            return aiStepForm(step, context);
         default:
             return t.div({ className: "txt-sm txt-danger" }, `Unsupported step type "${step.type}".`);
     }
@@ -1697,6 +1667,7 @@ function capabilityStepForm(step, context) {
         objectRowsEditor({
             title: "Input fields",
             emptyText: "No input fields configured.",
+            context,
             rows: () => step.inputRows,
             add: () => step.inputRows.push(createConfigRow()),
             remove: (index) => step.inputRows.splice(index, 1),
@@ -1744,7 +1715,7 @@ function waitDelayStepForm(step) {
     );
 }
 
-function waitKeyStepForm(step) {
+function waitKeyStepForm(step, context) {
     const label = step.type === "wait.event" ? "Event name" : "Webhook key";
     const placeholder = step.type === "wait.event" ? "invoice.paid" : "payment_completed";
     return t.div(
@@ -1752,19 +1723,21 @@ function waitKeyStepForm(step) {
         t.div(
             { className: "field" },
             t.label({ htmlFor: `${step.__id}_key` }, label),
-            t.input({
+            app.components.automationInput({
                 id: `${step.__id}_key`,
-                type: "text",
+                singleLine: true,
                 placeholder,
                 value: () => step.key,
-                oninput: (e) => (step.key = e.target.value),
+                triggerType: () => context.triggerType,
+                triggerCollectionRef: () => context.triggerCollectionRef,
+                oninput: (value) => (step.key = value),
             }),
         ),
         generatedConfigPreview(step),
     );
 }
 
-function waitApprovalStepForm(step) {
+function waitApprovalStepForm(step, context) {
     return t.div(
         { className: "automation-graphical-config" },
         t.div(
@@ -1774,12 +1747,14 @@ function waitApprovalStepForm(step) {
                 t.div(
                     { className: "field" },
                     t.label({ htmlFor: `${step.__id}_assignee` }, "Assignee"),
-                    t.input({
+                    app.components.automationInput({
                         id: `${step.__id}_assignee`,
-                        type: "text",
+                        singleLine: true,
                         placeholder: "user@example.com",
                         value: () => step.assignee,
-                        oninput: (e) => (step.assignee = e.target.value),
+                        triggerType: () => context.triggerType,
+                        triggerCollectionRef: () => context.triggerCollectionRef,
+                        oninput: (value) => (step.assignee = value),
                     }),
                 ),
             ),
@@ -1788,12 +1763,14 @@ function waitApprovalStepForm(step) {
                 t.div(
                     { className: "field" },
                     t.label({ htmlFor: `${step.__id}_role` }, "Role"),
-                    t.input({
+                    app.components.automationInput({
                         id: `${step.__id}_role`,
-                        type: "text",
+                        singleLine: true,
                         placeholder: "manager",
                         value: () => step.role,
-                        oninput: (e) => (step.role = e.target.value),
+                        triggerType: () => context.triggerType,
+                        triggerCollectionRef: () => context.triggerCollectionRef,
+                        oninput: (value) => (step.role = value),
                     }),
                 ),
             ),
@@ -1802,12 +1779,14 @@ function waitApprovalStepForm(step) {
                 t.div(
                     { className: "field" },
                     t.label({ htmlFor: `${step.__id}_approval_comment` }, "Approval note"),
-                    t.input({
+                    app.components.automationInput({
                         id: `${step.__id}_approval_comment`,
-                        type: "text",
+                        singleLine: true,
                         placeholder: "Optional note for approvers",
                         value: () => step.comment,
-                        oninput: (e) => (step.comment = e.target.value),
+                        triggerType: () => context.triggerType,
+                        triggerCollectionRef: () => context.triggerCollectionRef,
+                        oninput: (value) => (step.comment = value),
                     }),
                 ),
             ),
@@ -1816,7 +1795,7 @@ function waitApprovalStepForm(step) {
     );
 }
 
-function aiStepForm(step) {
+function aiStepForm(step, context) {
     return t.div(
         { className: "automation-graphical-config" },
         t.div(
@@ -1840,12 +1819,14 @@ function aiStepForm(step) {
                 t.div(
                     { className: "field" },
                     t.label({ htmlFor: `${step.__id}_input` }, "Input"),
-                    t.input({
+                    app.components.automationInput({
                         id: `${step.__id}_input`,
-                        type: "text",
+                        singleLine: true,
                         placeholder: "{{record.description}}",
                         value: () => step.inputText,
-                        oninput: (e) => (step.inputText = e.target.value),
+                        triggerType: () => context.triggerType,
+                        triggerCollectionRef: () => context.triggerCollectionRef,
+                        oninput: (value) => (step.inputText = value),
                     }),
                 ),
             ),
@@ -1925,7 +1906,7 @@ function objectRowsEditor(options) {
                             options: valueTypeOptions,
                             onchange: (selected) => (row.valueType = selected?.[0]?.value || "text"),
                         }),
-                        valueControl(row),
+                        valueControl(row, options.context),
                         removeRowButton(() => options.remove(index)),
                     )
                 ),
@@ -2052,7 +2033,7 @@ function schemaRowsEditor(step) {
     );
 }
 
-function valueControl(row) {
+function valueControl(row, context = {}) {
     if (row.valueType === "boolean") {
         return app.components.select({
             value: () => row.valueText,
@@ -2064,9 +2045,20 @@ function valueControl(row) {
         });
     }
 
+    if (row.valueType === "template") {
+        return app.components.automationInput({
+            singleLine: true,
+            placeholder: "{{record.field}}",
+            value: () => row.valueText,
+            triggerType: () => context.triggerType,
+            triggerCollectionRef: () => context.triggerCollectionRef,
+            oninput: (value) => (row.valueText = value),
+        });
+    }
+
     return t.input({
         type: row.valueType === "number" ? "number" : "text",
-        placeholder: row.valueType === "template" ? "{{record.field}}" : "Value",
+        placeholder: "Value",
         value: () => row.valueText,
         oninput: (e) => (row.valueText = e.target.value),
     });
