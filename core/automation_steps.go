@@ -20,6 +20,8 @@ const (
 	automationConditionOpNeq           = "neq"
 	automationConditionOpIn            = "in"
 	automationConditionOpExists        = "exists"
+	automationConditionOpEmpty         = "empty"
+	automationConditionOpNotEmpty      = "notEmpty"
 	automationConditionOpStartsWith    = "startsWith"
 	automationConditionOpEndsWith      = "endsWith"
 	automationConditionOpNotStartsWith = "notStartsWith"
@@ -260,6 +262,22 @@ func executeAutomationConditionStep(ctx *automationExecutionContext, step map[st
 		}
 
 		output["matched"] = false
+		return automationStepStatusStopped, output, nil
+	case automationConditionOpEmpty:
+		matched := !found || isEmptyAutomationValue(actual)
+		output["matched"] = matched
+		if matched {
+			return automationStepStatusSuccess, output, nil
+		}
+
+		return automationStepStatusStopped, output, nil
+	case automationConditionOpNotEmpty:
+		matched := found && !isEmptyAutomationValue(actual)
+		output["matched"] = matched
+		if matched {
+			return automationStepStatusSuccess, output, nil
+		}
+
 		return automationStepStatusStopped, output, nil
 	case automationConditionOpEq,
 		automationConditionOpNeq,

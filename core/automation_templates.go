@@ -109,7 +109,7 @@ func evalAutomationTemplateExpression(expression string, ctx map[string]any) (an
 	}
 
 	vm := goja.New()
-	for key, value := range ctx {
+	for key, value := range automationTemplateJSContext(ctx) {
 		if strings.HasPrefix(key, "__") {
 			continue
 		}
@@ -132,6 +132,65 @@ func evalAutomationTemplateExpression(expression string, ctx map[string]any) (an
 	}
 
 	return result.Export(), nil
+}
+
+func automationTemplateJSContext(ctx map[string]any) map[string]any {
+	result := make(map[string]any, len(ctx))
+	for key, value := range ctx {
+		result[key] = value
+	}
+
+	app, _ := ctx[automationTemplateAppKey].(App)
+	if app == nil {
+		return result
+	}
+
+	if record := automationTemplateContextRecord(app, ctx, "record", automationTemplateRecordModelKey); record != nil {
+		result["record"] = automationTemplateRecordDataWithRelations(app, record)
+	}
+	if record := automationTemplateContextRecord(app, ctx, "recordOriginal", automationTemplateOriginalRecordKey); record != nil {
+		result["recordOriginal"] = automationTemplateRecordDataWithRelations(app, record)
+	}
+
+	return result
+}
+
+func automationTemplateContextRecord(app App, ctx map[string]any, rootName string, modelKey string) *Record {
+	if record, _ := ctx[modelKey].(*Record); record != nil {
+		return record
+	}
+
+	root, ok := ctx[rootName]
+	if !ok {
+		return nil
+	}
+
+	return resolveAutomationTemplateRecordModel(app, ctx, rootName, root)
+}
+
+func automationTemplateRecordDataWithRelations(app App, record *Record) map[string]any {
+	data := automationTemplateRecordData(record)
+	if app == nil || record == nil || record.Collection() == nil {
+		return data
+	}
+
+	for _, field := range record.Collection().Fields {
+		relField, ok := field.(*RelationField)
+		if !ok {
+			continue
+		}
+
+		relValue, _, found := resolveAutomationRelationTemplateValue(app, record, relField)
+		if found {
+			data[relField.GetName()] = relValue
+		} else if relField.IsMultiple() {
+			data[relField.GetName()] = []any{}
+		} else {
+			data[relField.GetName()] = nil
+		}
+	}
+
+	return data
 }
 
 func resolveAutomationTemplatePath(ctx map[string]any, path string) (any, bool) {
@@ -369,6 +428,25 @@ func isNilAutomationValue(value any) bool {
 	switch rv.Kind() {
 	case reflect.Interface, reflect.Pointer, reflect.Map, reflect.Slice:
 		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
+func isEmptyAutomationValue(value any) bool {
+	if isNilAutomationValue(value) {
+		return true
+	}
+
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v) == ""
+	}
+
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
+		return rv.Len() == 0
 	default:
 		return false
 	}

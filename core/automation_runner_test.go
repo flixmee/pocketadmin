@@ -436,6 +436,120 @@ func TestAutomationConditionStringOperators(t *testing.T) {
 	}
 }
 
+func TestAutomationConditionEmptyOperators(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []struct {
+		name               string
+		op                 string
+		path               string
+		recordText         string
+		expectHTTPCalls    int
+		expectedStepStatus string
+	}{
+		{
+			name:               "empty string matches empty",
+			op:                 "empty",
+			path:               "record.text",
+			recordText:         "",
+			expectHTTPCalls:    1,
+			expectedStepStatus: "success",
+		},
+		{
+			name:               "missing path matches empty",
+			op:                 "empty",
+			path:               "record.missing",
+			recordText:         "phase_condition_title",
+			expectHTTPCalls:    1,
+			expectedStepStatus: "success",
+		},
+		{
+			name:               "non-empty string does not match empty",
+			op:                 "empty",
+			path:               "record.text",
+			recordText:         "phase_condition_title",
+			expectHTTPCalls:    0,
+			expectedStepStatus: "stopped",
+		},
+		{
+			name:               "non-empty string matches notEmpty",
+			op:                 "notEmpty",
+			path:               "record.text",
+			recordText:         "phase_condition_title",
+			expectHTTPCalls:    1,
+			expectedStepStatus: "success",
+		},
+		{
+			name:               "empty string does not match notEmpty",
+			op:                 "notEmpty",
+			path:               "record.text",
+			recordText:         "",
+			expectHTTPCalls:    0,
+			expectedStepStatus: "stopped",
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+
+			app, _ := tests.NewTestApp()
+			defer app.Cleanup()
+
+			httpCalls := 0
+			app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+				httpCalls++
+				return &http.Response{
+					StatusCode: http.StatusNoContent,
+					Body:       io.NopCloser(strings.NewReader("")),
+					Header:     make(http.Header),
+				}, nil
+			}))
+
+			collection, err := app.FindCollectionByNameOrId("demo1")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			automation := core.NewAutomation(app)
+			populateValidAutomation(automation)
+			automation.SetActive(true)
+			automation.SetTriggerType(core.AutomationTriggerRecordCreate)
+			automation.SetCollectionRef(collection.Id)
+			automation.SetSteps(mustParseJSONRaw(t, fmt.Sprintf(`[
+				{"type":"condition","path":%q,"op":%q},
+				{"type":"http","url":"https://example.com/hooks"}
+			]`, scenario.path, scenario.op)))
+
+			if err := app.Save(automation); err != nil {
+				t.Fatal(err)
+			}
+
+			record := core.NewRecord(collection)
+			record.Set("text", scenario.recordText)
+			if err := app.Save(record); err != nil {
+				t.Fatal(err)
+			}
+
+			runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+			if runs[0].Status() != core.AutomationRunStatusSuccess {
+				t.Fatalf("Expected successful run, got %q", runs[0].Status())
+			}
+			if httpCalls != scenario.expectHTTPCalls {
+				t.Fatalf("Expected %d HTTP calls, got %d", scenario.expectHTTPCalls, httpCalls)
+			}
+
+			results := decodeStepResults(t, runs[0])
+			if len(results) == 0 {
+				t.Fatal("Expected at least one step result")
+			}
+			if results[0]["status"] != scenario.expectedStepStatus {
+				t.Fatalf("Expected first step status %q, got %v", scenario.expectedStepStatus, results[0]["status"])
+			}
+		})
+	}
+}
+
 func TestAutomationWebhookRunExposesRequestTemplateData(t *testing.T) {
 	t.Parallel()
 
@@ -656,7 +770,8 @@ func TestAutomationTemplateResolvesRecordRelationPath(t *testing.T) {
 			"body":{
 				"relId":"{{record.rel_one}}",
 				"relTitle":"{{record.rel_one.title}}",
-				"firstRelManyTitle":"{{record.rel_many.0.title}}"
+				"firstRelManyTitle":"{{record.rel_many.0.title}}",
+				"relManyTitles":"{{(record.rel_many.map(function(rel) { return rel.title })).join(\",\")}}"
 			}
 		}
 	]`))
@@ -686,6 +801,9 @@ func TestAutomationTemplateResolvesRecordRelationPath(t *testing.T) {
 	if gotBody["firstRelManyTitle"] != "test1" {
 		t.Fatalf("Expected first multiple relation title, got %#v", gotBody["firstRelManyTitle"])
 	}
+	if gotBody["relManyTitles"] != "test1,test2" {
+		t.Fatalf("Expected mapped multiple relation titles, got %#v", gotBody["relManyTitles"])
+	}
 
 	gotBody = nil
 	if err := app.RunAutomationFromRun(runs[0].Id); err != nil {
@@ -703,6 +821,9 @@ func TestAutomationTemplateResolvesRecordRelationPath(t *testing.T) {
 	}
 	if gotBody["firstRelManyTitle"] != "test1" {
 		t.Fatalf("Expected replay first multiple relation title, got %#v", gotBody["firstRelManyTitle"])
+	}
+	if gotBody["relManyTitles"] != "test1,test2" {
+		t.Fatalf("Expected replay mapped multiple relation titles, got %#v", gotBody["relManyTitles"])
 	}
 }
 
@@ -1258,6 +1379,56 @@ func TestAutomationMailStepSendsMessageWithRecordAttachments(t *testing.T) {
 	}
 	if attachmentContent["terms.txt"] != "file two content" {
 		t.Fatalf("Expected terms attachment content, got %#v", attachmentContent)
+	}
+}
+
+func TestAutomationMailStepSupportsMappedRelationRecipients(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerRecordCreate)
+	automation.SetCollectionRef(collection.Id)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"mail.send",
+			"to":["{{(record.rel_many.map(function(u) { return u.email })).join(\"","\")}}"],
+			"subject":"Mapped relation recipients",
+			"text":"Hello"
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("text", "mapped_relation_recipients")
+	record.Set("rel_many", []string{"4q1xlclmfloku33", "oap640cot4yru2s"})
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+
+	message := app.TestMailer.LastMessage()
+	if len(message.To) != 2 {
+		t.Fatalf("Expected 2 recipients, got %d", len(message.To))
+	}
+	if message.To[0].Address != "test@example.com" || message.To[1].Address != "test2@example.com" {
+		t.Fatalf("Unexpected recipients: %#v", message.To)
 	}
 }
 

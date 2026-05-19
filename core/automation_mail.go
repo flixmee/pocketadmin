@@ -90,6 +90,7 @@ func renderAutomationMailAddresses(ctx *automationExecutionContext, raw any, fie
 		return nil, nil
 	}
 
+	raw = mergeAutomationMailTemplateFragments(raw)
 	rendered, err := renderAutomationTemplateValue(raw, ctx.TemplateData)
 	if err != nil {
 		return nil, err
@@ -110,6 +111,70 @@ func renderAutomationMailAddresses(ctx *automationExecutionContext, raw any, fie
 	}
 
 	return result, nil
+}
+
+func mergeAutomationMailTemplateFragments(raw any) any {
+	items, ok := raw.([]any)
+	if !ok {
+		if stringItems, ok := raw.([]string); ok {
+			items = make([]any, len(stringItems))
+			for i, item := range stringItems {
+				items[i] = item
+			}
+			ok = true
+		}
+	}
+	if !ok {
+		return raw
+	}
+
+	result := make([]any, 0, len(items))
+	var buffer strings.Builder
+	depth := 0
+
+	flush := func() {
+		if buffer.Len() > 0 {
+			result = append(result, buffer.String())
+			buffer.Reset()
+		}
+		depth = 0
+	}
+
+	for _, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			if depth > 0 {
+				flush()
+			}
+			result = append(result, item)
+			continue
+		}
+
+		if depth > 0 {
+			buffer.WriteString(",")
+			buffer.WriteString(text)
+			depth += strings.Count(text, "{{") - strings.Count(text, "}}")
+			if depth <= 0 {
+				flush()
+			}
+			continue
+		}
+
+		delta := strings.Count(text, "{{") - strings.Count(text, "}}")
+		if delta > 0 {
+			buffer.WriteString(text)
+			depth = delta
+			continue
+		}
+
+		result = append(result, item)
+	}
+
+	if buffer.Len() > 0 {
+		result = append(result, buffer.String())
+	}
+
+	return result
 }
 
 func renderAutomationMailString(ctx *automationExecutionContext, raw any) (string, error) {

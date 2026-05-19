@@ -471,6 +471,8 @@ func validateAutomationConditionStep(step map[string]any) error {
 		automationConditionOpNeq,
 		automationConditionOpIn,
 		automationConditionOpExists,
+		automationConditionOpEmpty,
+		automationConditionOpNotEmpty,
 		automationConditionOpStartsWith,
 		automationConditionOpEndsWith,
 		automationConditionOpNotStartsWith,
@@ -480,7 +482,7 @@ func validateAutomationConditionStep(step map[string]any) error {
 		return err
 	}
 
-	if op != automationConditionOpExists {
+	if op != automationConditionOpExists && op != automationConditionOpEmpty && op != automationConditionOpNotEmpty {
 		if _, ok := step["value"]; !ok {
 			return validation.NewError("validation_invalid_automation_condition", "Condition step requires a value.")
 		}

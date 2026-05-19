@@ -241,6 +241,8 @@ func conditionStepSchema() AutomationSchema {
 				automationConditionOpNeq,
 				automationConditionOpIn,
 				automationConditionOpExists,
+				automationConditionOpEmpty,
+				automationConditionOpNotEmpty,
 				automationConditionOpStartsWith,
 				automationConditionOpEndsWith,
 				automationConditionOpNotStartsWith,

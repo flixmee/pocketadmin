@@ -1,5 +1,7 @@
 Goal (incl. success criteria):
 
+- Add `empty` and `notEmpty` automation condition operators to the admin UI and backend runtime/validation/schema.
+- Support `.map(...)` JavaScript expressions over multiple relation fields in automation `{{ }}` templates, e.g. `{{(record.users.map(function(u) { return u.email })).join(",")}}`.
 - Add an admin UI `AutomationInput` based on `CodeEditor` that autocompletes supported automation data mappings when the user types `{{`.
 - Support automation `{{ }}` templates resolving relation field paths, e.g. `{{ record.user.email }}`, while preserving existing raw relation ID templates.
 - Implement Platform Phases 7-10 from `FUTURE_AUTOMATION_PLATFORM_PLAN.md`.
@@ -193,10 +195,29 @@ State:
     - Reused the shared mapping token groups in the automation builder Data mapping palette.
     - Replaced automation template-capable fields in condition, HTTP, mail, record, response, wait, AI, and capability template inputs with `automationInput`.
     - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User requested `.map(...)` support when a relation field is multiple, e.g. `{{(record.users.map(function(u) { return u.email })).join(",")}}`.
+    - Updating Goja template evaluation context so non-simple JS expressions receive relation-expanded record objects, while simple path templates still preserve raw relation ID behavior.
+    - Added a JS-only template context that expands direct `record` and `recordOriginal` relation fields into related record objects/arrays before passing them to Goja.
+    - Preserved simple path fast-path behavior so templates like `{{ record.rel_one }}` still return raw relation IDs.
+    - Added regression coverage for `{{(record.rel_many.map(function(rel) { return rel.title })).join(",")}}`, including stored-run replay.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationTemplateResolvesRecordRelationPath|TestAutomation'`; passed.
+    - User reported mail send failed with `invalid to address "{{(record.users.map(function(u) { return u.email })).join(\""`, indicating recipient splitting broke a template expression containing `join(",")`.
+    - Fixing mail recipient rendering to recombine split template fragments before evaluating address templates.
+    - Added mail recipient fragment merging for arrays split around commas inside `{{ ... }}` templates, including `[]any` and `[]string` step values.
+    - Added regression coverage for a `mail.send` step using split `{{(record.rel_many.map(function(u) { return u.email })).join(",")}}` recipients.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationMailStepSupportsMappedRelationRecipients|TestAutomationMailStepSendsMessageWithRecordAttachments|TestAutomationTemplateResolvesRecordRelationPath|TestAutomation'`; passed.
+    - User requested adding `empty` and `is not empty` options to `conditionOpOptions`.
+    - Adding `empty`/`notEmpty` through condition UI, payload builder, backend validator/schema, and runtime.
+    - Added `Is empty` and `Is not empty` condition options in `conditionStepForm.js`, hiding the expected value input for those operators.
+    - Added `empty`/`notEmpty` backend constants, schema entries, validation rules, and runtime matching for nil, missing, blank string, empty arrays/slices/maps.
+    - Updated automation step payload building/client validation so `empty` and `notEmpty` do not require `value`.
+    - Added focused condition tests for empty string, missing path, non-empty string, and notEmpty behavior.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationConditionEmptyOperators|TestAutomationConditionStringOperators|TestAutomationSchemas|TestAutomation'`; passed.
+    - Attempted `cd ui && npm run build`; failed because local `ui/node_modules/.bin/dprint` is missing (`sh: dprint: command not found`).
   - Now:
     - Ready for user review.
   - Next:
-    - Optional: manually verify the autocomplete dropdown in the browser for representative trigger types.
+    - Optional: install UI dependencies and rerun `cd ui && npm run build`.
 
 Open questions (UNCONFIRMED if needed):
 

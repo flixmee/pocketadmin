@@ -2239,7 +2239,7 @@ function buildConditionPayload(step, index) {
         op: step.op || "exists",
     };
 
-    if (payload.op !== "exists") {
+    if (!["exists", "empty", "notEmpty"].includes(payload.op)) {
         const value = parseLooseValue(step.valueText);
         if (payload.op === "in" && !Array.isArray(value)) {
             throw new Error(
@@ -2477,7 +2477,7 @@ function clientValidateStep(step) {
             if (!step.path?.trim()) {
                 messages.push("Condition path is required.");
             }
-            if (step.op !== "exists" && !step.valueText?.trim()) {
+            if (!["exists", "empty", "notEmpty"].includes(step.op) && !step.valueText?.trim()) {
                 messages.push("Condition value is required for this operator.");
             }
             break;

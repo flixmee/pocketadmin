@@ -1,5 +1,7 @@
 const conditionOpOptions = [
     { value: "exists", label: "Exists" },
+    { value: "empty", label: "Is empty" },
+    { value: "notEmpty", label: "Is not empty" },
     { value: "eq", label: "Equals" },
     { value: "neq", label: "Does not equal" },
     { value: "startsWith", label: "Starts with" },
@@ -71,7 +73,7 @@ export function conditionStepForm(propsArg = {}) {
             ),
         ),
         app.components.slide(
-            () => props.step.op !== "exists",
+            () => !["exists", "empty", "notEmpty"].includes(props.step.op),
             t.div(
                 { className: "col-lg-12" },
                 t.div(
