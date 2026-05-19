@@ -1,5 +1,6 @@
 Goal (incl. success criteria):
 
+- Redesign the automation condition builder form into a unified polished card with logic badges, inline condition rows, subtle dividers, footer add actions, and a separate hint panel.
 - Allow automation condition steps to contain multiple condition rows combined with `and` / `or`.
 - Add `empty` and `notEmpty` automation condition operators to the admin UI and backend runtime/validation/schema.
 - Support `.map(...)` JavaScript expressions over multiple relation fields in automation `{{ }}` templates, e.g. `{{(record.users.map(function(u) { return u.email })).join(",")}}`.
@@ -224,10 +225,15 @@ State:
     - Added focused runtime tests for multi-condition AND/OR behavior.
     - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationConditionMultipleRules|TestAutomationConditionEmptyOperators|TestAutomationConditionStringOperators|TestAutomationSchemas|TestAutomation'`; passed.
     - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
+    - User requested redesigning the condition builder for clarity and polish: one unified card, filter icon header, logic pill badges, between-row dividers, inline row layout, mono field input, cleaner operator select, subtle delete button, dashed footer add buttons, and a separate hint box with code chips.
+    - Reworked `conditionStepForm.js` into a unified Conditions card with IF/AND/OR badges, row dividers, inline inputs, match selector, and footer actions for Add AND condition / Add OR group.
+    - Added condition-builder CSS for the card, badges, dividers, inline row grid, hover-only red delete button, dashed add buttons, responsive layout, and hint code chips.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
+    - Reran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationConditionMultipleRules|TestAutomationConditionEmptyOperators|TestAutomationConditionStringOperators|TestAutomationSchemas|TestAutomation'`; passed from cache.
   - Now:
     - Ready for user review.
   - Next:
-    - Optional: manually verify add/remove condition rows in the automation step modal.
+    - Optional: manually verify the redesigned condition card in the automation step modal.
 
 Open questions (UNCONFIRMED if needed):
 
