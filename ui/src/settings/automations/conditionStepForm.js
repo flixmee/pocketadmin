@@ -12,6 +12,13 @@ const conditionOpOptions = [
     { value: "in", label: "In list" },
 ];
 
+const conditionMatchOptions = [
+    { value: "and", label: "All conditions" },
+    { value: "or", label: "Any condition" },
+];
+
+const conditionOpsWithoutValue = ["exists", "empty", "notEmpty"];
+
 export function conditionStepForm(propsArg = {}) {
     const props = store({
         step: null,
@@ -22,6 +29,32 @@ export function conditionStepForm(propsArg = {}) {
 
     const watchers = app.utils.extendStore(props, propsArg);
 
+    if (!Array.isArray(props.step.conditions) || !props.step.conditions.length) {
+        props.step.conditions = [{
+            __id: app.utils.randomString(),
+            path: props.step.path || "",
+            op: props.step.op || "exists",
+            valueText: props.step.valueText || "",
+        }];
+    }
+
+    function addCondition() {
+        props.step.conditions.push({
+            __id: app.utils.randomString(),
+            path: "",
+            op: "exists",
+            valueText: "",
+        });
+    }
+
+    function removeCondition(index) {
+        if (props.step.conditions.length <= 1) {
+            return;
+        }
+
+        props.step.conditions.splice(index, 1);
+    }
+
     return t.div(
         {
             className: "grid automation-condition-step-form flex-start",
@@ -30,20 +63,87 @@ export function conditionStepForm(propsArg = {}) {
             },
         },
         t.div(
-            { className: "col-md-8" },
+            { className: "col-md-8", hidden: () => props.step.conditions.length < 2 },
             t.div(
                 { className: "field" },
-                t.label({ htmlFor: `${props.step.__id}_path` }, "Data path"),
-                t.input({
-                    id: `${props.step.__id}_path`,
-                    type: "text",
-                    placeholder: "record.status",
-                    value: () => props.step.path,
-                    oninput: (e) => (props.step.path = e.target.value),
+                t.label({ htmlFor: `${props.step.__id}_match` }, "Match"),
+                app.components.select({
+                    id: `${props.step.__id}_match`,
+                    value: () => props.step.match || "and",
+                    options: conditionMatchOptions,
+                    onchange: (selected) => {
+                        props.step.match = selected?.[0]?.value || "and";
+                    },
                 }),
             ),
+        ),
+        t.div(
+            { className: "col-md-4" },
+            t.button(
+                {
+                    type: "button",
+                    className: "btn secondary m-t-20",
+                    onclick: addCondition,
+                },
+                t.i({ className: "ri-add-line", ariaHidden: true }),
+                t.span({ className: "txt" }, "Add condition"),
+            ),
+        ),
+        t.div(
+            { className: "col-lg-12 automation-config-section" },
+            t.div({ className: "txt-bold m-b-xs" }, "Conditions"),
+            () =>
+                t.div(
+                    { className: "automation-config-rows" },
+                    ...props.step.conditions.map((condition, index) =>
+                        t.div(
+                            { className: "automation-config-row schema" },
+                            t.div(
+                                { className: "txt-sm txt-hint txt-center" },
+                                () => index === 0 ? "If" : (props.step.match || "and").toUpperCase(),
+                            ),
+                            t.input({
+                                type: "text",
+                                placeholder: "record.status",
+                                value: () => condition.path,
+                                oninput: (e) => (condition.path = e.target.value),
+                            }),
+                            app.components.select({
+                                value: () => condition.op,
+                                options: conditionOpOptions,
+                                onchange: (selected) => {
+                                    condition.op = selected?.[0]?.value || "exists";
+                                },
+                            }),
+                            app.components.slide(
+                                () => !conditionOpsWithoutValue.includes(condition.op),
+                                app.components.automationInput({
+                                    className: "txt-code",
+                                    language: "js",
+                                    value: () => condition.valueText,
+                                    triggerType: () => props.triggerType,
+                                    triggerCollectionRef: () => props.triggerCollectionRef,
+                                    placeholder: condition.op === "in"
+                                        ? `["pending", "active"]`
+                                        : `approved`,
+                                    oninput: (value) => (condition.valueText = value),
+                                }),
+                            ),
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "btn sm secondary transparent circle",
+                                    disabled: () => props.step.conditions.length <= 1,
+                                    ariaLabel: app.attrs.tooltip("Remove condition"),
+                                    onclick: () => removeCondition(index),
+                                },
+                                t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                            ),
+                        )
+                    ),
+                ),
             t.div(
-                { className: "field-help" },
+                { className: "field-help m-t-xs" },
                 "Use trigger/template paths such as ",
                 t.code(null, "trigger.type"),
                 ", ",
@@ -55,50 +155,6 @@ export function conditionStepForm(propsArg = {}) {
                 " or ",
                 t.code(null, "prevStep.output.id"),
                 ".",
-            ),
-        ),
-        t.div(
-            { className: "col-md-4" },
-            t.div(
-                { className: "field" },
-                t.label({ htmlFor: `${props.step.__id}_op` }, "Operator"),
-                app.components.select({
-                    id: `${props.step.__id}_op`,
-                    value: () => props.step.op,
-                    options: conditionOpOptions,
-                    onchange: (selected) => {
-                        props.step.op = selected?.[0]?.value || "exists";
-                    },
-                }),
-            ),
-        ),
-        app.components.slide(
-            () => !["exists", "empty", "notEmpty"].includes(props.step.op),
-            t.div(
-                { className: "col-lg-12" },
-                t.div(
-                    { className: "field" },
-                    t.label({ htmlFor: `${props.step.__id}_value` }, "Expected value"),
-                    app.components.automationInput({
-                        id: `${props.step.__id}_value`,
-                        className: "txt-code",
-                        language: "js",
-                        value: () => props.step.valueText,
-                        triggerType: () => props.triggerType,
-                        triggerCollectionRef: () => props.triggerCollectionRef,
-                        placeholder: props.step.op === "in"
-                            ? `["pending", "active"]`
-                            : `approved`,
-                        oninput: (value) => (props.step.valueText = value),
-                    }),
-                ),
-                t.div(
-                    { className: "field-help" },
-                    () =>
-                        props.step.op === "in"
-                            ? "Use a JSON array or a template that resolves to an array."
-                            : "Strings may be entered directly; JSON values such as true, 5, or objects are also supported.",
-                ),
             ),
         ),
     );

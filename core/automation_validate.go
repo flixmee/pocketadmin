@@ -457,6 +457,44 @@ func validateAutomationCapabilityStep(app App, automationRecord *Record, step ma
 }
 
 func validateAutomationConditionStep(step map[string]any) error {
+	if conditionsRaw, ok := step["conditions"]; ok {
+		conditions := []map[string]any{}
+		switch list := conditionsRaw.(type) {
+		case []any:
+			for _, rawCondition := range list {
+				condition, ok := rawCondition.(map[string]any)
+				if !ok {
+					return validation.NewError("validation_invalid_automation_condition", "Condition entries must be objects.")
+				}
+				conditions = append(conditions, condition)
+			}
+		case []map[string]any:
+			conditions = append(conditions, list...)
+		default:
+			return validation.NewError("validation_invalid_automation_condition", "Condition step requires at least one condition.")
+		}
+		if len(conditions) == 0 {
+			return validation.NewError("validation_invalid_automation_condition", "Condition step requires at least one condition.")
+		}
+
+		match := strings.TrimSpace(toString(step["match"]))
+		if match != "" && match != "and" && match != "or" {
+			return validation.NewError("validation_invalid_automation_condition", `Condition match must be either "and" or "or".`)
+		}
+
+		for _, condition := range conditions {
+			if err := validateAutomationConditionRule(condition); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	return validateAutomationConditionRule(step)
+}
+
+func validateAutomationConditionRule(step map[string]any) error {
 	path := strings.TrimSpace(toString(step["path"]))
 	if path == "" {
 		path = strings.TrimSpace(toString(step["field"]))

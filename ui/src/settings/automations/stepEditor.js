@@ -1436,6 +1436,8 @@ function createEditorStep(type, rawStep = {}) {
                 path: toString(rawStep.path || rawStep.field),
                 op: toString(rawStep.op) || "exists",
                 valueText: stringifyLooseValue(rawStep.value),
+                match: ["and", "or"].includes(rawStep.match) ? rawStep.match : "and",
+                conditions: normalizeConditionRows(rawStep),
             };
         case "http":
             return {
@@ -2228,29 +2230,48 @@ function generatedStepConfig(step) {
 }
 
 function buildConditionPayload(step, index) {
-    const path = step.path.trim();
-    if (!path) {
-        throw new Error(`Step ${index + 1}: condition path is required.`);
+    const conditions = normalizeConditionRows(step);
+    if (!conditions.length) {
+        throw new Error(`Step ${index + 1}: at least one condition is required.`);
     }
 
-    const payload = {
-        type: "condition",
-        path,
-        op: step.op || "exists",
-    };
-
-    if (!["exists", "empty", "notEmpty"].includes(payload.op)) {
-        const value = parseLooseValue(step.valueText);
-        if (payload.op === "in" && !Array.isArray(value)) {
-            throw new Error(
-                `Step ${index + 1}: "in" condition value must be a JSON array or a template-rendered array.`,
-            );
+    const payloadConditions = conditions.map((condition, conditionIndex) => {
+        const path = condition.path.trim();
+        if (!path) {
+            throw new Error(`Step ${index + 1}: condition ${conditionIndex + 1} path is required.`);
         }
 
-        payload.value = value;
+        const op = condition.op || "exists";
+        const payloadCondition = { path, op };
+
+        if (!["exists", "empty", "notEmpty"].includes(op)) {
+            const value = parseLooseValue(condition.valueText);
+            if (op === "in" && !Array.isArray(value)) {
+                throw new Error(
+                    `Step ${index + 1}: condition ${
+                        conditionIndex + 1
+                    } "in" value must be a JSON array or a template-rendered array.`,
+                );
+            }
+
+            payloadCondition.value = value;
+        }
+
+        return payloadCondition;
+    });
+
+    if (payloadConditions.length === 1) {
+        return {
+            type: "condition",
+            ...payloadConditions[0],
+        };
     }
 
-    return payload;
+    return {
+        type: "condition",
+        match: step.match === "or" ? "or" : "and",
+        conditions: payloadConditions,
+    };
 }
 
 function buildHTTPPayload(step, index) {
@@ -2432,7 +2453,13 @@ function buildResponsePayload(step, index) {
 function summarizeStep(step) {
     switch (step.type) {
         case "condition":
-            return `${step.path || "Condition path"} • ${step.op || "exists"}`;
+            if (step.conditions?.length > 1) {
+                return `${step.conditions.length} conditions • ${(step.match || "and").toUpperCase()}`;
+            }
+
+            return `${step.conditions?.[0]?.path || step.path || "Condition path"} • ${
+                step.conditions?.[0]?.op || step.op || "exists"
+            }`;
         case "http":
             return `${(step.method || "GET").toUpperCase()} ${step.url || "HTTP request"}`;
         case "mail.send":
@@ -2474,11 +2501,16 @@ function clientValidateStep(step) {
 
     switch (step.type) {
         case "condition":
-            if (!step.path?.trim()) {
-                messages.push("Condition path is required.");
-            }
-            if (!["exists", "empty", "notEmpty"].includes(step.op) && !step.valueText?.trim()) {
-                messages.push("Condition value is required for this operator.");
+            normalizeConditionRows(step).forEach((condition, index) => {
+                if (!condition.path?.trim()) {
+                    messages.push(`Condition ${index + 1} path is required.`);
+                }
+                if (!["exists", "empty", "notEmpty"].includes(condition.op) && !condition.valueText?.trim()) {
+                    messages.push(`Condition ${index + 1} value is required for this operator.`);
+                }
+            });
+            if (step.match && !["and", "or"].includes(step.match)) {
+                messages.push("Condition match must be AND or OR.");
             }
             break;
         case "http":
@@ -2791,6 +2823,23 @@ function stringifyLooseValue(value) {
 
 function stringifyStringArray(value) {
     return normalizeStringArray(value).join("\n");
+}
+
+function createConditionRow(raw = {}) {
+    return {
+        __id: raw.__id || app.utils.randomString(),
+        path: toString(raw.path || raw.field),
+        op: toString(raw.op) || "exists",
+        valueText: stringifyLooseValue(raw.value),
+    };
+}
+
+function normalizeConditionRows(rawStep = {}) {
+    if (Array.isArray(rawStep.conditions) && rawStep.conditions.length) {
+        return rawStep.conditions.map((condition) => createConditionRow(condition));
+    }
+
+    return [createConditionRow(rawStep)];
 }
 
 function normalizeStringArray(value) {

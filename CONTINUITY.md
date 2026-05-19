@@ -1,5 +1,6 @@
 Goal (incl. success criteria):
 
+- Allow automation condition steps to contain multiple condition rows combined with `and` / `or`.
 - Add `empty` and `notEmpty` automation condition operators to the admin UI and backend runtime/validation/schema.
 - Support `.map(...)` JavaScript expressions over multiple relation fields in automation `{{ }}` templates, e.g. `{{(record.users.map(function(u) { return u.email })).join(",")}}`.
 - Add an admin UI `AutomationInput` based on `CodeEditor` that autocompletes supported automation data mappings when the user types `{{`.
@@ -214,10 +215,19 @@ State:
     - Added focused condition tests for empty string, missing path, non-empty string, and notEmpty behavior.
     - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationConditionEmptyOperators|TestAutomationConditionStringOperators|TestAutomationSchemas|TestAutomation'`; passed.
     - Attempted `cd ui && npm run build`; failed because local `ui/node_modules/.bin/dprint` is missing (`sh: dprint: command not found`).
+    - User requested allowing condition steps to add more conditions with `or` / `and`.
+    - Adding a multi-condition step payload/UI while preserving legacy single-condition steps.
+    - Added condition row editor UI with Add condition, Remove condition, and Match selector (`All conditions` / `Any condition`) in `conditionStepForm.js`.
+    - Updated automation editor normalization, summaries, client validation, and payload building for legacy single-condition and new `match` + `conditions` payloads.
+    - Updated backend condition runtime to evaluate multiple condition rules with `and` / `or`, while preserving old single-condition output behavior.
+    - Updated backend validation and schema discovery for `conditions` and `match`.
+    - Added focused runtime tests for multi-condition AND/OR behavior.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationConditionMultipleRules|TestAutomationConditionEmptyOperators|TestAutomationConditionStringOperators|TestAutomationSchemas|TestAutomation'`; passed.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
   - Now:
     - Ready for user review.
   - Next:
-    - Optional: install UI dependencies and rerun `cd ui && npm run build`.
+    - Optional: manually verify add/remove condition rows in the automation step modal.
 
 Open questions (UNCONFIRMED if needed):
 

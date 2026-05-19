@@ -235,12 +235,82 @@ func previewAutomationStep(ctx *automationExecutionContext, step map[string]any)
 }
 
 func executeAutomationConditionStep(ctx *automationExecutionContext, step map[string]any) (string, any, error) {
+	conditionRules := automationConditionRules(step)
+	if len(conditionRules) > 1 {
+		matchMode := strings.TrimSpace(toString(step["match"]))
+		if matchMode != "or" {
+			matchMode = "and"
+		}
+
+		output := map[string]any{
+			"match":      matchMode,
+			"conditions": []any{},
+		}
+
+		matched := matchMode == "and"
+		conditionOutputs := make([]any, 0, len(conditionRules))
+		for _, condition := range conditionRules {
+			conditionOutput, conditionMatched, err := evaluateAutomationConditionRule(ctx, condition)
+			if err != nil {
+				return automationStepStatusFailed, output, err
+			}
+
+			conditionOutputs = append(conditionOutputs, conditionOutput)
+			if matchMode == "or" {
+				matched = matched || conditionMatched
+			} else {
+				matched = matched && conditionMatched
+			}
+		}
+
+		output["conditions"] = conditionOutputs
+		output["matched"] = matched
+		if matched {
+			return automationStepStatusSuccess, output, nil
+		}
+
+		return automationStepStatusStopped, output, nil
+	}
+
+	output, matched, err := evaluateAutomationConditionRule(ctx, conditionRules[0])
+	if err != nil {
+		return automationStepStatusFailed, output, err
+	}
+	if matched {
+		return automationStepStatusSuccess, output, nil
+	}
+
+	return automationStepStatusStopped, output, nil
+}
+
+func automationConditionRules(step map[string]any) []map[string]any {
+	result := []map[string]any{}
+
+	if conditions, ok := step["conditions"].([]any); ok {
+		for _, item := range conditions {
+			if condition, ok := item.(map[string]any); ok {
+				result = append(result, condition)
+			}
+		}
+	}
+	if conditions, ok := step["conditions"].([]map[string]any); ok {
+		result = append(result, conditions...)
+	}
+
+	if len(result) == 0 {
+		result = append(result, step)
+	}
+
+	return result
+}
+
+func evaluateAutomationConditionRule(ctx *automationExecutionContext, step map[string]any) (map[string]any, bool, error) {
 	path := strings.TrimSpace(toString(step["path"]))
 	if path == "" {
 		path = strings.TrimSpace(toString(step["field"]))
 	}
 	if path == "" {
-		return automationStepStatusFailed, nil, fmt.Errorf("condition step is missing path")
+		return nil, false, fmt.Errorf("condition step is missing path")
 	}
 
 	op := strings.TrimSpace(toString(step["op"]))
@@ -258,27 +328,19 @@ func executeAutomationConditionStep(ctx *automationExecutionContext, step map[st
 	case automationConditionOpExists:
 		if found && !isNilAutomationValue(actual) {
 			output["matched"] = true
-			return automationStepStatusSuccess, output, nil
+			return output, true, nil
 		}
 
 		output["matched"] = false
-		return automationStepStatusStopped, output, nil
+		return output, false, nil
 	case automationConditionOpEmpty:
 		matched := !found || isEmptyAutomationValue(actual)
 		output["matched"] = matched
-		if matched {
-			return automationStepStatusSuccess, output, nil
-		}
-
-		return automationStepStatusStopped, output, nil
+		return output, matched, nil
 	case automationConditionOpNotEmpty:
 		matched := found && !isEmptyAutomationValue(actual)
 		output["matched"] = matched
-		if matched {
-			return automationStepStatusSuccess, output, nil
-		}
-
-		return automationStepStatusStopped, output, nil
+		return output, matched, nil
 	case automationConditionOpEq,
 		automationConditionOpNeq,
 		automationConditionOpIn,
@@ -289,12 +351,12 @@ func executeAutomationConditionStep(ctx *automationExecutionContext, step map[st
 		automationConditionOpContains:
 		if !found {
 			output["matched"] = false
-			return automationStepStatusStopped, output, nil
+			return output, false, nil
 		}
 
 		expected, err := renderAutomationTemplateValue(step["value"], ctx.TemplateData)
 		if err != nil {
-			return automationStepStatusFailed, output, err
+			return output, false, err
 		}
 		output["expected"] = expected
 
@@ -319,13 +381,9 @@ func executeAutomationConditionStep(ctx *automationExecutionContext, step map[st
 		}
 		output["matched"] = matched
 
-		if matched {
-			return automationStepStatusSuccess, output, nil
-		}
-
-		return automationStepStatusStopped, output, nil
+		return output, matched, nil
 	default:
-		return automationStepStatusFailed, output, fmt.Errorf("unsupported condition operator %q", op)
+		return output, false, fmt.Errorf("unsupported condition operator %q", op)
 	}
 }
 

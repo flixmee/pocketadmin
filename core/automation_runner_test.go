@@ -550,6 +550,104 @@ func TestAutomationConditionEmptyOperators(t *testing.T) {
 	}
 }
 
+func TestAutomationConditionMultipleRules(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []struct {
+		name            string
+		match           string
+		firstValue      string
+		secondValue     string
+		expectHTTPCalls int
+	}{
+		{
+			name:            "and requires all conditions",
+			match:           "and",
+			firstValue:      "phase_multi_condition",
+			secondValue:     "missing",
+			expectHTTPCalls: 0,
+		},
+		{
+			name:            "or requires any condition",
+			match:           "or",
+			firstValue:      "phase_multi_condition",
+			secondValue:     "missing",
+			expectHTTPCalls: 1,
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+
+			app, _ := tests.NewTestApp()
+			defer app.Cleanup()
+
+			httpCalls := 0
+			app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+				httpCalls++
+				return &http.Response{
+					StatusCode: http.StatusNoContent,
+					Body:       io.NopCloser(strings.NewReader("")),
+					Header:     make(http.Header),
+				}, nil
+			}))
+
+			collection, err := app.FindCollectionByNameOrId("demo2")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			automation := core.NewAutomation(app)
+			populateValidAutomation(automation)
+			automation.SetActive(true)
+			automation.SetTriggerType(core.AutomationTriggerRecordCreate)
+			automation.SetCollectionRef(collection.Id)
+			automation.SetSteps(mustParseJSONRaw(t, fmt.Sprintf(`[
+				{
+					"type":"condition",
+					"match":%q,
+					"conditions":[
+						{"path":"record.title","op":"eq","value":%q},
+						{"path":"record.title","op":"eq","value":%q}
+					]
+				},
+				{"type":"http","url":"https://example.com/hooks"}
+			]`, scenario.match, scenario.firstValue, scenario.secondValue)))
+
+			if err := app.Save(automation); err != nil {
+				t.Fatal(err)
+			}
+
+			record := core.NewRecord(collection)
+			record.Set("title", "phase_multi_condition")
+			if err := app.Save(record); err != nil {
+				t.Fatal(err)
+			}
+
+			runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+			if runs[0].Status() != core.AutomationRunStatusSuccess {
+				t.Fatalf("Expected successful run, got %q", runs[0].Status())
+			}
+			if httpCalls != scenario.expectHTTPCalls {
+				t.Fatalf("Expected %d HTTP calls, got %d", scenario.expectHTTPCalls, httpCalls)
+			}
+
+			results := decodeStepResults(t, runs[0])
+			if len(results) == 0 {
+				t.Fatal("Expected at least one step result")
+			}
+			output, _ := results[0]["output"].(map[string]any)
+			if output["match"] != scenario.match {
+				t.Fatalf("Expected condition match mode %q, got %#v", scenario.match, output["match"])
+			}
+			if len(output["conditions"].([]any)) != 2 {
+				t.Fatalf("Expected 2 condition outputs, got %#v", output["conditions"])
+			}
+		})
+	}
+}
+
 func TestAutomationWebhookRunExposesRequestTemplateData(t *testing.T) {
 	t.Parallel()
 
