@@ -572,8 +572,42 @@
     background: var(--surfaceColor);
 }
 
-.automation-condition-path-input {
+.automation-condition-path-input,
+.automation-condition-row .input.code-editor {
+    width: 100%;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--surfaceAlt2Color);
+    border-radius: 6px;
+    background: var(--surfaceColor);
+    color: var(--surfaceTxtColor);
     font-family: var(--monospaceFontFamily);
+    font-size: 13px;
+    line-height: 1;
+    outline: 0;
+    transition: border-color 200ms ease, box-shadow 200ms ease, background 200ms ease;
+}
+
+.automation-condition-path-input::placeholder {
+    color: var(--surfaceTxtDisabledColor);
+    font-family: var(--monospaceFontFamily);
+    opacity: 0.7;
+}
+.automation-condition-path-input:hover {
+    border-color: var(--surfaceAlt4Color);
+}
+
+.automation-condition-path-input:focus,
+.automation-condition-path-input:focus-visible {
+    border-color: var(--primaryColor);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primaryColor) 12%, transparent);
+    background: var(--surfaceColor);
+}
+
+.automation-condition-row .input.code-editor,
+.automation-condition-row .highlight-overlay {
+    display: flex;
+    align-items: center;
 }
 
 .automation-condition-op-select {

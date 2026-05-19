@@ -101,12 +101,6 @@ export function conditionStepForm(propsArg = {}) {
                 t.div(
                     { className: "automation-condition-rows" },
                     ...props.step.conditions.map((condition, index) => [
-                        index > 0
-                            ? t.div(
-                                { className: "automation-condition-divider" },
-                                t.span(null, () => props.step.match || "and"),
-                            )
-                            : null,
                         t.div(
                             { className: "automation-condition-row" },
                             t.div(
