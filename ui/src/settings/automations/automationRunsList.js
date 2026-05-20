@@ -38,8 +38,16 @@ function automationRunsModal(automation, settings) {
         hasMore: false,
     });
 
+    let realtimeUnsubscribe = null;
+    let realtimeRefreshTimer = null;
+    let pendingRealtimeRefresh = false;
+    let isClosed = false;
+
     async function loadRuns(reset = false) {
         if (data.isLoading || data.isLoadingMore) {
+            if (reset) {
+                pendingRealtimeRefresh = true;
+            }
             return;
         }
 
@@ -78,6 +86,59 @@ function automationRunsModal(automation, settings) {
         data.isLoading = false;
         data.isLoadingMore = false;
         data.isRefreshing = false;
+
+        if (pendingRealtimeRefresh && !isClosed) {
+            pendingRealtimeRefresh = false;
+            queueRealtimeRefresh();
+        }
+    }
+
+    function shouldRefreshForRealtimeEvent(event) {
+        const record = event?.record || {};
+
+        return !record.automationRef || record.automationRef === automation.id;
+    }
+
+    function queueRealtimeRefresh(event) {
+        if (isClosed || !shouldRefreshForRealtimeEvent(event)) {
+            return;
+        }
+
+        clearTimeout(realtimeRefreshTimer);
+        realtimeRefreshTimer = setTimeout(() => {
+            loadRuns(true);
+        }, 150);
+    }
+
+    async function subscribeToRealtime() {
+        try {
+            const unsubscribe = await app.pb.collection("_automationRuns").subscribe("*", queueRealtimeRefresh);
+            if (isClosed) {
+                unsubscribe().catch((err) => {
+                    console.warn("Failed to unsubscribe from automation runs realtime updates:", err);
+                });
+                return;
+            }
+
+            realtimeUnsubscribe = unsubscribe;
+        } catch (err) {
+            console.warn("Failed to subscribe to automation runs realtime updates:", err);
+        }
+    }
+
+    function unsubscribeFromRealtime() {
+        isClosed = true;
+        pendingRealtimeRefresh = false;
+        clearTimeout(realtimeRefreshTimer);
+        realtimeRefreshTimer = null;
+
+        if (typeof realtimeUnsubscribe === "function") {
+            realtimeUnsubscribe().catch((err) => {
+                console.warn("Failed to unsubscribe from automation runs realtime updates:", err);
+            });
+        }
+
+        realtimeUnsubscribe = null;
     }
 
     async function rerunAutomationRun(run) {
@@ -167,12 +228,15 @@ function automationRunsModal(automation, settings) {
             pbEvent: "automationRunsModal",
             className: "modal popup lg automation-runs-modal",
             onbeforeopen: (el) => {
+                isClosed = false;
                 loadRuns(true);
+                subscribeToRealtime();
                 return settings.onbeforeopen?.(el);
             },
             onafteropen: (el) => settings.onafteropen?.(el),
             onbeforeclose: (el) => settings.onbeforeclose?.(el),
             onafterclose: (el) => {
+                unsubscribeFromRealtime();
                 settings.onafterclose?.(el);
                 el?.remove();
             },

@@ -29,6 +29,10 @@ export function automationsList(propsArg = {}) {
         automations: [],
     });
 
+    let realtimeUnsubscribe = null;
+    let realtimeRefreshTimer = null;
+    let isMounted = false;
+
     async function loadAutomations() {
         data.isLoading = true;
 
@@ -43,6 +47,44 @@ export function automationsList(propsArg = {}) {
                 data.isLoading = false;
             }
         }
+    }
+
+    function queueRealtimeRefresh() {
+        clearTimeout(realtimeRefreshTimer);
+
+        realtimeRefreshTimer = setTimeout(() => {
+            loadAutomations();
+        }, 150);
+    }
+
+    async function subscribeToRealtime() {
+        try {
+            const unsubscribe = await app.pb.collection("_automations").subscribe("*", queueRealtimeRefresh);
+            if (!isMounted) {
+                unsubscribe().catch((err) => {
+                    console.warn("Failed to unsubscribe from automation realtime updates:", err);
+                });
+                return;
+            }
+
+            realtimeUnsubscribe = unsubscribe;
+        } catch (err) {
+            console.warn("Failed to subscribe to automation realtime updates:", err);
+        }
+    }
+
+    function unsubscribeFromRealtime() {
+        isMounted = false;
+        clearTimeout(realtimeRefreshTimer);
+        realtimeRefreshTimer = null;
+
+        if (typeof realtimeUnsubscribe === "function") {
+            realtimeUnsubscribe().catch((err) => {
+                console.warn("Failed to unsubscribe from automation realtime updates:", err);
+            });
+        }
+
+        realtimeUnsubscribe = null;
     }
 
     async function toggleAutomation(automation) {
@@ -243,7 +285,9 @@ export function automationsList(propsArg = {}) {
             pbEvent: "automationsList",
             className: "al-card-list",
             onmount: () => {
+                isMounted = true;
                 loadAutomations();
+                subscribeToRealtime();
                 watchers.push(
                     watch(() => props.reset, () => {
                         loadAutomations();
@@ -251,6 +295,7 @@ export function automationsList(propsArg = {}) {
                 );
             },
             onunmount: () => {
+                unsubscribeFromRealtime();
                 watchers.forEach((w) => w?.unwatch());
             },
         },
