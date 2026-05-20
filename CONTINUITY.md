@@ -7,6 +7,7 @@ Goal (incl. success criteria):
 - Add an admin UI `AutomationInput` based on `CodeEditor` that autocompletes supported automation data mappings when the user types `{{`.
 - Support automation `{{ }}` templates resolving relation field paths, e.g. `{{ record.user.email }}`, while preserving existing raw relation ID templates.
 - Implement Platform Phases 7-10 from `FUTURE_AUTOMATION_PLATFORM_PLAN.md`.
+- Apply realtime updates to the admin automation List and Recent runs UI.
 - Success: add connector foundation, internal event bus MVP, AI runtime MVP, and workflow versioning/publish flow foundation with focused tests while preserving existing automation behavior.
 
 Constraints/Assumptions:
@@ -230,10 +231,14 @@ State:
     - Added condition-builder CSS for the card, badges, dividers, inline row grid, hover-only red delete button, dashed add buttons, responsive layout, and hint code chips.
     - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
     - Reran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationConditionMultipleRules|TestAutomationConditionEmptyOperators|TestAutomationConditionStringOperators|TestAutomationSchemas|TestAutomation'`; passed from cache.
+    - User requested realtime for automation List and Recent runs.
+    - Added debounced `_automations` realtime subscription to `automationsList.js` with lifecycle cleanup.
+    - Added debounced `_automationRuns` realtime subscription to `automationRunsList.js`, filtering by `automationRef`, handling in-flight loads, and cleaning up on modal close.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
   - Now:
     - Ready for user review.
   - Next:
-    - Optional: manually verify the redesigned condition card in the automation step modal.
+    - Optional: manually verify that automation row status and the Recent runs modal update when runs are created/updated from another tab or process.
 
 Open questions (UNCONFIRMED if needed):
 
@@ -302,6 +307,8 @@ Working set (files/ids/commands):
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationUpsertModal.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationsList.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunsList.js`
+- `/Users/hungtrancongvinh/dev/go/pocketadmin/ui/src/settings/automations/automationsList.js`
+- `/Users/hungtrancongvinh/dev/go/pocketadmin/ui/src/settings/automations/automationRunsList.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunPreviewModal.js`
 - `/Users/suytbily/dev/gits/harry/pocketadmin/CONTINUITY.md`
 - `/Users/suytbily/dev/gits/harry/pocketadmin/FUTURE_AUTOMATION_PLATFORM_PLAN.md`
