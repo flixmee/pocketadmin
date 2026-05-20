@@ -10,7 +10,17 @@ export function automationApprovalsList(propsArg = {}) {
         approvals: [],
     });
 
+    let realtimeUnsubscribe = null;
+    let realtimeRefreshTimer = null;
+    let pendingRealtimeRefresh = false;
+    let isMounted = false;
+
     async function loadApprovals() {
+        if (data.isLoading) {
+            pendingRealtimeRefresh = true;
+            return;
+        }
+
         data.isLoading = true;
 
         try {
@@ -24,6 +34,53 @@ export function automationApprovalsList(propsArg = {}) {
         }
 
         data.isLoading = false;
+
+        if (pendingRealtimeRefresh && isMounted) {
+            pendingRealtimeRefresh = false;
+            queueRealtimeRefresh();
+        }
+    }
+
+    function queueRealtimeRefresh() {
+        if (!isMounted) {
+            return;
+        }
+
+        clearTimeout(realtimeRefreshTimer);
+        realtimeRefreshTimer = setTimeout(() => {
+            loadApprovals();
+        }, 150);
+    }
+
+    async function subscribeToRealtime() {
+        try {
+            const unsubscribe = await app.pb.collection("_approvals").subscribe("*", queueRealtimeRefresh);
+            if (!isMounted) {
+                unsubscribe().catch((err) => {
+                    console.warn("Failed to unsubscribe from automation approvals realtime updates:", err);
+                });
+                return;
+            }
+
+            realtimeUnsubscribe = unsubscribe;
+        } catch (err) {
+            console.warn("Failed to subscribe to automation approvals realtime updates:", err);
+        }
+    }
+
+    function unsubscribeFromRealtime() {
+        isMounted = false;
+        pendingRealtimeRefresh = false;
+        clearTimeout(realtimeRefreshTimer);
+        realtimeRefreshTimer = null;
+
+        if (typeof realtimeUnsubscribe === "function") {
+            realtimeUnsubscribe().catch((err) => {
+                console.warn("Failed to unsubscribe from automation approvals realtime updates:", err);
+            });
+        }
+
+        realtimeUnsubscribe = null;
     }
 
     async function resolveApproval(approval, decision) {
@@ -65,10 +122,15 @@ export function automationApprovalsList(propsArg = {}) {
             pbEvent: "automationApprovalsList",
             className: "al-card-list",
             onmount: () => {
+                isMounted = true;
                 loadApprovals();
+                subscribeToRealtime();
                 watchers.push(watch(() => props.reset, () => loadApprovals()));
             },
-            onunmount: () => watchers.forEach((w) => w?.unwatch()),
+            onunmount: () => {
+                unsubscribeFromRealtime();
+                watchers.forEach((w) => w?.unwatch());
+            },
         },
         // Loading skeleton
         t.div(

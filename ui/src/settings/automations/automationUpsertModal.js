@@ -36,7 +36,7 @@ function automationUpsertModal(automation, settings) {
 
     const data = store({
         isSaving: false,
-        form: JSON.parse(JSON.stringify(initialForm)),
+        form: cloneAutomationForm(initialForm),
         initialSerialized: JSON.stringify(initialForm),
         get title() {
             return isNew ? "Create automation" : "Edit automation";
@@ -346,7 +346,10 @@ function automationUpsertModal(automation, settings) {
                         triggerType: () => data.form.triggerType,
                         triggerCollectionRef: () => data.form.collectionRef,
                         onchange: (steps) => {
-                            data.form.steps = steps;
+                            data.form = {
+                                ...data.form,
+                                steps,
+                            };
                         },
                     }),
                 ),
@@ -430,6 +433,13 @@ function normalizeAutomationForm(automation = null) {
         cronExpr: automation?.cronExpr || "",
         notes: automation?.notes || "",
         steps: normalizeAutomationEditorSteps(automation?.steps),
+    };
+}
+
+function cloneAutomationForm(form) {
+    return {
+        ...form,
+        steps: normalizeAutomationEditorSteps(form?.steps),
     };
 }
 

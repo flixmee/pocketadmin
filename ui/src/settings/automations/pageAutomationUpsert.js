@@ -57,7 +57,7 @@ export function pageAutomationUpsert(route) {
     function hydrateForm(automation) {
         const nextForm = normalizeAutomationForm(automation);
         data.automation = automation;
-        data.form = JSON.parse(JSON.stringify(nextForm));
+        data.form = cloneAutomationForm(nextForm);
         data.initialSerialized = JSON.stringify(nextForm);
         app.store.title = isNew ? "Create automation" : data.form.name || "Edit automation";
     }
@@ -480,7 +480,10 @@ export function pageAutomationUpsert(route) {
                         triggerType: () => data.form.triggerType,
                         triggerCollectionRef: () => data.form.collectionRef,
                         onchange: (steps) => {
-                            data.form.steps = steps;
+                            data.form = {
+                                ...data.form,
+                                steps,
+                            };
                         },
                     }),
                 ),
@@ -498,6 +501,13 @@ function normalizeAutomationForm(automation = null) {
         cronExpr: automation?.cronExpr || "",
         notes: automation?.notes || "",
         steps: normalizeAutomationEditorSteps(automation?.steps),
+    };
+}
+
+function cloneAutomationForm(form) {
+    return {
+        ...form,
+        steps: normalizeAutomationEditorSteps(form?.steps),
     };
 }
 

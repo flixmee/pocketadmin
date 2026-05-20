@@ -33,6 +33,7 @@ var (
 	}
 	automationStepTypes = []string{
 		AutomationStepCondition,
+		AutomationStepCode,
 		AutomationStepHTTP,
 		AutomationStepMailSend,
 		AutomationStepRecordCreate,
@@ -368,6 +369,8 @@ func validateAutomationStepDefinition(app App, automationRecord *Record, step ma
 	switch strings.TrimSpace(toString(step["type"])) {
 	case AutomationStepCondition:
 		return validateAutomationConditionStep(step)
+	case AutomationStepCode:
+		return validateAutomationCodeStep(step)
 	case AutomationStepHTTP:
 		return validateAutomationHTTPStep(step)
 	case AutomationStepMailSend:
@@ -393,6 +396,18 @@ func validateAutomationStepDefinition(app App, automationRecord *Record, step ma
 	default:
 		return nil
 	}
+}
+
+func validateAutomationCodeStep(step map[string]any) error {
+	code := strings.TrimSpace(toString(step["code"]))
+	if code == "" {
+		return validation.NewError("validation_invalid_automation_code", "Code step requires JavaScript code.")
+	}
+	if len(code) > AutomationMaxTemplateStringSize {
+		return validation.NewError("validation_invalid_automation_code", fmt.Sprintf("Code step exceeds %d bytes.", AutomationMaxTemplateStringSize))
+	}
+
+	return nil
 }
 
 func validateAutomationAIStep(step map[string]any) error {

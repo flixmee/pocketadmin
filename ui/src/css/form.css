@@ -468,9 +468,6 @@ button {
       cursor: default;
       color: var(--surfaceTxtDisabledColor);
     }
-    &:only-child {
-      height: 100%;
-    }
   }
   input[type="range"] {
     -webkit-appearance: none;
@@ -726,9 +723,6 @@ button {
     &[disabled] {
       cursor: default;
       color: var(--surfaceTxtDisabledColor);
-    }
-    &:only-child {
-      height: 100%;
     }
   }
   input[type="range"] {
@@ -1430,5 +1424,9 @@ button {
     .highlight-overlay {
       white-space: pre-wrap;
     }
+  }
+  &.mini {
+    font-size: 0.85rem;
+    min-height: 50px;
   }
 }

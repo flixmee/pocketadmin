@@ -1,5 +1,7 @@
 Goal (incl. success criteria):
 
+- Fix automation Create Record step editor so the Data JSON input does not auto-reset to default while editing.
+- Add an automation step type named `Code` that executes JavaScript and returns object data usable by later automation steps.
 - Redesign the automation condition builder form into a unified polished card with logic badges, inline condition rows, subtle dividers, footer add actions, and a separate hint panel.
 - Allow automation condition steps to contain multiple condition rows combined with `and` / `or`.
 - Add `empty` and `notEmpty` automation condition operators to the admin UI and backend runtime/validation/schema.
@@ -8,6 +10,7 @@ Goal (incl. success criteria):
 - Support automation `{{ }}` templates resolving relation field paths, e.g. `{{ record.user.email }}`, while preserving existing raw relation ID templates.
 - Implement Platform Phases 7-10 from `FUTURE_AUTOMATION_PLATFORM_PLAN.md`.
 - Apply realtime updates to the admin automation List and Recent runs UI.
+- Apply realtime updates to the admin automation Pending approvals UI.
 - Success: add connector foundation, internal event bus MVP, AI runtime MVP, and workflow versioning/publish flow foundation with focused tests while preserving existing automation behavior.
 
 Constraints/Assumptions:
@@ -235,10 +238,35 @@ State:
     - Added debounced `_automations` realtime subscription to `automationsList.js` with lifecycle cleanup.
     - Added debounced `_automationRuns` realtime subscription to `automationRunsList.js`, filtering by `automationRef`, handling in-flight loads, and cleaning up on modal close.
     - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
+    - User requested realtime for automation Pending approvals.
+    - Added debounced `_approvals` realtime subscription to `automationApprovalsList.js`, with in-flight refresh coalescing and lifecycle cleanup.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
+    - User reported that automation add-step reactivity suddenly does not work.
+    - Fixed automation add-step reactive flow by replacing the parent `form` object on structural step changes in both page and legacy modal upsert flows.
+    - Updated automation form cloning/normalization so loaded steps and just-added steps are reactive editor stores consistently.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
+    - User reported `conditionStepForm.js:103` crash reading `conditions.map` from undefined.
+    - Fixed `conditionStepForm.js` to materialize condition rows through `ensureConditions()` before render/add/remove/visibility checks.
+    - Preserved condition `valueText` when re-normalizing editor steps so reactive cloning does not drop unsaved condition values.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
+    - User requested automation add step `Code` that can execute JavaScript and return object data.
+    - Added backend automation `code` step type with validation, schema discovery, Goja execution, JSON object output normalization, and a 2s execution timeout.
+    - Code steps receive automation template roots such as `trigger`, `record`, `recordOriginal`, `request`, `i18n`, `steps`, and `prevStep`; returned object data is stored in step output for later templates.
+    - Added admin UI Code step option/editor using `codeEditor`, plus payload building, summary, and client validation in `stepEditor.js`.
+    - Added regression coverage proving a Code step return object can feed a later record.create step through `prevStep.output` / `steps[0].output`.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationCodeStepReturnsObjectForLaterSteps|TestAutomationStepsExposePreviousOutputsToTemplates|TestAutomationSchemas'`; passed.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomation'`; passed.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
+    - User requested fixing automation Create Record Data JSON auto-reset to default.
+    - Patched `recordStepForm.js` so Data JSON collection autofill state survives form remounts and stops overwriting after user input.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
+    - User reported Data JSON still resets after Save.
+    - Patched `stepEditor.js` record create/update normalization to preserve editor `dataText` instead of falling back to persisted `data`/`{}` during current-form normalization.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
   - Now:
     - Ready for user review.
   - Next:
-    - Optional: manually verify that automation row status and the Recent runs modal update when runs are created/updated from another tab or process.
+    - Optional: manually create a Record create step, edit Data JSON, save, and confirm the saved editor rehydrates with the edited JSON.
 
 Open questions (UNCONFIRMED if needed):
 
@@ -254,7 +282,18 @@ Working set (files/ids/commands):
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/base/codeEditor.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/base/automationInput.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/stepEditor.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_model.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_validate.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_schema.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_steps.go`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_runner_test.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/conditionStepForm.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationsList.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationRunsList.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationApprovalsList.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/pageAutomationUpsert.js`
+- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationUpsertModal.js`
+- `cd ui && npm run build`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/httpStepForm.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/mailStepForm.js`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/recordStepForm.js`

@@ -6,6 +6,7 @@ import { responseStepForm } from "./responseStepForm";
 
 const stepTypeOptions = [
     { value: "condition", label: "Condition", icon: "ri-git-merge-line", category: "control" },
+    { value: "code", label: "Code", icon: "ri-code-s-slash-line", category: "control" },
     { value: "http", label: "HTTP request", icon: "ri-global-line", category: "integration" },
     { value: "mail.send", label: "Send mail", icon: "ri-mail-send-line", category: "communication" },
     { value: "record.create", label: "Create record", icon: "ri-add-box-line", category: "record" },
@@ -523,7 +524,7 @@ export function normalizeAutomationEditorSteps(steps) {
         return [];
     }
 
-    return steps.map((step) => createEditorStep(step?.type, step));
+    return steps.map((step) => createReactiveEditorStep(step?.type, step));
 }
 
 export function buildAutomationStepsPayload(steps) {
@@ -534,6 +535,8 @@ function renderStepForm(step, error, context = {}) {
     switch (step.type) {
         case "condition":
             return conditionStepForm({ step, error, ...context });
+        case "code":
+            return codeStepForm({ step, context });
         case "http":
             return httpStepForm({ step, error, ...context });
         case "mail.send":
@@ -1435,9 +1438,16 @@ function createEditorStep(type, rawStep = {}) {
                 ...base,
                 path: toString(rawStep.path || rawStep.field),
                 op: toString(rawStep.op) || "exists",
-                valueText: stringifyLooseValue(rawStep.value),
+                valueText: rawStep.value === undefined
+                    ? toString(rawStep.valueText)
+                    : stringifyLooseValue(rawStep.value),
                 match: ["and", "or"].includes(rawStep.match) ? rawStep.match : "and",
                 conditions: normalizeConditionRows(rawStep),
+            };
+        case "code":
+            return {
+                ...base,
+                code: toString(rawStep.code) || "return {\n    value: record.id,\n};",
             };
         case "http":
             return {
@@ -1463,7 +1473,7 @@ function createEditorStep(type, rawStep = {}) {
             return {
                 ...base,
                 collection: toString(rawStep.collection),
-                dataText: stringifyJSONObject(rawStep.data, "{}"),
+                dataText: toString(rawStep.dataText) || stringifyJSONObject(rawStep.data, "{}"),
             };
         case "record.update":
             return {
@@ -1471,7 +1481,7 @@ function createEditorStep(type, rawStep = {}) {
                 collection: toString(rawStep.collection),
                 id: toString(rawStep.id),
                 filter: toString(rawStep.filter),
-                dataText: stringifyJSONObject(rawStep.data, "{}"),
+                dataText: toString(rawStep.dataText) || stringifyJSONObject(rawStep.data, "{}"),
             };
         case "record.delete":
             return {
@@ -1564,6 +1574,8 @@ function buildStepPayload(step, index) {
     switch (step.type) {
         case "condition":
             return buildConditionPayload(step, index);
+        case "code":
+            return buildCodePayload(step, index);
         case "http":
             return buildHTTPPayload(step, index);
         case "mail.send":
@@ -1599,6 +1611,8 @@ function genericJSONStepForm({ step, context = {} }) {
     switch (step.type) {
         case "capability":
             return capabilityStepForm(step, context);
+        case "code":
+            return codeStepForm({ step, context });
         case "wait.delay":
             return waitDelayStepForm(step);
         case "wait.webhook":
@@ -1614,6 +1628,42 @@ function genericJSONStepForm({ step, context = {} }) {
         default:
             return t.div({ className: "txt-sm txt-danger" }, `Unsupported step type "${step.type}".`);
     }
+}
+
+function codeStepForm({ step, context = {} }) {
+    return t.div(
+        { className: "automation-graphical-config" },
+        t.div(
+            { className: "field" },
+            t.label({ htmlFor: `${step.__id}_code` }, "JavaScript code"),
+            app.components.codeEditor({
+                id: `${step.__id}_code`,
+                language: "js",
+                placeholder: "return { total: record.amount * 1.1 };",
+                value: () => step.code,
+                autocomplete: () => [
+                    { value: "record", label: "record" },
+                    { value: "recordOriginal", label: "recordOriginal" },
+                    { value: "trigger", label: "trigger" },
+                    { value: "request", label: "request" },
+                    { value: "i18n", label: "i18n" },
+                    { value: "steps", label: "steps" },
+                    { value: "prevStep", label: "prevStep" },
+                    { value: "output", label: "output" },
+                ],
+                oninput: (value) => (step.code = value),
+            }),
+        ),
+        t.div(
+            { className: "txt-sm txt-hint" },
+            "Return a JSON object. The result is available to later steps as ",
+            t.code("prevStep.output"),
+            " or ",
+            t.code("steps[n].output"),
+            ".",
+        ),
+        generatedConfigPreview(step),
+    );
 }
 
 function capabilityStepForm(step, context) {
@@ -2116,6 +2166,18 @@ function generatedConfigPreview(step) {
     );
 }
 
+function buildCodePayload(step, index) {
+    const code = step.code.trim();
+    if (!code) {
+        throw new Error(`Step ${index + 1}: JavaScript code is required.`);
+    }
+
+    return {
+        type: "code",
+        code,
+    };
+}
+
 function buildCapabilityPayload(step, index) {
     const capability = step.capability.trim();
     if (!capability) {
@@ -2460,6 +2522,8 @@ function summarizeStep(step) {
             return `${step.conditions?.[0]?.path || step.path || "Condition path"} • ${
                 step.conditions?.[0]?.op || step.op || "exists"
             }`;
+        case "code":
+            return "Run JavaScript and return object data";
         case "http":
             return `${(step.method || "GET").toUpperCase()} ${step.url || "HTTP request"}`;
         case "mail.send":
@@ -2557,6 +2621,11 @@ function clientValidateStep(step) {
         case "response":
             validateOptionalNumber(step.statusCodeText, "Response status code", messages);
             validateOptionalJSONObject(step.headersText, "Response headers", messages);
+            break;
+        case "code":
+            if (!step.code?.trim()) {
+                messages.push("JavaScript code is required.");
+            }
             break;
         case "capability":
         case "wait.delay":
@@ -2830,7 +2899,7 @@ function createConditionRow(raw = {}) {
         __id: raw.__id || app.utils.randomString(),
         path: toString(raw.path || raw.field),
         op: toString(raw.op) || "exists",
-        valueText: stringifyLooseValue(raw.value),
+        valueText: raw.value === undefined ? toString(raw.valueText) : stringifyLooseValue(raw.value),
     };
 }
 

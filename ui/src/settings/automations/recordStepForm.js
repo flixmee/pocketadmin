@@ -1,3 +1,5 @@
+const dataAutofillByStep = new WeakMap();
+
 export function recordStepForm(propsArg = {}) {
     const props = store({
         step: null,
@@ -7,15 +9,12 @@ export function recordStepForm(propsArg = {}) {
     });
 
     const watchers = app.utils.extendStore(props, propsArg);
-    const local = store({
-        lastAutofillText: "",
-    });
-
     function maybeAutofillDataText() {
         if (props.step.type === "record.delete") {
             return;
         }
 
+        const state = dataAutofillState(props.step);
         const collection = findCollection(props.step.collection);
         if (!collection) {
             return;
@@ -24,9 +23,14 @@ export function recordStepForm(propsArg = {}) {
         const nextDataText = buildDefaultDataText(collection);
         const currentText = (props.step.dataText || "").trim();
 
-        if (!currentText || currentText === "{}" || currentText === local.lastAutofillText) {
+        if (state.userEdited && currentText !== state.lastAutofillText) {
+            return;
+        }
+
+        if (!currentText || currentText === "{}" || currentText === state.lastAutofillText) {
             props.step.dataText = nextDataText;
-            local.lastAutofillText = nextDataText;
+            state.lastAutofillText = nextDataText;
+            state.userEdited = false;
         }
     }
 
@@ -116,7 +120,10 @@ export function recordStepForm(propsArg = {}) {
                         triggerType: () => props.triggerType,
                         triggerCollectionRef: () => props.triggerCollectionRef,
                         placeholder: () => defaultPlaceholder(props.step.collection),
-                        oninput: (value) => (props.step.dataText = value),
+                        oninput: (value) => {
+                            props.step.dataText = value;
+                            dataAutofillState(props.step).userEdited = true;
+                        },
                     }),
                 ),
                 t.div(
@@ -146,6 +153,20 @@ export function recordStepForm(propsArg = {}) {
             );
         },
     );
+}
+
+function dataAutofillState(step) {
+    let state = dataAutofillByStep.get(step);
+
+    if (!state) {
+        state = {
+            lastAutofillText: "",
+            userEdited: false,
+        };
+        dataAutofillByStep.set(step, state);
+    }
+
+    return state;
 }
 
 function collectionOptions(selectedValue) {

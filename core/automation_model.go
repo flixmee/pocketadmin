@@ -22,6 +22,7 @@ const (
 	AutomationTriggerI18nAIFinished = "i18n.ai_translation_finished"
 
 	AutomationStepCondition    = "condition"
+	AutomationStepCode         = "code"
 	AutomationStepHTTP         = "http"
 	AutomationStepMailSend     = "mail.send"
 	AutomationStepRecordCreate = "record.create"

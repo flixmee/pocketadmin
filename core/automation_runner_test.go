@@ -1747,6 +1747,56 @@ func TestAutomationStepsExposePreviousOutputsToTemplates(t *testing.T) {
 	}
 }
 
+func TestAutomationCodeStepReturnsObjectForLaterSteps(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerManual)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"code",
+			"code":"return { text: 'code_' + trigger.type, previousSteps: steps.length, ok: true };"
+		},
+		{
+			"type":"record.create",
+			"collection":"demo1",
+			"data":{"text":"{{prevStep.output.text + '_' + steps[0].output.previousSteps + '_' + steps[0].output.ok}}"}
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatalf("Expected automation run to succeed, got %v", err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q", runs[0].Status())
+	}
+
+	createdRecord, err := app.FindFirstRecordByData("demo1", "text", "code_manual_0_true")
+	if err != nil {
+		t.Fatalf("Expected record.create step to use code output: %v", err)
+	}
+	if createdRecord.GetString("text") != "code_manual_0_true" {
+		t.Fatalf("Expected record text from code output, got %q", createdRecord.GetString("text"))
+	}
+
+	results := decodeStepResults(t, runs[0])
+	output, ok := results[0]["output"].(map[string]any)
+	if !ok || output["text"] != "code_manual" || output["previousSteps"] != float64(0) || output["ok"] != true {
+		t.Fatalf("Expected code step output to be recorded, got %#v", results[0]["output"])
+	}
+}
+
 func TestAutomationRecordUpdateStep(t *testing.T) {
 	t.Parallel()
 

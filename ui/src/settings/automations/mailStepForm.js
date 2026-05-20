@@ -174,7 +174,7 @@ export function mailStepForm(propsArg = {}) {
                 t.label({ htmlFor: `${props.step.__id}_${key}` }, label),
                 app.components.automationInput({
                     id: `${props.step.__id}_${key}`,
-                    className: "pre-wrap",
+                    className: "pre-wrap mini",
                     placeholder,
                     value: () => props.step[key + "Text"],
                     triggerType: () => props.triggerType,

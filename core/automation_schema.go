@@ -43,6 +43,7 @@ func AutomationSchemas() AutomationSchemaCatalog {
 		},
 		Steps: map[string]AutomationSchema{
 			AutomationStepCondition:    conditionStepSchema(),
+			AutomationStepCode:         codeStepSchema(),
 			AutomationStepHTTP:         httpStepSchema(),
 			AutomationStepMailSend:     mailStepSchema(),
 			AutomationStepRecordCreate: recordWriteStepSchema(AutomationStepRecordCreate, "Create record"),
@@ -67,6 +68,19 @@ func AutomationSchemas() AutomationSchemaCatalog {
 			HTTPInputBodyLimit:    AutomationHTTPInputBodyLimit,
 			HTTPOutputBodyLimit:   automationHTTPOutputBodyLimit,
 		},
+	}
+}
+
+func codeStepSchema() AutomationSchema {
+	return AutomationSchema{
+		Key:      AutomationStepCode,
+		Label:    "Code",
+		Category: "control",
+		InputSchema: objectSchema(map[string]any{
+			"type": constStringSchema(AutomationStepCode),
+			"code": stringSchema(),
+		}),
+		OutputSchema: objectSchema(nil),
 	}
 }
 

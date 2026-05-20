@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/dop251/goja"
 )
 
 const (
@@ -11,6 +14,7 @@ const (
 
 	AutomationMaxSteps              = 100
 	AutomationMaxTemplateStringSize = 256 * 1024
+	AutomationCodeStepTimeout       = 2 * time.Second
 
 	automationStepStatusSuccess = "success"
 	automationStepStatusFailed  = "failed"
@@ -114,7 +118,7 @@ func executeAutomationStep(ctx *automationExecutionContext, step map[string]any)
 		return executeAutomationStep(ctx, legacyStep)
 	}
 
-	if ctx.DryRun && stepType != AutomationStepCondition {
+	if ctx.DryRun && stepType != AutomationStepCondition && stepType != AutomationStepCode {
 		output, err := previewAutomationStep(ctx, step)
 		return automationStepStatusSuccess, output, err
 	}
@@ -130,6 +134,9 @@ func executeAutomationStep(ctx *automationExecutionContext, step map[string]any)
 		return automationStepStatusSuccess, output, err
 	case AutomationStepCondition:
 		return executeAutomationConditionStep(ctx, step)
+	case AutomationStepCode:
+		output, err := executeAutomationCodeStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	case AutomationStepHTTP:
 		output, err := executeAutomationHTTPStep(ctx, step)
 		return automationStepStatusSuccess, output, err
@@ -161,6 +168,8 @@ func previewAutomationStep(ctx *automationExecutionContext, step map[string]any)
 	}
 
 	switch stepType {
+	case AutomationStepCode:
+		return executeAutomationCodeStep(ctx, step)
 	case AutomationStepHTTP:
 		renderedURL, err := renderAutomationTemplateString(toString(step["url"]), ctx.TemplateData)
 		if err != nil {
@@ -232,6 +241,58 @@ func previewAutomationStep(ctx *automationExecutionContext, step map[string]any)
 	}
 
 	return output, nil
+}
+
+func executeAutomationCodeStep(ctx *automationExecutionContext, step map[string]any) (map[string]any, error) {
+	code := strings.TrimSpace(toString(step["code"]))
+	if code == "" {
+		return nil, fmt.Errorf("code step is missing JavaScript code")
+	}
+
+	vm := goja.New()
+	for key, value := range automationTemplateJSContext(ctx.TemplateData) {
+		if strings.HasPrefix(key, "__") {
+			continue
+		}
+		if err := vm.Set(key, value); err != nil {
+			return nil, fmt.Errorf("failed to initialize code step root %q: %w", key, err)
+		}
+	}
+
+	output := map[string]any{}
+	if err := vm.Set("output", output); err != nil {
+		return nil, fmt.Errorf("failed to initialize code step output: %w", err)
+	}
+
+	timeout := time.AfterFunc(AutomationCodeStepTimeout, func() {
+		vm.Interrupt("automation code step timed out")
+	})
+	defer timeout.Stop()
+
+	result, err := vm.RunScript("automation-code-step.js", "(function() {\n"+code+"\n})()")
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute automation code step: %w", err)
+	}
+	if goja.IsUndefined(result) {
+		return output, nil
+	}
+
+	exported := result.Export()
+	if exported == nil {
+		return map[string]any{}, nil
+	}
+
+	raw, err := json.Marshal(exported)
+	if err != nil {
+		return nil, fmt.Errorf("automation code step must return JSON-compatible object data: %w", err)
+	}
+
+	normalized := map[string]any{}
+	if err := json.Unmarshal(raw, &normalized); err != nil {
+		return nil, fmt.Errorf("automation code step must return an object")
+	}
+
+	return normalized, nil
 }
 
 func executeAutomationConditionStep(ctx *automationExecutionContext, step map[string]any) (string, any, error) {

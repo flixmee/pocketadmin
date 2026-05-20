@@ -29,18 +29,27 @@ export function conditionStepForm(propsArg = {}) {
 
     const watchers = app.utils.extendStore(props, propsArg);
 
-    if (!Array.isArray(props.step.conditions) || !props.step.conditions.length) {
-        props.step.conditions = [{
-            __id: app.utils.randomString(),
-            path: props.step.path || "",
-            op: props.step.op || "exists",
-            valueText: props.step.valueText || "",
-        }];
+    function ensureConditions() {
+        if (!props.step) {
+            return [];
+        }
+
+        if (!Array.isArray(props.step.conditions) || !props.step.conditions.length) {
+            props.step.conditions = [{
+                __id: app.utils.randomString(),
+                path: props.step.path || "",
+                op: props.step.op || "exists",
+                valueText: props.step.valueText || "",
+            }];
+        }
+
+        return props.step.conditions;
     }
 
     function addCondition(match) {
+        const conditions = ensureConditions();
         props.step.match = match;
-        props.step.conditions.push({
+        conditions.push({
             __id: app.utils.randomString(),
             path: "",
             op: "exists",
@@ -49,11 +58,12 @@ export function conditionStepForm(propsArg = {}) {
     }
 
     function removeCondition(index) {
-        if (props.step.conditions.length <= 1) {
+        const conditions = ensureConditions();
+        if (conditions.length <= 1) {
             return;
         }
 
-        props.step.conditions.splice(index, 1);
+        conditions.splice(index, 1);
     }
 
     function logicLabel(index) {
@@ -83,7 +93,7 @@ export function conditionStepForm(propsArg = {}) {
                 t.div(
                     {
                         className: "automation-condition-match",
-                        hidden: () => props.step.conditions.length < 2,
+                        hidden: () => ensureConditions().length < 2,
                     },
                     app.components.select({
                         required: true,
@@ -100,7 +110,7 @@ export function conditionStepForm(propsArg = {}) {
             () =>
                 t.div(
                     { className: "automation-condition-rows" },
-                    ...props.step.conditions.map((condition, index) => [
+                    ...ensureConditions().map((condition, index) => [
                         t.div(
                             { className: "automation-condition-row" },
                             t.div(
@@ -145,7 +155,7 @@ export function conditionStepForm(propsArg = {}) {
                                 {
                                     type: "button",
                                     className: "btn sm transparent circle automation-condition-delete-btn",
-                                    disabled: () => props.step.conditions.length <= 1,
+                                    disabled: () => ensureConditions().length <= 1,
                                     ariaLabel: app.attrs.tooltip("Remove condition"),
                                     onclick: () => removeCondition(index),
                                 },
