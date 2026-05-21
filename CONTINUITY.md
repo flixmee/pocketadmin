@@ -263,10 +263,15 @@ State:
     - User reported Data JSON still resets after Save.
     - Patched `stepEditor.js` record create/update normalization to preserve editor `dataText` instead of falling back to persisted `data`/`{}` during current-form normalization.
     - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully and updated `ui/dist` assets.
+    - User requested Monaco Editor for the automation Code step, using CDN `https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.53.0/min/vs/editor/editor.main.js`.
+    - Added lazy `app.components.monacoEditor` backed by Monaco 0.53.0 from cdnjs, with lifecycle cleanup, value sync, read-only sync, and completion provider support.
+    - Swapped only the automation Code step JavaScript field to `monacoEditor`, preserving the existing lightweight `codeEditor` for other inputs.
+    - Added Monaco editor CSS and rebuilt `ui/dist` assets.
+    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
   - Now:
     - Ready for user review.
   - Next:
-    - Optional: manually create a Record create step, edit Data JSON, save, and confirm the saved editor rehydrates with the edited JSON.
+    - Optional: open an automation Code step in the browser and confirm Monaco loads from cdnjs in the edit modal.
 
 Open questions (UNCONFIRMED if needed):
 
@@ -302,6 +307,10 @@ Working set (files/ids/commands):
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_templates.go`
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_steps.go`
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_runner_test.go`
+- `/Users/hungtrancongvinh/dev/go/pocketadmin/ui/src/base/monacoEditor.js`
+- `/Users/hungtrancongvinh/dev/go/pocketadmin/ui/src/main.js`
+- `/Users/hungtrancongvinh/dev/go/pocketadmin/ui/src/settings/automations/stepEditor.js`
+- `/Users/hungtrancongvinh/dev/go/pocketadmin/ui/src/css/form.css`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/CONTINUITY.md`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_workflow_state_model.go`
 - `/Volumes/MacOS_WD/Developer/pocketadmin/core/automation_workflow_runtime.go`

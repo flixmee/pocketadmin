@@ -1430,3 +1430,22 @@ button {
     min-height: 50px;
   }
 }
+
+.input.monaco-editor-input {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  width: 100%;
+  min-height: 280px;
+  overflow: hidden;
+  padding: 0;
+
+  .monaco-editor-host {
+    width: 100%;
+    min-height: inherit;
+  }
+
+  &.disabled {
+    opacity: 0.75;
+  }
+}

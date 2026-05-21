@@ -1636,9 +1636,9 @@ function codeStepForm({ step, context = {} }) {
         t.div(
             { className: "field" },
             t.label({ htmlFor: `${step.__id}_code` }, "JavaScript code"),
-            app.components.codeEditor({
+            app.components.monacoEditor({
                 id: `${step.__id}_code`,
-                language: "js",
+                language: "javascript",
                 placeholder: "return { total: record.amount * 1.1 };",
                 value: () => step.code,
                 autocomplete: () => [

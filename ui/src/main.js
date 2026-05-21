@@ -17,6 +17,7 @@ import "./base/sortable";
 import "./base/copyButton";
 import "./base/codeBlock";
 import "./base/codeEditor";
+import "./base/monacoEditor";
 import "./base/automationInput";
 import "./base/codeBlockTabs";
 import "./base/select";
