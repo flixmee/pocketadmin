@@ -268,10 +268,15 @@ State:
     - Swapped only the automation Code step JavaScript field to `monacoEditor`, preserving the existing lightweight `codeEditor` for other inputs.
     - Added Monaco editor CSS and rebuilt `ui/dist` assets.
     - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - User requested applying the `plugins/jsvm/jsvm.go` JavaScript function-call pattern to the automation Code step so it can call functions in that style.
+    - Updated automation Code step runtime to support JSVM-style callable function expressions and arrow functions via `.apply(undefined, __args)` with a context argument.
+    - Added named entrypoint support for `run`, `main`, `execute`, and `handler` functions while preserving existing `return { ... }` block-style code.
+    - Added regression coverage for callable and named-function Code steps feeding a later record.create step.
+    - Ran `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationCodeStepCallsFunctionEntryPoints|TestAutomationCodeStepReturnsObjectForLaterSteps|TestAutomation'`; passed.
   - Now:
     - Ready for user review.
   - Next:
-    - Optional: open an automation Code step in the browser and confirm Monaco loads from cdnjs in the edit modal.
+    - Optional: update UI Code step placeholder/help text if you want the function-entry style advertised in the editor.
 
 Open questions (UNCONFIRMED if needed):
 
@@ -307,6 +312,8 @@ Working set (files/ids/commands):
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_templates.go`
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_steps.go`
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/core/automation_runner_test.go`
+- `/Users/hungtrancongvinh/dev/go/pocketadmin/plugins/jsvm/jsvm.go`
+- `env GOCACHE=/private/tmp/pocketadmin-go-cache go test ./core -run 'TestAutomationCodeStepCallsFunctionEntryPoints|TestAutomationCodeStepReturnsObjectForLaterSteps|TestAutomation'`
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/ui/src/base/monacoEditor.js`
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/ui/src/main.js`
 - `/Users/hungtrancongvinh/dev/go/pocketadmin/ui/src/settings/automations/stepEditor.js`

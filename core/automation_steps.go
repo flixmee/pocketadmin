@@ -250,7 +250,8 @@ func executeAutomationCodeStep(ctx *automationExecutionContext, step map[string]
 	}
 
 	vm := goja.New()
-	for key, value := range automationTemplateJSContext(ctx.TemplateData) {
+	jsContext := automationTemplateJSContext(ctx.TemplateData)
+	for key, value := range jsContext {
 		if strings.HasPrefix(key, "__") {
 			continue
 		}
@@ -263,13 +264,16 @@ func executeAutomationCodeStep(ctx *automationExecutionContext, step map[string]
 	if err := vm.Set("output", output); err != nil {
 		return nil, fmt.Errorf("failed to initialize code step output: %w", err)
 	}
+	if err := vm.Set("__args", []any{automationCodeStepContextArg(jsContext)}); err != nil {
+		return nil, fmt.Errorf("failed to initialize code step arguments: %w", err)
+	}
 
 	timeout := time.AfterFunc(AutomationCodeStepTimeout, func() {
 		vm.Interrupt("automation code step timed out")
 	})
 	defer timeout.Stop()
 
-	result, err := vm.RunScript("automation-code-step.js", "(function() {\n"+code+"\n})()")
+	result, err := runAutomationCodeStepScript(vm, code)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute automation code step: %w", err)
 	}
@@ -277,6 +281,74 @@ func executeAutomationCodeStep(ctx *automationExecutionContext, step map[string]
 		return output, nil
 	}
 
+	return normalizeAutomationCodeStepOutput(result)
+}
+
+func automationCodeStepContextArg(jsContext map[string]any) map[string]any {
+	arg := map[string]any{}
+	for key, value := range jsContext {
+		if strings.HasPrefix(key, "__") {
+			continue
+		}
+		arg[key] = value
+	}
+	return arg
+}
+
+func runAutomationCodeStepScript(vm *goja.Runtime, code string) (goja.Value, error) {
+	if automationCodeStepLooksCallable(code) {
+		result, err := vm.RunScript("automation-code-step.js", "("+code+").apply(undefined, __args)")
+		if err == nil {
+			return result, nil
+		}
+	}
+
+	return vm.RunScript("automation-code-step.js", `(function() {
+`+code+`
+if (typeof run === "function") {
+	return run.apply(undefined, __args);
+}
+if (typeof main === "function") {
+	return main.apply(undefined, __args);
+}
+if (typeof execute === "function") {
+	return execute.apply(undefined, __args);
+}
+if (typeof handler === "function") {
+	return handler.apply(undefined, __args);
+}
+})()`)
+}
+
+func automationCodeStepLooksCallable(code string) bool {
+	trimmed := strings.TrimSpace(code)
+	if strings.HasPrefix(trimmed, "function") {
+		return true
+	}
+	if arrowIndex := strings.Index(trimmed, "=>"); arrowIndex > 0 {
+		left := strings.TrimSpace(trimmed[:arrowIndex])
+		return strings.HasPrefix(left, "(") || strings.HasPrefix(left, "async ") || automationCodeStepLooksIdentifier(left)
+	}
+	return false
+}
+
+func automationCodeStepLooksIdentifier(value string) bool {
+	if value == "" {
+		return false
+	}
+	for i, r := range value {
+		if r == '_' || r == '$' || ('a' <= r && r <= 'z') || ('A' <= r && r <= 'Z') {
+			continue
+		}
+		if i > 0 && '0' <= r && r <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func normalizeAutomationCodeStepOutput(result goja.Value) (map[string]any, error) {
 	exported := result.Export()
 	if exported == nil {
 		return map[string]any{}, nil

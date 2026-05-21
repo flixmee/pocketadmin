@@ -1797,6 +1797,55 @@ func TestAutomationCodeStepReturnsObjectForLaterSteps(t *testing.T) {
 	}
 }
 
+func TestAutomationCodeStepCallsFunctionEntryPoints(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetName("code_step_functions")
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerManual)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"code",
+			"code":"function(ctx) { return { text: ctx.trigger.type + '_callback', stepCount: ctx.steps.length }; }"
+		},
+		{
+			"type":"code",
+			"code":"function suffix() { return '_run'; }\nfunction run(ctx) { return { text: prevStep.output.text + '_' + ctx.steps[0].output.stepCount + suffix() }; }"
+		},
+		{
+			"type":"record.create",
+			"collection":"demo1",
+			"data":{"text":"{{prevStep.output.text}}"}
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatalf("Expected automation run to succeed, got %v", err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q", runs[0].Status())
+	}
+
+	createdRecord, err := app.FindFirstRecordByData("demo1", "text", "manual_callback_0_run")
+	if err != nil {
+		t.Fatalf("Expected record.create step to use function code output: %v", err)
+	}
+	if createdRecord.GetString("text") != "manual_callback_0_run" {
+		t.Fatalf("Expected record text from function code output, got %q", createdRecord.GetString("text"))
+	}
+}
+
 func TestAutomationRecordUpdateStep(t *testing.T) {
 	t.Parallel()
 
