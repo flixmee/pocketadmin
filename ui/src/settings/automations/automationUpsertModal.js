@@ -194,6 +194,23 @@ function automationUpsertModal(automation, settings) {
                 t.div(
                     { className: "col-md-4" },
                     t.div(
+                        { className: "field" },
+                        t.label({ htmlFor: formId + "_tag" }, "Tag"),
+                        t.input({
+                            id: formId + "_tag",
+                            name: "tag",
+                            type: "text",
+                            maxlength: 255,
+                            placeholder: "Optional group",
+                            value: () => data.form.tag,
+                            oninput: (e) => (data.form.tag = e.target.value),
+                        }),
+                    ),
+                    () => fieldError(app.store.errors?.tag),
+                ),
+                t.div(
+                    { className: "col-md-4" },
+                    t.div(
                         { className: "field m-t-lg" },
                         t.input({
                             id: formId + "_active",
@@ -424,6 +441,7 @@ function automationUpsertModal(automation, settings) {
 function normalizeAutomationForm(automation = null) {
     return {
         name: automation?.name || "",
+        tag: automation?.tag || "",
         active: !!automation?.active,
         triggerType: automation?.triggerType || "manual",
         collectionRef: automation?.collectionRef || "",
@@ -443,6 +461,7 @@ function cloneAutomationForm(form) {
 function buildAutomationPayload(form) {
     return {
         name: form.name.trim(),
+        tag: form.tag.trim(),
         active: !!form.active,
         triggerType: form.triggerType,
         collectionRef: isRecordAutomationTrigger(form.triggerType) || isI18nAutomationTrigger(form.triggerType)

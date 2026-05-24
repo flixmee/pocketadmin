@@ -97,6 +97,16 @@ func (m *Automation) SetName(name string) {
 	m.Set("name", name)
 }
 
+// Tag returns the optional automation grouping tag.
+func (m *Automation) Tag() string {
+	return m.GetString("tag")
+}
+
+// SetTag updates the optional automation grouping tag.
+func (m *Automation) SetTag(tag string) {
+	m.Set("tag", tag)
+}
+
 // Active returns whether the automation is enabled.
 func (m *Automation) Active() bool {
 	return m.GetBool("active")

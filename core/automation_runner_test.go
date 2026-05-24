@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -1843,6 +1844,75 @@ func TestAutomationCodeStepCallsFunctionEntryPoints(t *testing.T) {
 	}
 	if createdRecord.GetString("text") != "manual_callback_0_run" {
 		t.Fatalf("Expected record text from function code output, got %q", createdRecord.GetString("text"))
+	}
+}
+
+func TestAutomationCodeStepCanUseJsvmGlobals(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"message":"from_http"}`))
+	}))
+	defer server.Close()
+
+	collection, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceRecord := core.NewRecord(collection)
+	sourceRecord.Set("text", "jsvm_globals_source")
+	if err := app.Save(sourceRecord); err != nil {
+		t.Fatal(err)
+	}
+
+	code := fmt.Sprintf(`
+const rec = $app.findFirstRecordByData("demo1", "text", "jsvm_globals_source");
+const res = $http.send({ url: %q, method: "POST", body: "payload" });
+return {
+	recordText: rec.get("text"),
+	httpStatus: res.statusCode,
+	httpMessage: res.json.message,
+	hash: $security.md5("automation"),
+	joined: $filepath.join("automation", "code")
+};
+`, server.URL)
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetName("code_step_jsvm_globals")
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerManual)
+	automation.SetSteps(mustParseJSONRaw(t, fmt.Sprintf(`[{"type":"code","code":%q}]`, code)))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatalf("Expected automation run to succeed, got %v", err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q", runs[0].Status())
+	}
+
+	results := decodeStepResults(t, runs[0])
+	output, ok := results[0]["output"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected code step output map, got %#v", results[0]["output"])
+	}
+	if output["recordText"] != "jsvm_globals_source" {
+		t.Fatalf("Expected $app result in output, got %#v", output)
+	}
+	if output["httpStatus"] != float64(http.StatusCreated) || output["httpMessage"] != "from_http" {
+		t.Fatalf("Expected $http result in output, got %#v", output)
+	}
+	if output["hash"] != "205d64ff9b580aadbf4829ec41dd4ef0" || output["joined"] != "automation/code" {
+		t.Fatalf("Expected helper globals in output, got %#v", output)
 	}
 }
 

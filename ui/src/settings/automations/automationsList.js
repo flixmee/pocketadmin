@@ -27,6 +27,29 @@ export function automationsList(propsArg = {}) {
         isDeleting: {},
         isToggling: {},
         automations: [],
+        keyword: "",
+        tagFilter: "",
+        groupByTag: false,
+        get visibleAutomations() {
+            const keyword = normalizeSearch(data.keyword);
+            const tagFilter = normalizeTag(data.tagFilter);
+
+            return data.automations.filter((automation) => {
+                const tag = normalizeTag(automation.tag);
+                if (tagFilter && tag !== tagFilter) {
+                    return false;
+                }
+
+                if (!keyword) {
+                    return true;
+                }
+
+                return automationSearchText(automation).includes(keyword);
+            });
+        },
+        get hasActiveFilters() {
+            return !!data.keyword.trim() || !!normalizeTag(data.tagFilter);
+        },
     });
 
     let realtimeUnsubscribe = null;
@@ -201,6 +224,148 @@ export function automationsList(propsArg = {}) {
         openAutomationRunsModal(automation);
     }
 
+    function resetListFilters() {
+        data.keyword = "";
+        data.tagFilter = "";
+        data.groupByTag = false;
+    }
+
+    function tagOptions() {
+        return uniqueAutomationTags(data.automations).map((tag) => ({
+            value: tag,
+            label: tag,
+        }));
+    }
+
+    function renderAutomationRow(automation) {
+        return t.div(
+            { className: () => `al-card-row ${data.isLoading ? "al-faded" : ""}` },
+            t.div(
+                { className: "al-icon-block" },
+                t.i({ className: "ri-flashlight-line", ariaHidden: true }),
+            ),
+            t.div(
+                { className: "al-row-content" },
+                t.div(
+                    { className: "al-row-top" },
+                    t.span({
+                        className: "al-row-name",
+                        title: () => automation.name,
+                        textContent: () => automation.name,
+                    }),
+                    () => {
+                        const tag = normalizeTag(automation.tag);
+                        if (!tag) {
+                            return null;
+                        }
+
+                        return t.span(
+                            { className: "al-badge al-badge-tag" },
+                            t.i({ className: "ri-price-tag-3-line", ariaHidden: true }),
+                            t.span(null, tag),
+                        );
+                    },
+                    t.span(
+                        {
+                            className: () => `al-badge ${automation.active ? "al-badge-indigo" : "al-badge-muted"}`,
+                        },
+                        () => automation.active ? "Active" : "Inactive",
+                    ),
+                    t.span(
+                        { className: () => `al-badge ${badgeClass(automation.lastRunStatus)}` },
+                        () => formatRunStatus(automation.lastRunStatus),
+                    ),
+                ),
+                t.div(
+                    { className: "al-row-meta" },
+                    t.span(
+                        null,
+                        () => triggerLabels[automation.triggerType] || automation.triggerType,
+                    ),
+                    t.span({ className: "al-meta-dot" }, "·"),
+                    t.span(
+                        null,
+                        () => `${Array.isArray(automation.steps) ? automation.steps.length : 0} step(s)`,
+                    ),
+                    () => {
+                        const scope = describeAutomationScope(automation);
+                        if (!scope) return null;
+                        return t.span(null, t.span({ className: "al-meta-dot" }, "·"), t.span(null, scope));
+                    },
+                ),
+            ),
+            t.div(
+                { className: "al-last-run" },
+                t.div({ className: "al-last-run-label" }, "Last run"),
+                () => {
+                    if (!automation.lastRunAt) {
+                        return t.div({ className: "al-last-run-value" }, "Never");
+                    }
+                    const d = new Date(automation.lastRunAt);
+                    const dateStr = d.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                    });
+                    const timeStr = d.toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hour12: false,
+                        timeZoneName: "short",
+                    });
+                    return t.div(
+                        null,
+                        t.div({ className: "al-last-run-value" }, dateStr),
+                        t.div({ className: "al-last-run-time" }, timeStr),
+                    );
+                },
+            ),
+            t.div(
+                {
+                    hidden: () => data.isLoading,
+                    className: "al-row-actions",
+                },
+                t.button(
+                    {
+                        type: "button",
+                        ariaLabel: app.attrs.tooltip("Run now"),
+                        className: () => `al-action-btn ${data.isRunning[automation.id] ? "loading" : ""}`,
+                        disabled: () => isBusy(automation),
+                        onclick: (e) => {
+                            e.stopPropagation();
+                            runAutomation(automation);
+                        },
+                    },
+                    t.i({ className: "ri-play-fill", ariaHidden: true }),
+                ),
+                t.button(
+                    {
+                        type: "button",
+                        ariaLabel: app.attrs.tooltip("Edit"),
+                        className: "al-action-btn",
+                        disabled: () => isBusy(automation),
+                        onclick: (e) => {
+                            e.stopPropagation();
+                            openEditModal(automation);
+                        },
+                    },
+                    t.i({ className: "ri-pencil-line", ariaHidden: true }),
+                ),
+                t.button(
+                    {
+                        type: "button",
+                        ariaLabel: app.attrs.tooltip("More"),
+                        className: "al-action-btn",
+                        disabled: () => isBusy(automation),
+                        onclick: (e) => showMoreMenu(e, automation),
+                    },
+                    t.i({ className: "ri-more-2-fill", ariaHidden: true }),
+                ),
+            ),
+        );
+    }
+
     // More menu popover for a row
     function showMoreMenu(e, automation) {
         e.stopPropagation();
@@ -299,6 +464,55 @@ export function automationsList(propsArg = {}) {
                 watchers.forEach((w) => w?.unwatch());
             },
         },
+        t.div(
+            {
+                hidden: () => !data.automations.length,
+                className: "al-list-toolbar",
+            },
+            t.div(
+                { className: "al-search-field" },
+                t.i({ className: "ri-search-line", ariaHidden: true }),
+                t.input({
+                    type: "search",
+                    placeholder: "Search automations",
+                    value: () => data.keyword,
+                    oninput: (e) => (data.keyword = e.target.value),
+                }),
+            ),
+            t.div(
+                { className: "al-tag-filter" },
+                app.components.select({
+                    value: () => data.tagFilter,
+                    options: tagOptions,
+                    placeholder: "All tags",
+                    searchThreshold: 8,
+                    disabled: () => tagOptions().length === 0,
+                    onchange: (selected) => {
+                        data.tagFilter = selected?.[0]?.value || "";
+                    },
+                }),
+            ),
+            t.label(
+                { className: "al-group-toggle" },
+                t.input({
+                    type: "checkbox",
+                    className: "switch",
+                    checked: () => data.groupByTag,
+                    onchange: (e) => (data.groupByTag = e.target.checked),
+                }),
+                t.span({ className: "txt" }, "Group by tag"),
+            ),
+            t.button(
+                {
+                    type: "button",
+                    className: "btn secondary transparent sm",
+                    hidden: () => !data.hasActiveFilters && !data.groupByTag,
+                    onclick: resetListFilters,
+                },
+                t.i({ className: "ri-close-line", ariaHidden: true }),
+                t.span({ className: "txt" }, "Clear"),
+            ),
+        ),
         // Loading skeleton
         t.div(
             {
@@ -323,128 +537,37 @@ export function automationsList(propsArg = {}) {
                 "Create one to start wiring record, webhook, cron, or manual workflows.",
             ),
         ),
+        t.div(
+            {
+                hidden: () => data.isLoading || !data.automations.length || data.visibleAutomations.length,
+                className: "al-card-row al-empty-state",
+            },
+            t.div(
+                { className: "al-empty-icon-wrap" },
+                t.i({ className: "ri-search-eye-line", ariaHidden: true }),
+            ),
+            t.div({ className: "al-empty-title" }, "No matching automations"),
+            t.div(
+                { className: "al-empty-hint" },
+                "Try another keyword or tag filter.",
+            ),
+        ),
         // Automation rows
         () => {
-            return data.automations.map((automation) => {
+            if (!data.groupByTag) {
+                return data.visibleAutomations.map(renderAutomationRow);
+            }
+
+            return groupedAutomationsByTag(data.visibleAutomations).map((group) => {
                 return t.div(
-                    { className: () => `al-card-row ${data.isLoading ? "al-faded" : ""}` },
-                    // Icon block
+                    { className: "al-tag-group" },
                     t.div(
-                        { className: "al-icon-block" },
-                        t.i({ className: "ri-flashlight-line", ariaHidden: true }),
+                        { className: "al-tag-group-header" },
+                        t.i({ className: "ri-price-tag-3-line", ariaHidden: true }),
+                        t.span(null, group.tag),
+                        t.span({ className: "al-tag-group-count" }, `${group.items.length}`),
                     ),
-                    // Content
-                    t.div(
-                        { className: "al-row-content" },
-                        t.div(
-                            { className: "al-row-top" },
-                            t.span({
-                                className: "al-row-name",
-                                title: () => automation.name,
-                                textContent: () => automation.name,
-                            }),
-                            // Status badges
-                            t.span(
-                                {
-                                    className: () =>
-                                        `al-badge ${automation.active ? "al-badge-indigo" : "al-badge-muted"}`,
-                                },
-                                () => automation.active ? "Active" : "Inactive",
-                            ),
-                            t.span(
-                                { className: () => `al-badge ${badgeClass(automation.lastRunStatus)}` },
-                                () => formatRunStatus(automation.lastRunStatus),
-                            ),
-                        ),
-                        t.div(
-                            { className: "al-row-meta" },
-                            t.span(
-                                null,
-                                () => triggerLabels[automation.triggerType] || automation.triggerType,
-                            ),
-                            t.span({ className: "al-meta-dot" }, "·"),
-                            t.span(
-                                null,
-                                () => `${Array.isArray(automation.steps) ? automation.steps.length : 0} step(s)`,
-                            ),
-                            () => {
-                                const scope = describeAutomationScope(automation);
-                                if (!scope) return null;
-                                return t.span(null, t.span({ className: "al-meta-dot" }, "·"), t.span(null, scope));
-                            },
-                        ),
-                    ),
-                    // Last run
-                    t.div(
-                        { className: "al-last-run" },
-                        t.div({ className: "al-last-run-label" }, "Last run"),
-                        () => {
-                            if (!automation.lastRunAt) {
-                                return t.div({ className: "al-last-run-value" }, "Never");
-                            }
-                            const d = new Date(automation.lastRunAt);
-                            const dateStr = d.toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                            });
-                            const timeStr = d.toLocaleTimeString("en-US", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                second: "2-digit",
-                                hour12: false,
-                                timeZoneName: "short",
-                            });
-                            return t.div(
-                                null,
-                                t.div({ className: "al-last-run-value" }, dateStr),
-                                t.div({ className: "al-last-run-time" }, timeStr),
-                            );
-                        },
-                    ),
-                    // Row actions
-                    t.div(
-                        {
-                            hidden: () => data.isLoading,
-                            className: "al-row-actions",
-                        },
-                        t.button(
-                            {
-                                type: "button",
-                                ariaLabel: app.attrs.tooltip("Run now"),
-                                className: () => `al-action-btn ${data.isRunning[automation.id] ? "loading" : ""}`,
-                                disabled: () => isBusy(automation),
-                                onclick: (e) => {
-                                    e.stopPropagation();
-                                    runAutomation(automation);
-                                },
-                            },
-                            t.i({ className: "ri-play-fill", ariaHidden: true }),
-                        ),
-                        t.button(
-                            {
-                                type: "button",
-                                ariaLabel: app.attrs.tooltip("Edit"),
-                                className: "al-action-btn",
-                                disabled: () => isBusy(automation),
-                                onclick: (e) => {
-                                    e.stopPropagation();
-                                    openEditModal(automation);
-                                },
-                            },
-                            t.i({ className: "ri-pencil-line", ariaHidden: true }),
-                        ),
-                        t.button(
-                            {
-                                type: "button",
-                                ariaLabel: app.attrs.tooltip("More"),
-                                className: "al-action-btn",
-                                disabled: () => isBusy(automation),
-                                onclick: (e) => showMoreMenu(e, automation),
-                            },
-                            t.i({ className: "ri-more-2-fill", ariaHidden: true }),
-                        ),
-                    ),
+                    ...group.items.map(renderAutomationRow),
                 );
             });
         },
@@ -497,6 +620,59 @@ function describeAutomationScope(automation) {
     }
 
     return "";
+}
+
+function normalizeTag(value) {
+    return String(value || "").trim();
+}
+
+function normalizeSearch(value) {
+    return normalizeTag(value).toLowerCase();
+}
+
+function uniqueAutomationTags(automations) {
+    return [...new Set((automations || []).map((automation) => normalizeTag(automation.tag)).filter(Boolean))].sort(
+        (a, b) => a.localeCompare(b),
+    );
+}
+
+function automationSearchText(automation) {
+    return normalizeSearch(
+        [
+            automation.id,
+            automation.name,
+            automation.tag,
+            automation.notes,
+            automation.triggerType,
+            triggerLabels[automation.triggerType],
+            describeAutomationScope(automation),
+            formatRunStatus(automation.lastRunStatus),
+        ].filter(Boolean).join(" "),
+    );
+}
+
+function groupedAutomationsByTag(automations) {
+    const groups = new Map();
+
+    (automations || []).forEach((automation) => {
+        const tag = normalizeTag(automation.tag) || "Untagged";
+        if (!groups.has(tag)) {
+            groups.set(tag, []);
+        }
+        groups.get(tag).push(automation);
+    });
+
+    return [...groups.entries()]
+        .sort(([a], [b]) => {
+            if (a === "Untagged") {
+                return 1;
+            }
+            if (b === "Untagged") {
+                return -1;
+            }
+            return a.localeCompare(b);
+        })
+        .map(([tag, items]) => ({ tag, items }));
 }
 
 function formatRunStatus(status) {

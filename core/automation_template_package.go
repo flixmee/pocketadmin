@@ -14,6 +14,7 @@ const WorkflowTemplatePackageVersion = "pocketadmin.workflowTemplate.v1"
 type WorkflowTemplatePackage struct {
 	PackageVersion       string        `json:"packageVersion"`
 	Name                 string        `json:"name"`
+	Tag                  string        `json:"tag,omitempty"`
 	Description          string        `json:"description,omitempty"`
 	TriggerType          string        `json:"triggerType"`
 	CollectionRef        string        `json:"collectionRef,omitempty"`
@@ -148,6 +149,7 @@ func (app *BaseApp) InstallWorkflowTemplate(templateID string, options WorkflowT
 
 	automation := NewAutomation(app)
 	automation.SetName(name)
+	automation.SetTag(pkg.Tag)
 	automation.SetActive(options.Active)
 	automation.SetTriggerType(pkg.TriggerType)
 	automation.SetCollectionRef(pkg.CollectionRef)
@@ -199,6 +201,7 @@ func automationTemplatePackageFromAutomation(automation *Automation, options Wor
 	pkg := &WorkflowTemplatePackage{
 		PackageVersion: WorkflowTemplatePackageVersion,
 		Name:           name,
+		Tag:            automation.Tag(),
 		Description:    strings.TrimSpace(options.Description),
 		TriggerType:    automation.TriggerType(),
 		CollectionRef:  automation.CollectionRef(),

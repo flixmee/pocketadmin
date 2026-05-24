@@ -122,6 +122,7 @@ func TestAutomationCreate(t *testing.T) {
 
 	validBody := `{
 		"name":"API create automation",
+		"tag":"ops",
 		"active":true,
 		"triggerType":"manual",
 		"steps":[{"type":"condition","path":"trigger.type","op":"exists"}]
@@ -177,10 +178,14 @@ func TestAutomationCreate(t *testing.T) {
 				if record.GetString("triggerType") != core.AutomationTriggerManual {
 					t.Fatalf("Expected created automation trigger type %q, got %q", core.AutomationTriggerManual, record.GetString("triggerType"))
 				}
+				if record.GetString("tag") != "ops" {
+					t.Fatalf("Expected created automation tag %q, got %q", "ops", record.GetString("tag"))
+				}
 			},
 			ExpectedStatus: 200,
 			ExpectedContent: []string{
 				`"name":"API create automation"`,
+				`"tag":"ops"`,
 				`"triggerType":"manual"`,
 			},
 		},
@@ -318,7 +323,7 @@ func TestAutomationViewUpdateDelete(t *testing.T) {
 			Name:   "update authorized as superuser",
 			Method: http.MethodPatch,
 			URL:    "/api/automations/autoapi00000003",
-			Body:   strings.NewReader(`{"active":false,"notes":"updated through api"}`),
+			Body:   strings.NewReader(`{"active":false,"tag":"ops","notes":"updated through api"}`),
 			Headers: map[string]string{
 				"Authorization": testSuperuserAuthHeader,
 			},
@@ -336,11 +341,15 @@ func TestAutomationViewUpdateDelete(t *testing.T) {
 				if record.GetString("notes") != "updated through api" {
 					t.Fatalf("Expected updated notes, got %q", record.GetString("notes"))
 				}
+				if record.GetString("tag") != "ops" {
+					t.Fatalf("Expected updated tag, got %q", record.GetString("tag"))
+				}
 			},
 			ExpectedStatus: 200,
 			ExpectedContent: []string{
 				`"id":"autoapi00000003"`,
 				`"active":false`,
+				`"tag":"ops"`,
 				`"notes":"updated through api"`,
 			},
 		},

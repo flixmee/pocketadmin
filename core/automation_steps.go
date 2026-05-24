@@ -250,6 +250,10 @@ func executeAutomationCodeStep(ctx *automationExecutionContext, step map[string]
 	}
 
 	vm := goja.New()
+	if err := bindAutomationCodeStepJsvmGlobals(vm, ctx.App); err != nil {
+		return nil, err
+	}
+
 	jsContext := automationTemplateJSContext(ctx.TemplateData)
 	for key, value := range jsContext {
 		if strings.HasPrefix(key, "__") {
@@ -275,6 +279,9 @@ func executeAutomationCodeStep(ctx *automationExecutionContext, step map[string]
 
 	result, err := runAutomationCodeStepScript(vm, code)
 	if err != nil {
+		return nil, fmt.Errorf("failed to execute automation code step: %w", normalizeAutomationCodeStepException(err))
+	}
+	if err := checkAutomationCodeStepValueForError(ctx.App, result); err != nil {
 		return nil, fmt.Errorf("failed to execute automation code step: %w", err)
 	}
 	if goja.IsUndefined(result) {

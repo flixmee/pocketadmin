@@ -1,24 +1,30 @@
 Goal (incl. success criteria):
 
-- Fix admin UI automation form reactivity after adding a step.
-- Success: after adding a step, changing the automation trigger or name still updates/reacts correctly in the UI/save state.
+- Add `tag` support to automations and update the automation list to support grouping by tag plus filtering by tag and keyword.
+- Success: automation edit/create UI can store a tag; automation list can search by keyword, filter by tag, and group entries by tag using existing admin UI patterns.
 
 Constraints/Assumptions:
 
-- Follow `AGENTS.md`/`UI_DOCS.md` guidance for UI changes.
-- Keep UI changes focused to automations unless investigation shows shared reactive helpers are at fault.
-- Do not disturb unrelated dirty work.
+- Follow `AGENTS.md` and `UI_DOCS.md`; keep UI changes focused.
+- Existing unrelated backend/UI/dist changes are present; do not revert them.
+- Preserve existing automation behavior and payload shape aside from the new tag field.
+- Follow admin UI guidance: use shared components, avoid native selects, keep ephemeral view state local.
 
 Key decisions:
 
-- Preserve the existing reactive `data.form` object when automation steps change; update `data.form.steps` in place instead of replacing `data.form`.
+- Tag is implemented as a simple optional system text field on `_automations`.
+- Automation list filtering/grouping/search is implemented client-side over the admin list payload.
 
 State:
   - Done:
-    - Read `CONTINUITY.md` at the start of the turn.
-    - User reported: after adding a step, reactivity does not work when changing automation trigger or name.
-    - Patched both automation upsert surfaces so step editor `onchange` mutates `data.form.steps` directly.
-    - Ran `cd ui && npm run build`; passed. dprint still emitted the existing cache write warning outside the workspace before Vite completed successfully.
+    - Read `CONTINUITY.md`.
+    - Added backend tag field/API/model/template/version plumbing.
+    - Added automation edit/create tag input.
+    - Added automation list keyword search, tag filter, and group-by-tag controls.
+    - Ran `go test ./core -run 'TestAutomation(CollectionsExist|Fields)|TestAutomationSchemas|TestAutomationTemplate|TestAutomationVersion|TestPublishAutomationVersion|TestWorkflowTemplate'`; passed.
+    - Ran `go test ./apis -run 'TestAutomationsList|TestAutomationCreate|TestAutomationViewUpdateDelete'`; passed.
+    - Ran `npm run build`; Vite passed, dprint emitted its existing cache write warning outside the workspace.
+    - Ran `./node_modules/.bin/vite build`; passed and regenerated `ui/dist`.
   - Now:
     - Ready for user review.
   - Next:
@@ -26,12 +32,12 @@ State:
 
 Open questions (UNCONFIRMED if needed):
 
-- Exact user-visible failure mode is UNCONFIRMED: likely dirty/change detection or bound field UI not updating after step add.
+- None.
 
 Working set (files/ids/commands):
 
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/recordStepForm.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/automationUpsertModal.js`
-- `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations/pageAutomationUpsert.js`
-- Automation UI files under `/Volumes/MacOS_WD/Developer/pocketadmin/ui/src/settings/automations`
-- `cd ui && npm run build`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/automations/`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/apis/automation.go`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/core/automation_model.go`
+- `/Users/suytbily/dev/gits/harry/pocketadmin/migrations/1781000001_automation_tags.go`
+- `go test ./apis ./core` was attempted but this checkout still fails unrelated broader package tests (`TestDefaultRateLimitMiddleware`, `TestRecordAuthWithOTPManualRateLimiterCheck`, `TestNotifyWatcher_SettingsUpdate`, `TestFindCachedCollectionReferences`, `TestFindAllCollections`).

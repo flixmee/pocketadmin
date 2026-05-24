@@ -48,6 +48,10 @@ func createAutomationsCollection(txApp core.App) error {
 		System:   true,
 		Required: true,
 	})
+	col.Fields.Add(&core.TextField{
+		Name:   "tag",
+		System: true,
+	})
 	col.Fields.Add(&core.BoolField{
 		Name:   "active",
 		System: true,

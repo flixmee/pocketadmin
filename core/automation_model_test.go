@@ -27,6 +27,7 @@ func TestAutomationCollectionsExist(t *testing.T) {
 			expectedFields: []string{
 				"id",
 				"name",
+				"tag",
 				"active",
 				"triggerType",
 				"collectionRef",
@@ -412,6 +413,7 @@ func TestAutomationFields(t *testing.T) {
 	steps := mustParseJSONRaw(t, `[{"type":"condition"}]`)
 
 	automation.SetName("Sync orders")
+	automation.SetTag("operations")
 	automation.SetActive(true)
 	automation.SetTriggerType(core.AutomationTriggerRecordCreate)
 	automation.SetCollectionRef("users")
@@ -425,6 +427,9 @@ func TestAutomationFields(t *testing.T) {
 
 	if automation.Name() != "Sync orders" {
 		t.Fatalf("Expected name to roundtrip, got %q", automation.Name())
+	}
+	if automation.Tag() != "operations" {
+		t.Fatalf("Expected tag to roundtrip, got %q", automation.Tag())
 	}
 	if !automation.Active() {
 		t.Fatal("Expected active to be true")

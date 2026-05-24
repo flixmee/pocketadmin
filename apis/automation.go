@@ -20,6 +20,7 @@ import (
 
 var automationAllowedFields = []string{
 	"name",
+	"tag",
 	"active",
 	"triggerType",
 	"collectionRef",

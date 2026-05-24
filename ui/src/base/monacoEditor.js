@@ -8,6 +8,8 @@ window.app = window.app || {};
 window.app.components = window.app.components || {};
 
 let monacoLoadPromise;
+let monacoTypeDefinitionsPromise;
+let monacoTypeDefinitionsRegistered = false;
 
 window.MonacoEnvironment = {
     ...(window.MonacoEnvironment || {}),
@@ -85,9 +87,11 @@ window.app.components.monacoEditor = function(propsArg = {}) {
             const language = normalizeLanguage(props.language);
             const uri = monaco.Uri.parse(`inmemory://pocketadmin/${props.id || app.utils.randomString()}.${language}`);
             model = monaco.editor.createModel(toString(props.value), language, uri);
+            const theme = defineMonacoEditorTheme(monaco, editorHost);
 
             editor = monaco.editor.create(editorHost, {
                 model: model,
+                theme: theme,
                 readOnly: !!props.disabled,
                 automaticLayout: true,
                 minimap: { enabled: false },
@@ -97,7 +101,7 @@ window.app.components.monacoEditor = function(propsArg = {}) {
                 insertSpaces: true,
                 lineNumbersMinChars: 3,
                 renderLineHighlight: "line",
-                fixedOverflowWidgets: true,
+                fixedOverflowWidgets: false,
                 fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--monospaceFontFamily"),
                 fontSize: 13,
             });
@@ -183,17 +187,171 @@ window.app.components.monacoEditor = function(propsArg = {}) {
 
 function loadMonaco() {
     if (window.monaco?.editor) {
-        return Promise.resolve(window.monaco);
+        return configureMonacoTypeDefinitions(window.monaco).then(() => window.monaco);
     }
 
     if (!monacoLoadPromise) {
-        monacoLoadPromise = import("monaco-editor").then((monaco) => {
+        monacoLoadPromise = import("monaco-editor").then(async (monaco) => {
             window.monaco = monaco;
+            await configureMonacoTypeDefinitions(monaco);
             return monaco;
         });
     }
 
     return monacoLoadPromise;
+}
+
+function configureMonacoTypeDefinitions(monaco) {
+    if (monacoTypeDefinitionsRegistered || !monaco?.languages?.typescript) {
+        return Promise.resolve();
+    }
+
+    if (!monacoTypeDefinitionsPromise) {
+        monacoTypeDefinitionsPromise = fetch(resolvePublicAssetURL("types.d.ts"), {
+            cache: "force-cache",
+        })
+            .then((res) => {
+                if (!res.ok) {
+                    throw new Error(`Failed to load types.d.ts (${res.status})`);
+                }
+                return res.text();
+            })
+            .then((source) => {
+                if (!source || monacoTypeDefinitionsRegistered) {
+                    return;
+                }
+
+                const libPath = "file:///pocketbase/types.d.ts";
+                monaco.languages.typescript.javascriptDefaults.addExtraLib(source, libPath);
+                monaco.languages.typescript.typescriptDefaults.addExtraLib(source, libPath);
+                monacoTypeDefinitionsRegistered = true;
+            })
+            .catch((err) => {
+                console.warn("failed to load Monaco TypeScript definitions:", err);
+            });
+    }
+
+    return monacoTypeDefinitionsPromise;
+}
+
+function resolvePublicAssetURL(path) {
+    return new URL(path, document.baseURI).toString();
+}
+
+function defineMonacoEditorTheme(monaco, el) {
+    const themeName = `pocketadmin-${app.utils.randomString()}`;
+    const inputColor = cssVarColor(el, "--inputColor", "#ffffff");
+    const inputFocusColor = cssVarColor(el, "--inputFocusColor", inputColor);
+    const inputBorderColor = cssVarColor(el, "--inputBorderColor", inputFocusColor);
+    const textColor = cssVarColor(el, "--surfaceTxtColor", "#111111");
+    const hintColor = cssVarColor(el, "--surfaceTxtHintColor", textColor);
+    const disabledColor = cssVarColor(el, "--surfaceTxtDisabledColor", hintColor);
+    const selectionColor = cssVarColor(el, "--selectionColor", inputFocusColor);
+
+    monaco.editor.defineTheme(themeName, {
+        base: "vs",
+        inherit: true,
+        rules: [
+            { token: "", foreground: "111111" },
+            { token: "comment", foreground: "008000" },
+            { token: "comment.doc", foreground: "008000" },
+            { token: "keyword", foreground: "0000ff" },
+            { token: "keyword.json", foreground: "0000ff" },
+            { token: "identifier", foreground: "006dcc" },
+            { token: "identifier.function", foreground: "795e26" },
+            { token: "type.identifier", foreground: "001080" },
+            { token: "number", foreground: "098658" },
+            { token: "string", foreground: "a31515" },
+            { token: "string.escape", foreground: "0451a5" },
+            { token: "regexp", foreground: "811f3f" },
+            { token: "delimiter", foreground: "111111" },
+            { token: "delimiter.bracket", foreground: "0000ff" },
+            { token: "delimiter.parenthesis", foreground: "111111" },
+            { token: "operator", foreground: "0000ff" },
+            { token: "predefined", foreground: "001080" },
+            { token: "variable", foreground: "001080" },
+            { token: "variable.predefined", foreground: "001080" },
+            { token: "tag", foreground: "800000" },
+            { token: "attribute.name", foreground: "ff0000" },
+            { token: "attribute.value", foreground: "0000ff" },
+        ],
+        colors: {
+            "editor.background": inputColor,
+            "editor.foreground": textColor,
+            "editorCursor.foreground": hintColor,
+            "editorLineNumber.foreground": disabledColor,
+            "editorLineNumber.activeForeground": textColor,
+            "editorGutter.background": inputColor,
+            "editor.lineHighlightBackground": withAlpha(inputFocusColor, "88"),
+            "editor.selectionBackground": withAlpha(selectionColor, "66"),
+            "editor.inactiveSelectionBackground": withAlpha(selectionColor, "33"),
+            "editorIndentGuide.background1": inputBorderColor,
+            "editorIndentGuide.activeBackground1": hintColor,
+            "editorWidget.background": inputColor,
+            "editorWidget.border": inputBorderColor,
+            "editorHoverWidget.background": inputColor,
+            "editorHoverWidget.border": inputBorderColor,
+            "editorSuggestWidget.background": inputColor,
+            "editorSuggestWidget.border": inputBorderColor,
+            "editorSuggestWidget.foreground": textColor,
+            "editorSuggestWidget.selectedBackground": inputFocusColor,
+            "scrollbarSlider.background": withAlpha(hintColor, "33"),
+            "scrollbarSlider.hoverBackground": withAlpha(hintColor, "55"),
+            "scrollbarSlider.activeBackground": withAlpha(hintColor, "77"),
+        },
+    });
+
+    return themeName;
+}
+
+function cssVarColor(el, name, fallback) {
+    const raw = getComputedStyle(el).getPropertyValue(name).trim();
+    return resolveCssColor(el, raw || fallback, fallback);
+}
+
+function resolveCssColor(parent, color, fallback) {
+    const probe = document.createElement("span");
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    probe.style.pointerEvents = "none";
+    probe.style.color = color;
+    parent.appendChild(probe);
+
+    const resolved = getComputedStyle(probe).color;
+    probe.remove();
+
+    return rgbToHex(resolved) || fallback;
+}
+
+function rgbToHex(value) {
+    const match = String(value || "").match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\)$/i);
+    if (!match) {
+        return "";
+    }
+
+    const r = Number(match[1]);
+    const g = Number(match[2]);
+    const b = Number(match[3]);
+    const alpha = match[4] === undefined ? 1 : Number(match[4]);
+    const result = [r, g, b].map((part) => clampColor(part).toString(16).padStart(2, "0")).join("");
+    if (alpha >= 1) {
+        return `#${result}`;
+    }
+
+    return `#${result}${clampColor(Math.round(alpha * 255)).toString(16).padStart(2, "0")}`;
+}
+
+function trimHex(value) {
+    return String(value || "").replace(/^#/, "").slice(0, 6);
+}
+
+function withAlpha(value, alpha) {
+    const hex = String(value || "").replace(/^#/, "").slice(0, 6);
+    return `#${hex}${alpha}`;
+}
+
+function clampColor(value) {
+    return Math.max(0, Math.min(255, Number(value) || 0));
 }
 
 function registerAutocomplete(monaco, model, props) {

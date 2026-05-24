@@ -877,6 +877,56 @@
     overflow: hidden;
 }
 
+.al-list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 0.5px solid var(--surfaceAlt2Color);
+    background: var(--surfaceAlt1Color);
+}
+
+.al-search-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 260px;
+    min-width: 180px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--surfaceAlt2Color);
+    border-radius: 6px;
+    background: var(--surfaceColor);
+    color: var(--surfaceTxtHintColor);
+}
+
+.al-search-field input {
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.al-search-field input:focus {
+    box-shadow: none;
+}
+
+.al-tag-filter {
+    flex: 0 0 180px;
+}
+
+.al-group-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    color: var(--surfaceTxtColor);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
 /* Row base */
 .al-card-row {
     display: flex;
@@ -967,6 +1017,44 @@
 .al-badge-muted {
     background: var(--surfaceAlt1Color);
     color: var(--surfaceTxtHintColor);
+}
+.al-badge-tag {
+    gap: 4px;
+    background: rgba(14, 165, 233, 0.1);
+    color: #0284c7;
+}
+.al-badge-tag i {
+    font-size: 12px;
+}
+
+.al-tag-group + .al-tag-group {
+    border-top: 0.5px solid var(--surfaceAlt2Color);
+}
+
+.al-tag-group-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 16px;
+    background: color-mix(in srgb, var(--surfaceAlt1Color) 72%, transparent);
+    color: var(--surfaceTxtHintColor);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.al-tag-group-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    margin-left: 2px;
+    padding: 0 6px;
+    border-radius: 9999px;
+    background: var(--surfaceColor);
+    color: var(--surfaceTxtHintColor);
+    font-size: 11px;
 }
 
 /* Metadata line */
@@ -1185,8 +1273,21 @@
 [data-color-scheme="dark"] .al-badge-red {
     background: rgba(239, 68, 68, 0.15);
 }
+[data-color-scheme="dark"] .al-badge-tag {
+    background: rgba(14, 165, 233, 0.15);
+}
 
 @media (max-width: 680px) {
+    .al-list-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .al-tag-filter {
+        flex-basis: auto;
+    }
+    .al-group-toggle {
+        align-self: flex-start;
+    }
     .al-card-row {
         flex-wrap: wrap;
         gap: 8px;

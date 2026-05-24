@@ -16,6 +16,7 @@ type AutomationPublishOptions struct {
 type automationVersionSnapshot struct {
 	Id            string        `json:"id"`
 	Name          string        `json:"name"`
+	Tag           string        `json:"tag,omitempty"`
 	TriggerType   string        `json:"triggerType"`
 	CollectionRef string        `json:"collectionRef,omitempty"`
 	CronExpr      string        `json:"cronExpr,omitempty"`
@@ -80,6 +81,7 @@ func automationSnapshotRaw(automation *Automation) (types.JSONRaw, error) {
 	return toJSONRaw(automationVersionSnapshot{
 		Id:            automation.Id,
 		Name:          automation.Name(),
+		Tag:           automation.Tag(),
 		TriggerType:   automation.TriggerType(),
 		CollectionRef: automation.CollectionRef(),
 		CronExpr:      automation.CronExpr(),
@@ -103,6 +105,7 @@ func applyAutomationVersionSnapshot(automation *Automation, raw types.JSONRaw) (
 	if snapshot.Name != "" {
 		clone.SetName(snapshot.Name)
 	}
+	clone.SetTag(snapshot.Tag)
 	if snapshot.TriggerType != "" {
 		clone.SetTriggerType(snapshot.TriggerType)
 	}

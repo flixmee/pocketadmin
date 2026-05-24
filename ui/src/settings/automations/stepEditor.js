@@ -1662,7 +1662,6 @@ function codeStepForm({ step, context = {} }) {
             t.code("steps[n].output"),
             ".",
         ),
-        generatedConfigPreview(step),
     );
 }
 
