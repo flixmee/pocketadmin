@@ -15,6 +15,8 @@ const automationTriggerOptions = [
     { value: "i18n.ai_translation_finished", label: "AI translation finished" },
 ];
 
+const customTagOptionValue = "__pocketadmin_custom_tag__";
+
 export function pageAutomationUpsert(route) {
     const automationId = route.params?.id || "";
     const isNew = !automationId;
@@ -24,8 +26,10 @@ export function pageAutomationUpsert(route) {
     const initialForm = normalizeAutomationForm(null);
     const data = store({
         isLoading: !isNew,
+        isLoadingTags: false,
         isSaving: false,
         automation: null,
+        automationTags: [],
         form: initialForm,
         initialSerialized: JSON.stringify(initialForm),
         get title() {
@@ -62,6 +66,13 @@ export function pageAutomationUpsert(route) {
         app.store.title = isNew ? "Create automation" : data.form.name || "Edit automation";
     }
 
+    async function loadPageData() {
+        await Promise.all([
+            loadAutomation(),
+            loadAutomationTags(),
+        ]);
+    }
+
     async function loadAutomation() {
         if (isNew) {
             return;
@@ -82,6 +93,21 @@ export function pageAutomationUpsert(route) {
         data.isLoading = false;
     }
 
+    async function loadAutomationTags() {
+        data.isLoadingTags = true;
+        try {
+            const automations = await app.pb.send("/api/automations", {
+                requestKey: "automationUpsert.loadTags",
+            });
+            data.automationTags = uniqueAutomationTags(automations);
+        } catch (err) {
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+            }
+        }
+        data.isLoadingTags = false;
+    }
+
     function collectionOptions(selectedValue = "") {
         const options = (app.store.collections || [])
             .filter((collection) => collection?.type === "base" || collection?.type === "auth")
@@ -98,6 +124,103 @@ export function pageAutomationUpsert(route) {
         }
 
         return options;
+    }
+
+    function tagOptions(selectedValue = "") {
+        const tags = new Set(data.automationTags);
+        const selectedTag = normalizeTag(selectedValue);
+        if (selectedTag && selectedTag !== customTagOptionValue) {
+            tags.add(selectedTag);
+        }
+
+        const options = [...tags]
+            .sort((a, b) => a.localeCompare(b))
+            .map((tag) => ({
+                value: tag,
+                label: tag,
+            }));
+
+        options.push({
+            value: customTagOptionValue,
+            label: "Other...",
+        });
+
+        return options;
+    }
+
+    function openCustomTagDialog() {
+        const dialogFormId = "automation_custom_tag_" + app.utils.randomString();
+        const customTagData = store({
+            value: normalizeTag(data.form.tag),
+        });
+
+        let modal;
+
+        function submit() {
+            const tag = normalizeTag(customTagData.value);
+            if (!tag) {
+                return;
+            }
+
+            data.form.tag = tag;
+            app.modals.close(modal, true);
+        }
+
+        modal = t.div(
+            {
+                className: "modal popup sm automation-tag-modal",
+                onafterclose: (el) => el?.remove(),
+            },
+            t.header(
+                { className: "modal-header" },
+                t.h5({ className: "m-auto" }, "Custom tag"),
+            ),
+            t.form(
+                {
+                    id: dialogFormId,
+                    className: "modal-content",
+                    onsubmit: (e) => {
+                        e.preventDefault();
+                        submit();
+                    },
+                },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: dialogFormId + "_tag" }, "Tag"),
+                    t.input({
+                        id: dialogFormId + "_tag",
+                        type: "text",
+                        maxlength: 255,
+                        required: true,
+                        autofocus: true,
+                        value: () => customTagData.value,
+                        oninput: (e) => (customTagData.value = e.target.value),
+                    }),
+                ),
+            ),
+            t.footer(
+                { className: "modal-footer" },
+                t.button(
+                    {
+                        type: "button",
+                        className: "btn transparent m-r-auto",
+                        onclick: () => app.modals.close(modal),
+                    },
+                    t.span({ className: "txt" }, "Cancel"),
+                ),
+                t.button(
+                    {
+                        type: "submit",
+                        "html-form": dialogFormId,
+                        className: "btn",
+                    },
+                    t.span({ className: "txt" }, "Apply"),
+                ),
+            ),
+        );
+
+        document.body.appendChild(modal);
+        app.modals.open(modal);
     }
 
     function setTriggerType(triggerType) {
@@ -195,7 +318,7 @@ export function pageAutomationUpsert(route) {
         {
             pbEvent: "pageAutomationUpsert",
             className: "page page-automation-upsert",
-            onmount: loadAutomation,
+            onmount: loadPageData,
             onunmount: () => {
                 if (app.store.errors) {
                     app.store.errors = null;
@@ -324,7 +447,7 @@ export function pageAutomationUpsert(route) {
                     t.div(
                         { className: "grid" },
                         t.div(
-                            { className: "col-md-8" },
+                            { className: "col-md-6" },
                             t.div(
                                 { className: "field" },
                                 t.label({ htmlFor: formId + "_name", className: "automation-field-label" }, "Name"),
@@ -341,24 +464,33 @@ export function pageAutomationUpsert(route) {
                             () => fieldError(app.store.errors?.name),
                         ),
                         t.div(
-                            { className: "col-md-4" },
+                            { className: "col-md-3" },
                             t.div(
                                 { className: "field" },
                                 t.label({ htmlFor: formId + "_tag", className: "automation-field-label" }, "Tag"),
-                                t.input({
+                                app.components.select({
                                     id: formId + "_tag",
                                     name: "tag",
-                                    type: "text",
-                                    maxlength: 255,
-                                    placeholder: "Optional group",
                                     value: () => data.form.tag,
-                                    oninput: (e) => (data.form.tag = e.target.value),
+                                    options: () => tagOptions(data.form.tag),
+                                    placeholder: () => data.isLoadingTags ? "Loading tags..." : "Select existing tag",
+                                    searchThreshold: 8,
+                                    disabled: () => data.isLoadingTags || tagOptions(data.form.tag).length === 0,
+                                    onchange: (selected) => {
+                                        const selectedValue = selected?.[0]?.value || "";
+                                        if (selectedValue === customTagOptionValue) {
+                                            openCustomTagDialog();
+                                            return;
+                                        }
+
+                                        data.form.tag = selectedValue;
+                                    },
                                 }),
                             ),
                             () => fieldError(app.store.errors?.tag),
                         ),
                         t.div(
-                            { className: "col-md-4" },
+                            { className: "col-md-3" },
                             t.div(
                                 { className: "field m-t-lg" },
                                 t.input({
@@ -524,6 +656,14 @@ function cloneAutomationForm(form) {
         ...form,
         steps: normalizeAutomationEditorSteps(form?.steps),
     };
+}
+
+function normalizeTag(value) {
+    return String(value || "").trim();
+}
+
+function uniqueAutomationTags(automations) {
+    return [...new Set((automations || []).map((automation) => normalizeTag(automation.tag)).filter(Boolean))];
 }
 
 function buildAutomationPayload(form) {

@@ -67,6 +67,7 @@ export function stepEditor(propsArg = {}) {
     let suppressedClickStepId = "";
     let suppressedClickUntil = 0;
     let dragState = null;
+    let suppressedPaletteActionUntil = 0;
 
     const data = store({
         expandedById: {},
@@ -80,6 +81,8 @@ export function stepEditor(propsArg = {}) {
         drawerOpen: false,
         drawerActiveTab: "settings",
         dragStepId: "",
+        dragActionType: "",
+        dragInsertIndex: -1,
     });
 
     async function loadSchemas() {
@@ -313,6 +316,108 @@ export function stepEditor(propsArg = {}) {
         window.addEventListener("pointercancel", handlePointerCancel);
     }
 
+    function beginActionPointerDrag(e, option) {
+        if (e.button !== undefined && e.button !== 0) {
+            return;
+        }
+
+        stopPointerDrag?.();
+
+        const sourceEl = e.currentTarget;
+        const editorEl = sourceEl?.closest?.(".automation-step-editor");
+        const canvasEl = editorEl?.querySelector?.(".automation-builder-canvas");
+        const sourceRect = sourceEl?.getBoundingClientRect?.();
+        if (!sourceEl || !canvasEl || !sourceRect) {
+            return;
+        }
+
+        const pointerId = e.pointerId;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        let hasStarted = false;
+
+        const start = () => {
+            if (hasStarted) {
+                return;
+            }
+            hasStarted = true;
+            sourceEl.setPointerCapture?.(pointerId);
+            dragState = createActionDragState(sourceEl, canvasEl, option, startX, startY);
+            data.dragActionType = option.value;
+            data.dragInsertIndex = -1;
+            document.body.classList.add("automation-builder-node-dragging");
+            queueDragFrame();
+        };
+
+        const cleanup = () => {
+            window.removeEventListener("pointermove", handlePointerMove);
+            window.removeEventListener("pointerup", handlePointerUp);
+            window.removeEventListener("pointercancel", handlePointerCancel);
+            document.body.classList.remove("automation-builder-node-dragging");
+            if (dragState?.frame) {
+                cancelAnimationFrame(dragState.frame);
+            }
+            dragState?.overlay?.remove();
+            dragState = null;
+            data.dragActionType = "";
+            data.dragInsertIndex = -1;
+            stopPointerDrag = null;
+        };
+
+        const finish = (event, shouldInsert) => {
+            if (hasStarted && shouldInsert && dragState) {
+                dragState.clientX = event.clientX;
+                dragState.clientY = event.clientY;
+                runDragFrame(true);
+            }
+            cleanup();
+            if (hasStarted) {
+                event.preventDefault();
+                suppressedPaletteActionUntil = Date.now() + 350;
+            }
+        };
+
+        const handlePointerMove = (event) => {
+            if (pointerId !== undefined && event.pointerId !== pointerId) {
+                return;
+            }
+
+            const deltaX = Math.abs(event.clientX - startX);
+            const deltaY = Math.abs(event.clientY - startY);
+            if (!hasStarted && deltaX < 4 && deltaY < 4) {
+                return;
+            }
+
+            start();
+            event.preventDefault();
+            if (dragState) {
+                dragState.clientX = event.clientX;
+                dragState.clientY = event.clientY;
+                queueDragFrame();
+            }
+        };
+
+        const handlePointerUp = (event) => {
+            if (pointerId !== undefined && event.pointerId !== pointerId) {
+                return;
+            }
+            finish(event, true);
+        };
+
+        const handlePointerCancel = (event) => {
+            if (pointerId !== undefined && event.pointerId !== pointerId) {
+                return;
+            }
+            finish(event, false);
+        };
+
+        stopPointerDrag = () => finish(new Event("pointercancel"), false);
+
+        window.addEventListener("pointermove", handlePointerMove, { passive: false });
+        window.addEventListener("pointerup", handlePointerUp);
+        window.addEventListener("pointercancel", handlePointerCancel);
+    }
+
     function queueDragFrame() {
         if (!dragState || dragState.frame) {
             return;
@@ -330,7 +435,15 @@ export function stepEditor(propsArg = {}) {
         updateDragOverlay(dragState);
         const scrolled = autoScrollForDrag(dragState);
         const insertIndex = resolvePointerDropIndex(dragState.clientY);
-        if (insertIndex !== dragState.lastInsertIndex || isFinal) {
+        const isActionDrag = dragState.kind === "action";
+        const canInsertAction = isActionDrag
+            && isPointerInsideElement(dragState.canvasEl, dragState.clientX, dragState.clientY);
+        if (isActionDrag) {
+            data.dragInsertIndex = canInsertAction ? insertIndex : -1;
+            if (isFinal && canInsertAction) {
+                addStep(dragState.type, insertIndex);
+            }
+        } else if (insertIndex !== dragState.lastInsertIndex || isFinal) {
             dragState.lastInsertIndex = insertIndex;
             moveStep(dragState.stepId, insertIndex, true);
         }
@@ -484,8 +597,12 @@ export function stepEditor(propsArg = {}) {
                     beginDrag,
                     endDrag,
                     beginNodePointerDrag,
+                    beginActionPointerDrag,
                     isClickSuppressed,
+                    isPaletteActionClickSuppressed: () => Date.now() < suppressedPaletteActionUntil,
                     moveStep,
+                    dragActionType: data.dragActionType,
+                    dragInsertIndex: data.dragInsertIndex,
                     errors: props.errors,
                     triggerCollectionRef: props.triggerCollectionRef,
                 })
@@ -737,6 +854,7 @@ function renderVisualBuilder(options) {
                 if (!options.steps.length) {
                     return t.div(
                         { className: "automation-builder-empty" },
+                        () => options.dragInsertIndex === 0 ? renderActionDropMarker(options.dragActionType) : null,
                         t.i({ className: "ri-node-tree", ariaHidden: true }),
                         t.div({ className: "txt-bold" }, "Start with a step"),
                         t.div({ className: "txt-sm txt-hint" }, "Use the action palette to add workflow blocks."),
@@ -745,91 +863,107 @@ function renderVisualBuilder(options) {
 
                 return t.div(
                     { className: "automation-builder-step-nodes" },
-                    ...options.steps.map((step, index) => {
+                    ...options.steps.flatMap((step, index) => {
                         const validation = clientValidateStep(step);
-                        return t.div(
-                            { className: "automation-builder-node-wrap" },
-                            t.button(
-                                {
-                                    rid: step.__id,
-                                    type: "button",
-                                    "html-data-automation-step-node": "true",
-                                    "html-data-automation-step-id": step.__id,
-                                    className: () =>
-                                        `automation-builder-node ${
-                                            selectedStep?.__id === step.__id ? "selected" : ""
-                                        } ${validation.length ? "has-issues" : ""} ${
-                                            options.dragStepId === step.__id ? "dragging" : ""
-                                        }`,
-                                    onpointerdown: (e) => options.beginNodePointerDrag(e, step.__id),
-                                    oncontextmenu: (e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        contextMenuIndex = step.__id;
-                                        contextMenu.style.left = `${e.clientX}px`;
-                                        contextMenu.style.top = `${e.clientY}px`;
-                                        if (contextMenu.showPopover) {
-                                            setTimeout(() => {
-                                                try {
-                                                    contextMenu.showPopover();
-                                                } catch (_) {}
-                                            }, 100);
-                                        }
-                                    },
-                                    onclick: (e) => {
-                                        if (options.isClickSuppressed(step.__id)) {
-                                            e.preventDefault();
-                                            return;
-                                        }
-                                        options.selectStep(step.__id);
-                                    },
-                                },
-                                t.span(
-                                    {
-                                        className: "automation-builder-drag-handle",
-                                        title: "Drag to reorder",
-                                    },
-                                    t.i({ className: "ri-draggable", ariaHidden: true }),
-                                ),
-                                t.div(
-                                    { className: "automation-builder-node-icon" },
-                                    t.i({ className: stepTypeIcon(step.type), ariaHidden: true }),
-                                ),
-                                t.div(
-                                    { className: "content block txt-left" },
-                                    t.div({ className: "automation-node-title m-b-5" }, () => stepTypeLabel(step.type)),
-                                    t.div(
-                                        { className: "automation-node-desc txt-ellipsis" },
-                                        () => summarizeStep(step),
-                                    ),
-                                ),
-                                t.div(
-                                    { className: "automation-node-badges" },
-                                    t.span({ className: "label" }, `Step ${index + 1}`),
-                                    t.span(
-                                        {
-                                            className: () => `label ${validation.length ? "warning" : "success"}`,
-                                        },
-                                        validation.length ? `${validation.length} issue(s)` : "Valid",
-                                    ),
-                                ),
-                                t.span({ className: "automation-builder-port input-port" }),
-                                t.span({ className: "automation-builder-port output-port" }),
-                            ),
+                        const children = [];
+                        if (options.dragInsertIndex === index) {
+                            children.push(renderActionDropMarker(options.dragActionType));
+                        }
+
+                        children.push(
                             t.div(
-                                { className: "automation-builder-connector" },
-                                t.span({ className: "automation-builder-connector-line" }),
+                                { className: "automation-builder-node-wrap" },
                                 t.button(
                                     {
+                                        rid: step.__id,
                                         type: "button",
-                                        className: "automation-builder-plus",
-                                        title: "Add connected step",
-                                        onclick: () => options.addStep("condition", index + 1),
+                                        "html-data-automation-step-node": "true",
+                                        "html-data-automation-step-id": step.__id,
+                                        className: () =>
+                                            `automation-builder-node ${
+                                                selectedStep?.__id === step.__id ? "selected" : ""
+                                            } ${validation.length ? "has-issues" : ""} ${
+                                                options.dragStepId === step.__id ? "dragging" : ""
+                                            }`,
+                                        onpointerdown: (e) => options.beginNodePointerDrag(e, step.__id),
+                                        oncontextmenu: (e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            contextMenuIndex = step.__id;
+                                            contextMenu.style.left = `${e.clientX}px`;
+                                            contextMenu.style.top = `${e.clientY}px`;
+                                            if (contextMenu.showPopover) {
+                                                setTimeout(() => {
+                                                    try {
+                                                        contextMenu.showPopover();
+                                                    } catch (_) {}
+                                                }, 100);
+                                            }
+                                        },
+                                        onclick: (e) => {
+                                            if (options.isClickSuppressed(step.__id)) {
+                                                e.preventDefault();
+                                                return;
+                                            }
+                                            options.selectStep(step.__id);
+                                        },
                                     },
-                                    t.i({ className: "ri-add-line", ariaHidden: true }),
+                                    t.span(
+                                        {
+                                            className: "automation-builder-drag-handle",
+                                            title: "Drag to reorder",
+                                        },
+                                        t.i({ className: "ri-draggable", ariaHidden: true }),
+                                    ),
+                                    t.div(
+                                        { className: "automation-builder-node-icon" },
+                                        t.i({ className: stepTypeIcon(step.type), ariaHidden: true }),
+                                    ),
+                                    t.div(
+                                        { className: "content block txt-left" },
+                                        t.div(
+                                            { className: "automation-node-title m-b-5" },
+                                            () => stepTypeLabel(step.type),
+                                        ),
+                                        t.div(
+                                            { className: "automation-node-desc txt-ellipsis" },
+                                            () => summarizeStep(step),
+                                        ),
+                                    ),
+                                    t.div(
+                                        { className: "automation-node-badges" },
+                                        t.span({ className: "label" }, `Step ${index + 1}`),
+                                        t.span(
+                                            {
+                                                className: () => `label ${validation.length ? "warning" : "success"}`,
+                                            },
+                                            validation.length ? `${validation.length} issue(s)` : "Valid",
+                                        ),
+                                    ),
+                                    t.span({ className: "automation-builder-port input-port" }),
+                                    t.span({ className: "automation-builder-port output-port" }),
+                                ),
+                                t.div(
+                                    { className: "automation-builder-connector" },
+                                    t.span({ className: "automation-builder-connector-line" }),
+                                    t.button(
+                                        {
+                                            type: "button",
+                                            className: "automation-builder-plus",
+                                            title: "Add connected step",
+                                            onclick: () => options.addStep("condition", index + 1),
+                                        },
+                                        t.i({ className: "ri-add-line", ariaHidden: true }),
+                                    ),
                                 ),
                             ),
                         );
+
+                        if (index === options.steps.length - 1 && options.dragInsertIndex === index + 1) {
+                            children.push(renderActionDropMarker(options.dragActionType));
+                        }
+
+                        return children;
                     }),
                 );
             },
@@ -851,8 +985,18 @@ function renderActionPalette(options) {
                         t.button(
                             {
                                 type: "button",
-                                className: "automation-builder-palette-action",
-                                onclick: () => options.addStep(option.value),
+                                className: () =>
+                                    `automation-builder-palette-action ${
+                                        options.dragActionType === option.value ? "dragging" : ""
+                                    }`,
+                                onpointerdown: (e) => options.beginActionPointerDrag(e, option),
+                                onclick: (e) => {
+                                    if (options.isPaletteActionClickSuppressed()) {
+                                        e.preventDefault();
+                                        return;
+                                    }
+                                    options.addStep(option.value);
+                                },
                             },
                             t.div(
                                 { className: "automation-palette-icon-wrap" },
@@ -883,6 +1027,24 @@ function renderTriggerNode(options) {
     );
 }
 
+function renderActionDropMarker(type) {
+    return t.div(
+        { className: "automation-builder-drop-marker" },
+        t.div(
+            { className: "automation-builder-drop-node" },
+            t.div(
+                { className: "automation-builder-node-icon" },
+                t.i({ className: stepTypeIcon(type), ariaHidden: true }),
+            ),
+            t.div(
+                { className: "content block txt-left" },
+                t.div({ className: "automation-node-title" }, () => stepTypeLabel(type || "condition")),
+                t.div({ className: "automation-node-meta" }, "Drop to add step"),
+            ),
+        ),
+    );
+}
+
 function createNodeDragState(sourceEl, canvasEl, stepId, clientX, clientY) {
     const rect = sourceEl.getBoundingClientRect();
     const overlay = sourceEl.cloneNode(true);
@@ -898,7 +1060,36 @@ function createNodeDragState(sourceEl, canvasEl, stepId, clientX, clientY) {
     document.body.appendChild(overlay);
 
     return {
+        kind: "step",
         stepId,
+        overlay,
+        canvasEl,
+        clientX,
+        clientY,
+        offsetX: clientX - rect.left,
+        offsetY: clientY - rect.top,
+        lastInsertIndex: -1,
+        frame: 0,
+    };
+}
+
+function createActionDragState(sourceEl, canvasEl, option, clientX, clientY) {
+    const rect = sourceEl.getBoundingClientRect();
+    const overlay = sourceEl.cloneNode(true);
+    overlay.removeAttribute("rid");
+    overlay.removeAttribute("id");
+    overlay.classList.add("automation-builder-palette-action-overlay");
+    overlay.classList.remove("dragging");
+    overlay.style.width = `${rect.width}px`;
+    overlay.style.height = `${rect.height}px`;
+    overlay.style.left = "0px";
+    overlay.style.top = "0px";
+    overlay.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0) scale(1.03)`;
+    document.body.appendChild(overlay);
+
+    return {
+        kind: "action",
+        type: option.value,
         overlay,
         canvasEl,
         clientX,
@@ -1015,6 +1206,15 @@ function resolvePointerDropIndex(clientY) {
     }
 
     return nodes.length;
+}
+
+function isPointerInsideElement(el, clientX, clientY) {
+    if (!el) {
+        return false;
+    }
+
+    const rect = el.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
 }
 
 function renderStepEditModal(step, options) {

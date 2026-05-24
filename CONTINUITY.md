@@ -1,30 +1,27 @@
 Goal (incl. success criteria):
 
-- Add `tag` support to automations and update the automation list to support grouping by tag plus filtering by tag and keyword.
-- Success: automation edit/create UI can store a tag; automation list can search by keyword, filter by tag, and group entries by tag using existing admin UI patterns.
+- Revert the last polished drag/drop refactor while preserving the earlier working drag behavior.
+- Success: `stepEditor.js`, automation drag styling, and `ui/dist` are back to the prior working action-drag/reorder implementation.
 
 Constraints/Assumptions:
 
 - Follow `AGENTS.md` and `UI_DOCS.md`; keep UI changes focused.
 - Existing unrelated backend/UI/dist changes are present; do not revert them.
-- Preserve existing automation behavior and payload shape aside from the new tag field.
+- Preserve existing automation behavior and payload shape aside from UI-only drag insertion.
 - Follow admin UI guidance: use shared components, avoid native selects, keep ephemeral view state local.
 
 Key decisions:
 
-- Tag is implemented as a simple optional system text field on `_automations`.
-- Automation list filtering/grouping/search is implemented client-side over the admin list payload.
+- Reverted the placeholder-only reorder refactor because the user requested it.
+- Keep earlier pointer-based palette insertion and existing node reorder behavior.
 
 State:
   - Done:
     - Read `CONTINUITY.md`.
-    - Added backend tag field/API/model/template/version plumbing.
-    - Added automation edit/create tag input.
-    - Added automation list keyword search, tag filter, and group-by-tag controls.
-    - Ran `go test ./core -run 'TestAutomation(CollectionsExist|Fields)|TestAutomationSchemas|TestAutomationTemplate|TestAutomationVersion|TestPublishAutomationVersion|TestWorkflowTemplate'`; passed.
-    - Ran `go test ./apis -run 'TestAutomationsList|TestAutomationCreate|TestAutomationViewUpdateDelete'`; passed.
-    - Ran `npm run build`; Vite passed, dprint emitted its existing cache write warning outside the workspace.
-    - Ran `./node_modules/.bin/vite build`; passed and regenerated `ui/dist`.
+    - Prior tag select work is complete and verified with `npm run build`.
+    - Reverted the latest placeholder-based drag/drop refactor from `stepEditor.js` and `automations.css`.
+    - Rebuilt `ui/dist` back to the previous asset names (`index-BMkp5Z_3.js`, `index-Do0fcOsO.css`).
+    - Ran `npm run build`; passed. dprint still reports the known cache permission warning outside the workspace.
   - Now:
     - Ready for user review.
   - Next:
@@ -36,8 +33,10 @@ Open questions (UNCONFIRMED if needed):
 
 Working set (files/ids/commands):
 
-- `/Users/suytbily/dev/gits/harry/pocketadmin/ui/src/settings/automations/`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/apis/automation.go`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/core/automation_model.go`
-- `/Users/suytbily/dev/gits/harry/pocketadmin/migrations/1781000001_automation_tags.go`
-- `go test ./apis ./core` was attempted but this checkout still fails unrelated broader package tests (`TestDefaultRateLimitMiddleware`, `TestRecordAuthWithOTPManualRateLimiterCheck`, `TestNotifyWatcher_SettingsUpdate`, `TestFindCachedCollectionReferences`, `TestFindAllCollections`).
+- `ui/src/settings/automations/pageAutomationUpsert.js`
+- `ui/src/settings/automations/stepEditor.js`
+- `ui/src/css/automations.css`
+- `ui/dist/index.html`
+- `ui/dist/assets/index-BMkp5Z_3.js`
+- `ui/dist/assets/index-Do0fcOsO.css`
+- `npm run build`
