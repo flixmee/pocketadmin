@@ -586,7 +586,7 @@ export function pageAutomationUpsert(route) {
                                 () => {
                                     if (!data.automation?.id) {
                                         return t.div(
-                                            { className: "txt-sm txt-hint automation-field-desc" },
+                                            { className: "txt-sm txt-hint automation-field-desc p-10" },
                                             "Save the automation first to generate its stable webhook endpoint.",
                                         );
                                     }

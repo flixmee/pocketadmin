@@ -1647,7 +1647,7 @@ function createEditorStep(type, rawStep = {}) {
         case "code":
             return {
                 ...base,
-                code: toString(rawStep.code) || "return {\n    value: record.id,\n};",
+                code: toString(rawStep.code) || "\n\nreturn {\n    value: record.id,\n};",
             };
         case "http":
             return {
@@ -1693,11 +1693,17 @@ function createEditorStep(type, rawStep = {}) {
         case "response":
             return {
                 ...base,
-                statusCodeText: rawStep.statusCode === undefined || rawStep.statusCode === null
+                statusCodeText: rawStep.statusCodeText !== undefined && rawStep.statusCodeText !== null
+                    ? String(rawStep.statusCodeText)
+                    : rawStep.statusCode === undefined || rawStep.statusCode === null
                     ? "200"
                     : String(rawStep.statusCode),
-                headersText: stringifyJSONObject(rawStep.headers, "{}"),
-                bodyText: stringifyLooseValue(rawStep.body),
+                headersText: rawStep.headersText !== undefined
+                    ? toString(rawStep.headersText)
+                    : stringifyJSONObject(rawStep.headers, "{}"),
+                bodyText: rawStep.bodyText !== undefined
+                    ? toString(rawStep.bodyText)
+                    : stringifyLooseValue(rawStep.body),
             };
         case "capability":
             return createCapabilityStep(base, rawStep);
