@@ -346,10 +346,7 @@ function automationUpsertModal(automation, settings) {
                         triggerType: () => data.form.triggerType,
                         triggerCollectionRef: () => data.form.collectionRef,
                         onchange: (steps) => {
-                            data.form = {
-                                ...data.form,
-                                steps,
-                            };
+                            data.form.steps = steps;
                         },
                     }),
                 ),

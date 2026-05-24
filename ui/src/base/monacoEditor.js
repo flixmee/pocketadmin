@@ -1,11 +1,36 @@
+import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
+import HtmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
+import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
+import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+
 window.app = window.app || {};
 window.app.components = window.app.components || {};
 
-const monacoEditorMainURL = "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.53.0/min/vs/editor/editor.main.js";
-const monacoBaseURL = monacoEditorMainURL.replace(/\/editor\/editor\.main\.js$/, "");
-const monacoLoaderURL = monacoBaseURL + "/loader.js";
-
 let monacoLoadPromise;
+
+window.MonacoEnvironment = {
+    ...(window.MonacoEnvironment || {}),
+    getWorker: function(_, label) {
+        switch (label) {
+            case "json":
+                return new JsonWorker();
+            case "css":
+            case "scss":
+            case "less":
+                return new CssWorker();
+            case "html":
+            case "handlebars":
+            case "razor":
+                return new HtmlWorker();
+            case "typescript":
+            case "javascript":
+                return new TsWorker();
+            default:
+                return new EditorWorker();
+        }
+    },
+};
 
 /**
  * Lazy Monaco-powered code editor.
@@ -161,66 +186,14 @@ function loadMonaco() {
         return Promise.resolve(window.monaco);
     }
 
-    if (monacoLoadPromise) {
-        return monacoLoadPromise;
-    }
-
-    monacoLoadPromise = loadScript("lazy-monaco-loader-js", monacoLoaderURL).then(() => {
-        window.MonacoEnvironment = window.MonacoEnvironment || {
-            getWorkerUrl: function() {
-                const workerSource =
-                    `self.MonacoEnvironment = { baseUrl: "${monacoBaseURL}/" }; importScripts("${monacoBaseURL}/base/worker/workerMain.js");`;
-                return `data:text/javascript;charset=utf-8,${encodeURIComponent(workerSource)}`;
-            },
-        };
-
-        return new Promise((resolve, reject) => {
-            if (!window.require?.config) {
-                reject(new Error("Monaco AMD loader is unavailable."));
-                return;
-            }
-
-            window.require.config({
-                paths: {
-                    vs: monacoBaseURL,
-                },
-            });
-
-            window.require(
-                ["vs/editor/editor.main"],
-                () => resolve(window.monaco),
-                reject,
-            );
+    if (!monacoLoadPromise) {
+        monacoLoadPromise = import("monaco-editor").then((monaco) => {
+            window.monaco = monaco;
+            return monaco;
         });
-    });
+    }
 
     return monacoLoadPromise;
-}
-
-function loadScript(id, src) {
-    const existing = document.getElementById(id);
-    if (existing) {
-        return new Promise((resolve, reject) => {
-            existing.addEventListener("load", resolve, { once: true });
-            existing.addEventListener("error", reject, { once: true });
-        });
-    }
-
-    return new Promise((resolve, reject) => {
-        const script = t.script({
-            id: id,
-            src: src,
-            onload: resolve,
-            onerror: reject,
-        });
-        const shablonScript = document.head.querySelector("#shablon-script");
-
-        if (shablonScript) {
-            shablonScript.after(script);
-        } else {
-            document.head.appendChild(script);
-        }
-    });
 }
 
 function registerAutocomplete(monaco, model, props) {

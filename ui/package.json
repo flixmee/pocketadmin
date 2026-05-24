@@ -8,6 +8,7 @@
     },
     "dependencies": {
         "leaflet": "^1.9.4",
+        "monaco-editor": "^0.53.0",
         "pocketbase": "^0.26.8"
     },
     "devDependencies": {
