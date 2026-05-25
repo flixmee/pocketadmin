@@ -112,9 +112,8 @@
 
   --modalAnimationSpeed: 200ms;
   --modalOverlayColor: rgba(70, 90, 115, 0.25);
-
   --tooltipTxtColor: #fff;
-  --tooltipSurfaceColor: rgba(34, 36, 36, 0.9);
+  --tooltipSurfaceColor: rgba(37, 39, 45, 0.9);
 
   --boxShadow: 0px 8px 5px -5px rgba(34, 36, 36, 0.1);
   --leftBoxShadow: -1px 0px 5px 0 rgba(34, 36, 36, 0.1);
@@ -167,12 +166,12 @@
 /* dark */
 [data-color-scheme="dark"],
 [data-color-scheme="dark"] .dropdown {
-  --surfaceColor: #1f1f1f;
-  --surfaceAlt1Color: color-mix(in srgb, var(--surfaceColor), white 2%);
-  --surfaceAlt2Color: color-mix(in srgb, var(--surfaceColor), white 7%);
-  --surfaceAlt3Color: color-mix(in srgb, var(--surfaceColor), white 12%);
-  --surfaceAlt4Color: color-mix(in srgb, var(--surfaceColor), white 14%);
-  --surfaceAlt5Color: color-mix(in srgb, var(--surfaceColor), white 16%);
+    --surfaceColor: #1c1c1c;
+    --surfaceAlt1Color: color-mix(in srgb, var(--surfaceColor), white 2%);
+    --surfaceAlt2Color: color-mix(in srgb, var(--surfaceColor), white 7%);
+    --surfaceAlt3Color: color-mix(in srgb, var(--surfaceColor), white 12%);
+    --surfaceAlt4Color: color-mix(in srgb, var(--surfaceColor), white 14%);
+    --surfaceAlt5Color: color-mix(in srgb, var(--surfaceColor), white 16%);
 
   --surfaceTxtColor: #ebebeb;
   --tooltipTxtColor: var(--surfaceTxtColor);
@@ -192,20 +191,12 @@
   --secondaryAlt1Color: var(--surfaceAlt3Color);
   --secondaryAlt2Color: var(--surfaceAlt4Color);
 
-  --primaryColor: #161616;
-  --primaryTxtColor: var(--surfaceTxtColor);
-  --primaryAlt1Color: color-mix(in srgb, var(--primaryColor), white 1%);
-  --primaryAlt2Color: color-mix(in srgb, var(--primaryColor), white 1.5%);
-  --primaryTxtHintColor: color-mix(
-    in srgb,
-    var(--primaryTxtColor),
-    transparent 35%
-  );
-  --primaryTxtDisabledColor: color-mix(
-    in srgb,
-    var(--primaryTxtColor),
-    transparent 50%
-  );
+    --primaryColor: #121212;
+    --primaryTxtColor: var(--surfaceTxtColor);
+    --primaryAlt1Color: color-mix(in srgb, var(--primaryColor), black 12%);
+    --primaryAlt2Color: color-mix(in srgb, var(--primaryColor), black 25%);
+    --primaryTxtHintColor: color-mix(in srgb, var(--primaryTxtColor), transparent 35%);
+    --primaryTxtDisabledColor: color-mix(in srgb, var(--primaryTxtColor), transparent 50%);
 
   --infoColor: #4273bd;
   --infoTxtColor: var(--surfaceTxtColor);
@@ -253,8 +244,8 @@
   --inputBorderColor: var(--surfaceAlt4Color);
   scrollbar-color: var(--surfaceAlt5Color) transparent;
 
-  --modalOverlayColor: rgb(0, 0, 0, 0.45);
-  --tooltipSurfaceColor: rgb(22, 22, 22, 0.9);
+    --modalOverlayColor: rgb(18,18,18, 0.5);
+    --tooltipSurfaceColor: rgb(22,22,22, 0.9);
 
   --boxShadow: 0px 8px 5px -5px rgba(0, 0, 0, 0.3);
   --leftBoxShadow: -1px 0px 5px 0 rgba(0, 0, 0, 0.3);

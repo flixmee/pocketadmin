@@ -142,8 +142,8 @@ watch(
 );
 
 // load extensions
-let extensionsScript = t.script({
-    type: "module",
+document.body.appendChild(t.script({
+    type: "module", // allow top-level await
     src: app.pb.buildURL("/_/extensions.js"),
     onload: () => {
         app.store._ready = true;
@@ -152,5 +152,4 @@ let extensionsScript = t.script({
         console.warn("Failed to load extensions:", err);
         app.store._ready = true;
     },
-});
-document.body.appendChild(extensionsScript);
+}));

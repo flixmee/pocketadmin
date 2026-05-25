@@ -1,6 +1,43 @@
-## v0.38.1 (WIP)
+## v0.39.0 (WIP)
+
+- Added new "SQL console" section under _Settings > Debug_ allowing executing any raw SQL query from the UI ([#2236](https://github.com/pocketbase/pocketbase/issues/2236); [#7638](https://github.com/pocketbase/pocketbase/discussions/7638)).
+    _Note that this is intended for one-off analytic queries, the occasional `VACUUM`/`PRAGMA optimize` or debug purposes and not as the primary interface for interacting with your PocketBase data because it can break your application if not used with proper care!_
+
+- Fixed logs bulk selection export error.
+
+- Other Minor UI improvements (optimized logs and records list rendering, word breaking in labels, text contrast improvements, registered missing `oidc2` and `oidc3` option fields, etc.).
+
+
+## v0.38.2
+
+- Added `RealtimeConnectRequestEvent.MaxTimeout` field to specify the absolute max duration a realtime connection can remain open (default to 30mins).
+    _This is in addition to the `IdeTimeout` of 5mins in order to prevent misuse and to allow the GC to run more regularly._
+
+- Added extra checks for the connected user IP in the realtime APIs to prevent bruteforce guest subscription update attempts and to serve as an extra protection for the "all-in-one" OAuth2 realtime handler.
+
+- Don't reset the records list pagination on record update ([#7694](https://github.com/pocketbase/pocketbase/issues/7694)).
+
+- Updated all `golang.org/x/` packages to cover the recent [security fixes](https://groups.google.com/g/golang-announce/c/PdiGK3xulk4) _(none of them should be a critical issue in PocketBase but nonetheless it is advised to update)_.
+
+
+## v0.38.1
 
 - Silenced the superuser IPs confirmation if there is no change.
+
+- Updated the _experimental_ UI extensions APIs to allow top-level `await` in the initialization script.
+
+- Force unset the auth state of existing realtime connections on user password, collection secret, etc. changes.
+    _This is not strictly necessary because the realtime connections have short-lived idle timeout by design but nonetheless it was implemented to minimize the attack vectors._
+
+- Added error marker for each collection tab and fixed the styles of the raw errors tooltip.
+
+- Fixed indexes collection update error ([#7689](https://github.com/pocketbase/pocketbase/issues/7689)).
+    _⚠️ The fix comes with a system migration that resaves all collections with indexes to ensure that all indexes are normalized and available in the `Collection.Indexes` field (it will also include indexes created manually via the sqlite3 cli or other external tool)._
+    _If you are using a test `pb_data` for your Go automation tests you may want to apply the migration to it too so that it runs only once and not for each execution of your tests, aka. you could run once `go run main.go migrate up --dir="/path/to/test_pb_data"`._
+
+- Updated `modernc.org/sqlite` to v1.50.1 (SQLite 3.53.1).
+
+- Other minor fixes (_updated API preview examples, fixed code comment typos, etc._).
 
 
 ## v0.38.0

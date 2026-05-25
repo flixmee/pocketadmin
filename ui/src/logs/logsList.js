@@ -75,9 +75,9 @@ export function logsList(logsSettings) {
             for (let i = 0; i < result.items.length; i++) {
                 app.utils.pushOrReplaceObject(data.logs, result.items[i]);
 
-                // yield to main (with room to "breathe")
+                // yield to main
                 if (i > 1 && i % 20 == 0) {
-                    await new Promise((r) => setTimeout(r, 20));
+                    await new Promise((r) => setTimeout(r, 0));
                 }
             }
 
@@ -349,7 +349,7 @@ export function logsList(logsSettings) {
                                                         JSON.stringify(data.bulkSelected),
                                                     );
                                                     if (e.target.checked) {
-                                                        bulkSelected[log.id] = true;
+                                                        bulkSelected[log.id] = log;
                                                     } else {
                                                         delete bulkSelected[log.id];
                                                     }

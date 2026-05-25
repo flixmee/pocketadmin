@@ -50,6 +50,7 @@ func NewRouter(app core.App) (*router.Router[*core.RequestEvent], error) {
 	bindBatchApi(app, apiGroup)
 	bindRealtimeApi(app, apiGroup)
 	bindHealthApi(app, apiGroup)
+	bindSQLApi(app, apiGroup)
 
 	// UI routes
 	bindUIExtensions(app)

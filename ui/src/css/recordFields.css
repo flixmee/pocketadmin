@@ -414,13 +414,11 @@
 }
 
 .field-type-editor {
-  &.record-field-view {
-    width: 100%;
-  }
-  &.record-field-input {
-    /* fixed size to minimize flickering */
-    .field {
-      min-height: 296px;
+    &.record-field-view {
+        width: 100%;
+        .record-summary & {
+            width: auto;
+        }
     }
     .loading-textarea {
       resize: none;
@@ -428,8 +426,8 @@
     .pb-tinymce {
       animation: fadeIn var(--animationSpeed);
     }
-  }
 }
+
 
 .field-type-relation {
   &.record-field-view {
