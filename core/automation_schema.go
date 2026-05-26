@@ -30,16 +30,18 @@ type AutomationRuntimeLimits struct {
 func AutomationSchemas() AutomationSchemaCatalog {
 	return AutomationSchemaCatalog{
 		Triggers: map[string]AutomationSchema{
-			AutomationTriggerRecordCreate:   recordTriggerSchema(AutomationTriggerRecordCreate, "Record created"),
-			AutomationTriggerRecordUpdate:   recordTriggerSchema(AutomationTriggerRecordUpdate, "Record updated"),
-			AutomationTriggerRecordDelete:   recordTriggerSchema(AutomationTriggerRecordDelete, "Record deleted"),
-			AutomationTriggerScheduleCron:   simpleTriggerSchema(AutomationTriggerScheduleCron, "Schedule"),
-			AutomationTriggerWebhook:        webhookTriggerSchema(),
-			AutomationTriggerManual:         simpleTriggerSchema(AutomationTriggerManual, "Manual"),
-			AutomationTriggerI18nMissing:    i18nTriggerSchema(AutomationTriggerI18nMissing, "Translation missing"),
-			AutomationTriggerI18nPublished:  i18nTriggerSchema(AutomationTriggerI18nPublished, "Locale published"),
-			AutomationTriggerI18nUpdated:    i18nTriggerSchema(AutomationTriggerI18nUpdated, "Translation updated"),
-			AutomationTriggerI18nAIFinished: i18nTriggerSchema(AutomationTriggerI18nAIFinished, "AI translation finished"),
+			AutomationTriggerRecordBeforeCreate: recordTriggerSchema(AutomationTriggerRecordBeforeCreate, "Before record create"),
+			AutomationTriggerRecordBeforeUpdate: recordTriggerSchema(AutomationTriggerRecordBeforeUpdate, "Before record update"),
+			AutomationTriggerRecordCreate:       recordTriggerSchema(AutomationTriggerRecordCreate, "Record created"),
+			AutomationTriggerRecordUpdate:       recordTriggerSchema(AutomationTriggerRecordUpdate, "Record updated"),
+			AutomationTriggerRecordDelete:       recordTriggerSchema(AutomationTriggerRecordDelete, "Record deleted"),
+			AutomationTriggerScheduleCron:       simpleTriggerSchema(AutomationTriggerScheduleCron, "Schedule"),
+			AutomationTriggerWebhook:            webhookTriggerSchema(),
+			AutomationTriggerManual:             simpleTriggerSchema(AutomationTriggerManual, "Manual"),
+			AutomationTriggerI18nMissing:        i18nTriggerSchema(AutomationTriggerI18nMissing, "Translation missing"),
+			AutomationTriggerI18nPublished:      i18nTriggerSchema(AutomationTriggerI18nPublished, "Locale published"),
+			AutomationTriggerI18nUpdated:        i18nTriggerSchema(AutomationTriggerI18nUpdated, "Translation updated"),
+			AutomationTriggerI18nAIFinished:     i18nTriggerSchema(AutomationTriggerI18nAIFinished, "AI translation finished"),
 		},
 		Steps: map[string]AutomationSchema{
 			AutomationStepCondition:    conditionStepSchema(),

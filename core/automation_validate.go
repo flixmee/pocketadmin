@@ -20,6 +20,8 @@ const (
 
 var (
 	automationTriggerTypes = []string{
+		AutomationTriggerRecordBeforeCreate,
+		AutomationTriggerRecordBeforeUpdate,
 		AutomationTriggerRecordCreate,
 		AutomationTriggerRecordUpdate,
 		AutomationTriggerRecordDelete,
@@ -203,6 +205,27 @@ func (app *BaseApp) registerAutomationHooks() {
 			queueRecordAutomationRuns(e.App, AutomationTriggerRecordDelete, e.Record, e.Record.Original())
 
 			return nil
+		},
+		Priority: 100,
+	})
+
+	app.OnRecordCreate().Bind(&hook.Handler[*RecordEvent]{
+		Func: func(e *RecordEvent) error {
+			if err := runRecordAutomationRuns(e.App, AutomationTriggerRecordBeforeCreate, e.Record, nil); err != nil {
+				return err
+			}
+
+			return e.Next()
+		},
+		Priority: 100,
+	})
+	app.OnRecordUpdate().Bind(&hook.Handler[*RecordEvent]{
+		Func: func(e *RecordEvent) error {
+			if err := runRecordAutomationRuns(e.App, AutomationTriggerRecordBeforeUpdate, e.Record, e.Record.Original()); err != nil {
+				return err
+			}
+
+			return e.Next()
 		},
 		Priority: 100,
 	})
@@ -607,7 +630,10 @@ func validateAutomationMailStep(app App, automationRecord *Record, step map[stri
 	}
 
 	triggerType := strings.TrimSpace(automationRecord.GetString("triggerType"))
-	if triggerType != AutomationTriggerRecordCreate && triggerType != AutomationTriggerRecordUpdate {
+	if triggerType != AutomationTriggerRecordCreate &&
+		triggerType != AutomationTriggerRecordUpdate &&
+		triggerType != AutomationTriggerRecordBeforeCreate &&
+		triggerType != AutomationTriggerRecordBeforeUpdate {
 		return validation.NewError(
 			"validation_invalid_automation_mail",
 			"Mail step attachments require a record create or record update trigger.",
@@ -693,7 +719,11 @@ func validateAutomationResponseStep(automationRecord *Record, step map[string]an
 
 func isRecordAutomationTrigger(triggerType string) bool {
 	switch triggerType {
-	case AutomationTriggerRecordCreate, AutomationTriggerRecordUpdate, AutomationTriggerRecordDelete:
+	case AutomationTriggerRecordBeforeCreate,
+		AutomationTriggerRecordBeforeUpdate,
+		AutomationTriggerRecordCreate,
+		AutomationTriggerRecordUpdate,
+		AutomationTriggerRecordDelete:
 		return true
 	default:
 		return false

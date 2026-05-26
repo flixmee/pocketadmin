@@ -1,39 +1,54 @@
 Goal (incl. success criteria):
 
-- Fix automation Webhook response step editing so existing step data is displayed when the edit modal/form opens.
-- Success: editing an existing Webhook response step pre-populates its saved values without changing unrelated automation behavior.
+- Add automation triggers for before-create and before-update record lifecycle events.
+- Success: automations can run code steps before a record is created/updated and mutate the in-flight record before persistence, with validation/UI options updated and tests run where practical.
 
 Constraints/Assumptions:
 
-- Follow `AGENTS.md` and `UI_DOCS.md`; keep UI changes focused.
-- Existing unrelated backend/UI/dist changes are present; do not revert them.
-- Preserve existing automation behavior and payload shape aside from the Webhook response edit-state fix.
-- Follow admin UI guidance: use shared components, avoid native selects, keep ephemeral view state local.
+- Follow `AGENTS.md`; keep backend/UI changes focused.
+- Existing unrelated changes may be present; do not revert them.
+- Preserve existing async behavior for post-save record create/update/delete triggers.
+- Before-create/before-update triggers should run synchronously in the record lifecycle so code steps can customize the live record before persistence.
 
 Key decisions:
 
-- Keep the fix focused in the admin UI automation editor unless the data shape requires a backend change.
+- Added trigger values `record.beforeCreate` and `record.beforeUpdate`.
+- Code steps now expose live record models as `$record` and `$recordOriginal`; use `$record.set(...)` in before triggers to mutate the saved record.
+- Shared record-trigger lookup between async post-save queueing and sync pre-save execution.
 
 State:
   - Done:
-    - Read `CONTINUITY.md`.
-    - Prior automation drag/drop work was complete and verified with `npm run build`; dprint had a known cache permission warning outside the workspace.
-    - Identified double-normalization of automation editor steps as the Webhook response prefill bug.
-    - Patched `createEditorStep("response")` to preserve `statusCodeText`, `headersText`, and `bodyText` when a step is already in editor shape.
-    - Ran `npm run build`; passed. dprint again reported the known cache permission warning outside the workspace, then formatted 1 file and Vite built successfully.
+    - Added backend trigger constants, validation allowlist, schema catalog entries, and registry scoping via existing record trigger logic.
+    - Registered synchronous `OnRecordCreate` and `OnRecordUpdate` automation handlers for the new before triggers.
+    - Added `$record`/`$recordOriginal` code step globals and refreshed record template data after each step.
+    - Updated admin UI trigger options, labels, run formatting, data mapping suggestions, mail attachment trigger support, and code editor autocomplete.
+    - Added focused tests for before-create and before-update code-step record customization and persistence.
+    - Ran targeted Go tests successfully with `go test -mod=readonly ./core -run 'TestAutomationBeforeRecord(Create|Update)CodeStepCanCustomizeRecord|TestAutomationMailStepSendsMessageWithRecordAttachments|TestAutomationSchemas'`.
+    - Attempted `npm run build`; Vite failed because local `node_modules` is missing `monaco-editor`, and dprint reported the known cache permission warning. Cleaned generated `ui/dist` churn from the failed build.
   - Now:
     - Ready for user review.
   - Next:
-    - None.
+    - Install/restore the UI `monaco-editor` dependency and rerun `npm run build` if full frontend verification is needed.
 
 Open questions (UNCONFIRMED if needed):
 
-- None.
+- Whether before-trigger values should be renamed is UNCONFIRMED; current implementation uses `record.beforeCreate` and `record.beforeUpdate`.
 
 Working set (files/ids/commands):
 
+- `core/automation_model.go`
+- `core/automation_validate.go`
+- `core/automation_runner.go`
+- `core/automation_steps.go`
+- `core/automation_schema.go`
+- `core/automation_runner_test.go`
+- `ui/src/base/automationInput.js`
+- `ui/src/settings/automations/automationUpsertModal.js`
 - `ui/src/settings/automations/pageAutomationUpsert.js`
+- `ui/src/settings/automations/automationsList.js`
+- `ui/src/settings/automations/automationRunsList.js`
+- `ui/src/settings/automations/automationRunPreviewModal.js`
+- `ui/src/settings/automations/mailStepForm.js`
 - `ui/src/settings/automations/stepEditor.js`
-- `ui/dist/index.html`
-- `ui/dist/assets/index-CyeY0bv7.js`
-- `npm run build`
+- `go test -mod=readonly ./core -run 'TestAutomationBeforeRecord(Create|Update)CodeStepCanCustomizeRecord|TestAutomationMailStepSendsMessageWithRecordAttachments|TestAutomationSchemas'`
+- `npm run build` (failed: missing `monaco-editor`; dprint cache permission warning)

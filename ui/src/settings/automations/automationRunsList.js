@@ -416,6 +416,10 @@ function formatTriggerType(triggerType) {
             return "Webhook";
         case "schedule.cron":
             return "Scheduled cron";
+        case "record.beforeCreate":
+            return "Before record create";
+        case "record.beforeUpdate":
+            return "Before record update";
         case "record.create":
             return "Record create";
         case "record.update":

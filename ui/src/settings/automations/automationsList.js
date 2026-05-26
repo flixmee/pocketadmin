@@ -4,6 +4,8 @@ const triggerLabels = {
     "manual": "Manual",
     "webhook": "Webhook",
     "schedule.cron": "Scheduled cron",
+    "record.beforeCreate": "Before record create",
+    "record.beforeUpdate": "Before record update",
     "record.create": "Record create",
     "record.update": "Record update",
     "record.delete": "Record delete",
@@ -608,6 +610,8 @@ function describeAutomationScope(automation) {
 
     if (
         automation.triggerType === "record.create"
+        || automation.triggerType === "record.beforeCreate"
+        || automation.triggerType === "record.beforeUpdate"
         || automation.triggerType === "record.update"
         || automation.triggerType === "record.delete"
         || automation.triggerType === "i18n.translation_missing"

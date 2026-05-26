@@ -1850,6 +1850,8 @@ function codeStepForm({ step, context = {} }) {
                 autocomplete: () => [
                     { value: "record", label: "record" },
                     { value: "recordOriginal", label: "recordOriginal" },
+                    { value: "$record", label: "$record" },
+                    { value: "$recordOriginal", label: "$recordOriginal" },
                     { value: "trigger", label: "trigger" },
                     { value: "request", label: "request" },
                     { value: "i18n", label: "i18n" },

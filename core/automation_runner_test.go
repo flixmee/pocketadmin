@@ -1481,6 +1481,115 @@ func TestAutomationMailStepSendsMessageWithRecordAttachments(t *testing.T) {
 	}
 }
 
+func TestAutomationBeforeRecordCreateCodeStepCanCustomizeRecord(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerRecordBeforeCreate)
+	automation.SetCollectionRef(collection.Id)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"code",
+			"code":"$record.set('text', 'before_' + record.text); return {text: $record.get('text')};"
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("text", "created")
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+
+	if record.GetString("text") != "before_created" {
+		t.Fatalf("Expected before create automation to customize record, got %q", record.GetString("text"))
+	}
+	savedRecord, err := app.FindRecordById(collection.Id, record.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if savedRecord.GetString("text") != "before_created" {
+		t.Fatalf("Expected before create automation to persist customized record, got %q", savedRecord.GetString("text"))
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+}
+
+func TestAutomationBeforeRecordUpdateCodeStepCanCustomizeRecord(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("text", "original")
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+	record, err = app.FindRecordById(collection.Id, record.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerRecordBeforeUpdate)
+	automation.SetCollectionRef(collection.Id)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"code",
+			"code":"$record.set('text', recordOriginal.text + '_before_' + record.text); return {text: $record.get('text')};"
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	record.Set("text", "updated")
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+
+	if record.GetString("text") != "original_before_updated" {
+		t.Fatalf("Expected before update automation to customize record, got %q", record.GetString("text"))
+	}
+	savedRecord, err := app.FindRecordById(collection.Id, record.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if savedRecord.GetString("text") != "original_before_updated" {
+		t.Fatalf("Expected before update automation to persist customized record, got %q", savedRecord.GetString("text"))
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+}
+
 func TestAutomationMailStepSupportsMappedRelationRecipients(t *testing.T) {
 	t.Parallel()
 

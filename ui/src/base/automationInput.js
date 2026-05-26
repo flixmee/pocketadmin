@@ -8,6 +8,13 @@ const automationI18nTriggerTypes = [
     "i18n.translation_updated",
     "i18n.ai_translation_finished",
 ];
+const automationRecordTriggerTypes = [
+    "record.beforeCreate",
+    "record.beforeUpdate",
+    "record.create",
+    "record.update",
+    "record.delete",
+];
 
 const automationMappingBaseGroups = [
     {
@@ -25,7 +32,7 @@ const automationMappingBaseGroups = [
     {
         title: "Record",
         tokens: ["{{record.id}}", "{{record.*}}", "{{recordOriginal.*}}"],
-        triggerTypes: ["record.create", "record.update", "record.delete", ...automationI18nTriggerTypes],
+        triggerTypes: [...automationRecordTriggerTypes, ...automationI18nTriggerTypes],
     },
     {
         title: "Webhook",
@@ -120,17 +127,17 @@ window.app.utils.automationMappingTokenGroups = function(options = {}) {
         result.push({
             title: "Record fields",
             tokens: recordTokens,
-            triggerTypes: ["record.create", "record.update", "record.delete", ...automationI18nTriggerTypes],
+            triggerTypes: [...automationRecordTriggerTypes, ...automationI18nTriggerTypes],
         });
     }
 
-    if (triggerType === "record.update" || triggerType === "record.delete") {
+    if (triggerType === "record.beforeUpdate" || triggerType === "record.update" || triggerType === "record.delete") {
         const originalTokens = collectionMappingTokens("recordOriginal", triggerCollectionRef);
         if (originalTokens.length) {
             result.push({
                 title: "Original fields",
                 tokens: originalTokens,
-                triggerTypes: ["record.update", "record.delete"],
+                triggerTypes: ["record.beforeUpdate", "record.update", "record.delete"],
             });
         }
     }
