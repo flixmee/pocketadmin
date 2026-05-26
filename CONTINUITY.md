@@ -1,26 +1,27 @@
 Goal (incl. success criteria):
 
-- Fix automation Webhook response step editing so existing step data is displayed when the edit modal/form opens.
-- Success: editing an existing Webhook response step pre-populates its saved values without changing unrelated automation behavior.
+- Fix current `monaco-editor` incompatibility with newer Vite/Rolldown worker resolution.
+- Success: UI dependency/config/source changes allow the admin UI build to resolve Monaco workers under the current Vite/Rolldown toolchain.
 
 Constraints/Assumptions:
 
 - Follow `AGENTS.md` and `UI_DOCS.md`; keep UI changes focused.
-- Existing unrelated backend/UI/dist changes are present; do not revert them.
-- Preserve existing automation behavior and payload shape aside from the Webhook response edit-state fix.
-- Follow admin UI guidance: use shared components, avoid native selects, keep ephemeral view state local.
+- Existing unrelated backend/UI/dist changes may be present; do not revert them.
+- Keep Go and frontend changes isolated unless required.
+- Network access is restricted; dependency/audit commands may require approval if package registry access is needed.
 
 Key decisions:
 
-- Keep the fix focused in the admin UI automation editor unless the data shape requires a backend change.
+- Prefer the smallest dependency/config/source change that matches existing UI patterns and verifies with the UI build.
+- Pin `monaco-editor` exactly to `0.53.0`: it resolves the Vite 8/Rolldown worker import failure, while `0.55.1` currently introduces moderate `dompurify` audit findings.
 
 State:
   - Done:
     - Read `CONTINUITY.md`.
-    - Prior automation drag/drop work was complete and verified with `npm run build`; dprint had a known cache permission warning outside the workspace.
-    - Identified double-normalization of automation editor steps as the Webhook response prefill bug.
-    - Patched `createEditorStep("response")` to preserve `statusCodeText`, `headersText`, and `bodyText` when a step is already in editor shape.
-    - Ran `npm run build`; passed. dprint again reported the known cache permission warning outside the workspace, then formatted 1 file and Vite built successfully.
+    - Reproduced `npm run build` failure: Rolldown could not resolve `monaco-editor/esm/vs/editor/editor.worker?worker` from `ui/src/base/monacoEditor.js`.
+    - Installed and tested `monaco-editor@0.55.1`; build passed, but `npm audit --omit=dev` reported 2 moderate vulnerabilities via `dompurify`.
+    - Switched to exact `monaco-editor@0.53.0`; build passed and `npm audit --omit=dev` reported 0 vulnerabilities.
+    - Rebuilt `ui/dist`, producing Monaco worker/editor chunks and updating `ui/dist/index.html`.
   - Now:
     - Ready for user review.
   - Next:
@@ -32,8 +33,9 @@ Open questions (UNCONFIRMED if needed):
 
 Working set (files/ids/commands):
 
-- `ui/src/settings/automations/pageAutomationUpsert.js`
-- `ui/src/settings/automations/stepEditor.js`
+- `ui/package.json`
+- `ui/package-lock.json`
 - `ui/dist/index.html`
-- `ui/dist/assets/index-CyeY0bv7.js`
+- `ui/dist/assets/*` generated Monaco/editor chunks
 - `npm run build`
+- `npm audit --omit=dev`
