@@ -81,6 +81,15 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 	}
 }
 
+func (ctx *automationExecutionContext) refreshRecordTemplateData() {
+	if ctx.TriggerRecord != nil {
+		ctx.TemplateData["record"] = automationTemplateRecordData(ctx.TriggerRecord)
+	}
+	if ctx.OriginalRecord != nil {
+		ctx.TemplateData["recordOriginal"] = automationTemplateRecordData(ctx.OriginalRecord)
+	}
+}
+
 func (ctx *automationExecutionContext) appendStepTemplateResult(result AutomationStepResult) {
 	entry := map[string]any{
 		"index":      result.Index,
@@ -267,6 +276,16 @@ func executeAutomationCodeStep(ctx *automationExecutionContext, step map[string]
 	output := map[string]any{}
 	if err := vm.Set("output", output); err != nil {
 		return nil, fmt.Errorf("failed to initialize code step output: %w", err)
+	}
+	if ctx.TriggerRecord != nil {
+		if err := vm.Set("$record", ctx.TriggerRecord); err != nil {
+			return nil, fmt.Errorf("failed to initialize code step $record: %w", err)
+		}
+	}
+	if ctx.OriginalRecord != nil {
+		if err := vm.Set("$recordOriginal", ctx.OriginalRecord); err != nil {
+			return nil, fmt.Errorf("failed to initialize code step $recordOriginal: %w", err)
+		}
 	}
 	if err := vm.Set("__args", []any{automationCodeStepContextArg(jsContext)}); err != nil {
 		return nil, fmt.Errorf("failed to initialize code step arguments: %w", err)

@@ -205,7 +205,10 @@ function formatDefaultSender() {
 }
 
 function supportsRecordAttachments(triggerType) {
-    return triggerType === "record.create" || triggerType === "record.update";
+    return triggerType === "record.beforeCreate"
+        || triggerType === "record.beforeUpdate"
+        || triggerType === "record.create"
+        || triggerType === "record.update";
 }
 
 function fileFieldOptions(collectionIdOrName) {

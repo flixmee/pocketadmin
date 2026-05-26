@@ -6,6 +6,8 @@ const automationTriggerOptions = [
     { value: "manual", label: "Manual" },
     { value: "webhook", label: "Webhook" },
     { value: "schedule.cron", label: "Scheduled cron" },
+    { value: "record.beforeCreate", label: "Before record create" },
+    { value: "record.beforeUpdate", label: "Before record update" },
     { value: "record.create", label: "Record create" },
     { value: "record.update", label: "Record update" },
     { value: "record.delete", label: "Record delete" },
@@ -478,7 +480,9 @@ function webhookURL(automationId) {
 }
 
 function isRecordAutomationTrigger(triggerType) {
-    return triggerType === "record.create"
+    return triggerType === "record.beforeCreate"
+        || triggerType === "record.beforeUpdate"
+        || triggerType === "record.create"
         || triggerType === "record.update"
         || triggerType === "record.delete";
 }

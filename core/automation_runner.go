@@ -68,32 +68,14 @@ type AutomationStepResult struct {
 }
 
 func queueRecordAutomationRuns(app App, triggerType string, record *Record, original *Record) {
-	if record == nil || record.Collection() == nil {
-		return
-	}
-
-	if record.Collection().System || shouldSkipAutomationTriggerCollection(record.Collection().Name) {
-		return
-	}
-
-	registry, err := getAutomationRegistry(app)
+	automations, payload, err := recordAutomationRuns(app, triggerType, record, original)
 	if err != nil {
 		app.Logger().Warn("Failed to load automation registry", "error", err)
 		return
 	}
-
-	collectionRegistry := registry.ByTriggerScope[triggerType]
-	if collectionRegistry == nil {
-		return
-	}
-
-	automations := collectionRegistry[record.Collection().Id]
 	if len(automations) == 0 {
 		return
 	}
-
-	payload := newAutomationTriggerPayload(triggerType, record, original)
-	inheritAutomationPolicyContext(app, &payload)
 
 	for _, automation := range automations {
 		if automation == nil {
@@ -112,6 +94,55 @@ func queueRecordAutomationRuns(app App, triggerType string, record *Record, orig
 			}
 		})
 	}
+}
+
+func runRecordAutomationRuns(app App, triggerType string, record *Record, original *Record) error {
+	automations, payload, err := recordAutomationRuns(app, triggerType, record, original)
+	if err != nil || len(automations) == 0 {
+		return err
+	}
+
+	for _, automation := range automations {
+		if automation == nil {
+			continue
+		}
+
+		if err := runAutomation(app, automation, payload); err != nil {
+			return fmt.Errorf("failed to execute record-triggered automation %q: %w", automation.Id, err)
+		}
+	}
+
+	return nil
+}
+
+func recordAutomationRuns(app App, triggerType string, record *Record, original *Record) ([]*Automation, automationTriggerPayload, error) {
+	if record == nil || record.Collection() == nil {
+		return nil, automationTriggerPayload{}, nil
+	}
+
+	if record.Collection().System || shouldSkipAutomationTriggerCollection(record.Collection().Name) {
+		return nil, automationTriggerPayload{}, nil
+	}
+
+	registry, err := getAutomationRegistry(app)
+	if err != nil {
+		return nil, automationTriggerPayload{}, err
+	}
+
+	collectionRegistry := registry.ByTriggerScope[triggerType]
+	if collectionRegistry == nil {
+		return nil, automationTriggerPayload{}, nil
+	}
+
+	automations := collectionRegistry[record.Collection().Id]
+	if len(automations) == 0 {
+		return nil, automationTriggerPayload{}, nil
+	}
+
+	payload := newAutomationTriggerPayload(triggerType, record, original)
+	inheritAutomationPolicyContext(app, &payload)
+
+	return automations, payload, nil
 }
 
 func queueI18nAutomationRuns(app App, triggerType string, record *Record, i18n map[string]any) {
@@ -582,6 +613,7 @@ func executeAutomationSteps(ctx *automationExecutionContext) ([]AutomationStepRe
 			status, output, err = executeAutomationStep(ctx, step)
 		}
 		finished := types.NowDateTime()
+		ctx.refreshRecordTemplateData()
 		result := AutomationStepResult{
 			Index:      i,
 			Type:       stepType,
