@@ -377,14 +377,14 @@ button {
             animation: halfRotate 300ms;
         }
     }
-    & > * {
+    /* & > * {
       opacity: 0;
       transform: scale(0.95);
       transition:
         color var(--animationSpeed),
         opacity var(--animationSpeed),
         transform var(--animationSpeed);
-    }
+    } */
   }
 
     &[data-loading="true"],
