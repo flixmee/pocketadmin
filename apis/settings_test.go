@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -53,6 +54,7 @@ func TestSettingsList(t *testing.T) {
 				`"s3":{`,
 				`"backups":{`,
 				`"batch":{`,
+				`"ai":{`,
 			},
 			ExpectedEvents: map[string]int{
 				"*":                     0,
@@ -99,7 +101,8 @@ func TestSettingsSet(t *testing.T) {
 		"meta":{"appName":"update_test"},
 		"smtp":{"password": "new_smtp_password"},
 		"s3":{"secret": "new_s3_secret"},
-		"backups":{"s3":{"secret":"new_backups_s3_secret"}}
+		"backups":{"s3":{"secret":"new_backups_s3_secret"}},
+		"ai":{"enabled":true,"provider":"openai","apiKey":"new_ai_api_key","model":"test-model"}
 	}`
 
 	scenarios := []tests.ApiScenario{
@@ -140,6 +143,7 @@ func TestSettingsSet(t *testing.T) {
 				`"s3":{`,
 				`"backups":{`,
 				`"batch":{`,
+				`"ai":{`,
 			},
 			ExpectedEvents: map[string]int{
 				"*":                         0,
@@ -191,6 +195,7 @@ func TestSettingsSet(t *testing.T) {
 					"smtp.password":     {settings.SMTP.Password, "new_smtp_password"},
 					"s3.secret":         {settings.S3.Secret, "new_s3_secret"},
 					"backups.s3.secret": {settings.Backups.S3.Secret, "new_backups_s3_secret"},
+					"ai.apiKey":         {settings.AI.APIKey, "new_ai_api_key"},
 				}
 
 				for name, secret := range secrets {
@@ -207,11 +212,13 @@ func TestSettingsSet(t *testing.T) {
 				`"s3":{`,
 				`"backups":{`,
 				`"batch":{`,
+				`"ai":{`,
 				`"appName":"update_test"`,
 			},
 			NotExpectedContent: []string{
 				"secret",
 				"password",
+				"apiKey",
 			},
 			ExpectedEvents: map[string]int{
 				"*":                         0,
@@ -249,6 +256,63 @@ func TestSettingsSet(t *testing.T) {
 			ExpectedStatus:  400,
 			ExpectedEvents:  map[string]int{"OnSettingsUpdateRequest": 1},
 			ExpectedContent: []string{"TX_ERROR"},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
+func TestSettingsListAIModels(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models" {
+			t.Errorf("Expected path /models, got %q", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer test_key" {
+			t.Errorf("Expected authorization header, got %q", r.Header.Get("Authorization"))
+		}
+		w.Write([]byte(`{"data":[{"id":"gpt-test"}]}`))
+	}))
+	defer server.Close()
+
+	validData := fmt.Sprintf(`{"provider":"openai","apiKey":"test_key","baseURL":%q}`, server.URL)
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "unauthorized",
+			Method:          http.MethodPost,
+			URL:             "/api/settings/ai/models",
+			Body:            strings.NewReader(validData),
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as regular user",
+			Method: http.MethodPost,
+			URL:    "/api/settings/ai/models",
+			Body:   strings.NewReader(validData),
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjRxMXhsY2xtZmxva3UzMyIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoiX3BiX3VzZXJzX2F1dGhfIiwiZXhwIjoyNTI0NjA0NDYxLCJyZWZyZXNoYWJsZSI6dHJ1ZX0.ZT3F0Z3iM-xbGgSG3LEKiEzHrPHr8t8IuHLZGGNuxLo",
+			},
+			ExpectedStatus:  403,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized as superuser",
+			Method: http.MethodPost,
+			URL:    "/api/settings/ai/models",
+			Body:   strings.NewReader(validData),
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
+			},
+			ExpectedStatus:  200,
+			ExpectedContent: []string{`"models":[{"id":"gpt-test","label":"gpt-test"}]`},
+			ExpectedEvents:  map[string]int{"*": 0},
 		},
 	}
 

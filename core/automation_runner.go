@@ -481,6 +481,14 @@ func runAutomationWithContext(app App, automation *Automation, payload automatio
 				"error", err,
 			)
 		}
+		if err := notifyAutomationRunCompletion(app, automation, run); err != nil {
+			app.Logger().Warn(
+				"Failed to create automation run notification",
+				"automationId", automation.Id,
+				"runId", run.Id,
+				"error", err,
+			)
+		}
 		return nil, policyErr
 	}
 
@@ -569,6 +577,14 @@ func finalizeAutomationRun(app App, automation *Automation, run *AutomationRun, 
 		app.Logger().Warn(
 			"Failed to update automation last run state",
 			"automationId", automation.Id,
+			"error", err,
+		)
+	}
+	if err := notifyAutomationRunCompletion(app, automation, run); err != nil {
+		app.Logger().Warn(
+			"Failed to create automation run notification",
+			"automationId", automation.Id,
+			"runId", run.Id,
 			"error", err,
 		)
 	}

@@ -837,19 +837,10 @@ function renderVisualBuilder(options) {
         t.div(
             { className: "automation-builder-canvas" },
             renderTriggerNode(options),
-            t.div(
-                { className: "automation-builder-connector" },
-                t.span({ className: "automation-builder-connector-line" }),
-                t.button(
-                    {
-                        type: "button",
-                        className: "automation-builder-plus",
-                        title: "Add step after trigger",
-                        onclick: () => options.addStep("condition", 0),
-                    },
-                    t.i({ className: "ri-add-line", ariaHidden: true }),
-                ),
-            ),
+            renderBuilderConnector({
+                title: "Add step after trigger",
+                onclick: () => options.addStep("condition", 0),
+            }),
             () => {
                 if (!options.steps.length) {
                     return t.div(
@@ -882,9 +873,9 @@ function renderVisualBuilder(options) {
                                         className: () =>
                                             `automation-builder-node ${
                                                 selectedStep?.__id === step.__id ? "selected" : ""
-                                            } ${validation.length ? "has-issues" : ""} ${
-                                                options.dragStepId === step.__id ? "dragging" : ""
-                                            }`,
+                                            } ${isAIStep(step.type) ? "ai-step" : ""} ${
+                                                validation.length ? "has-issues" : ""
+                                            } ${options.dragStepId === step.__id ? "dragging" : ""}`,
                                         onpointerdown: (e) => options.beginNodePointerDrag(e, step.__id),
                                         oncontextmenu: (e) => {
                                             e.preventDefault();
@@ -913,7 +904,7 @@ function renderVisualBuilder(options) {
                                             className: "automation-builder-drag-handle",
                                             title: "Drag to reorder",
                                         },
-                                        t.i({ className: "ri-draggable", ariaHidden: true }),
+                                        "⠿",
                                     ),
                                     t.div(
                                         { className: "automation-builder-node-icon" },
@@ -931,31 +922,17 @@ function renderVisualBuilder(options) {
                                         ),
                                     ),
                                     t.div(
-                                        { className: "automation-node-badges" },
-                                        t.span({ className: "label" }, `Step ${index + 1}`),
-                                        t.span(
-                                            {
-                                                className: () => `label ${validation.length ? "warning" : "success"}`,
-                                            },
-                                            validation.length ? `${validation.length} issue(s)` : "Valid",
-                                        ),
+                                        { className: "automation-node-metadata" },
+                                        t.span({ className: "automation-step-label" }, `Step ${index + 1}`),
+                                        renderStepStatusBadge(validation),
                                     ),
                                     t.span({ className: "automation-builder-port input-port" }),
                                     t.span({ className: "automation-builder-port output-port" }),
                                 ),
-                                t.div(
-                                    { className: "automation-builder-connector" },
-                                    t.span({ className: "automation-builder-connector-line" }),
-                                    t.button(
-                                        {
-                                            type: "button",
-                                            className: "automation-builder-plus",
-                                            title: "Add connected step",
-                                            onclick: () => options.addStep("condition", index + 1),
-                                        },
-                                        t.i({ className: "ri-add-line", ariaHidden: true }),
-                                    ),
-                                ),
+                                renderBuilderConnector({
+                                    title: "Add connected step",
+                                    onclick: () => options.addStep("condition", index + 1),
+                                }),
                             ),
                         );
 
@@ -969,6 +946,43 @@ function renderVisualBuilder(options) {
             },
         ),
     );
+}
+
+function renderBuilderConnector(attrs) {
+    return t.div(
+        { className: "automation-builder-connector" },
+        t.span({ className: "automation-builder-connector-line" }),
+        t.button(
+            {
+                type: "button",
+                className: "automation-builder-plus",
+                title: attrs.title,
+                onclick: attrs.onclick,
+            },
+            t.i({ className: "ri-add-line", ariaHidden: true }),
+        ),
+        t.span({ className: "automation-builder-connector-line" }),
+    );
+}
+
+function renderStepStatusBadge(validation) {
+    if (!validation.length) {
+        return t.span(
+            { className: "automation-valid-badge" },
+            t.i({ className: "ri-check-line", ariaHidden: true }),
+            "Valid",
+        );
+    }
+
+    return t.span(
+        { className: "automation-valid-badge has-issues" },
+        t.i({ className: "ri-error-warning-line", ariaHidden: true }),
+        `${validation.length} issue(s)`,
+    );
+}
+
+function isAIStep(type) {
+    return String(type || "").startsWith("ai.");
 }
 
 function renderActionPalette(options) {
@@ -1763,13 +1777,29 @@ function createAIStep(base, rawStep = {}) {
     return {
         ...base,
         model: toString(rawStep.model),
-        inputText: stringifyLooseValue(rawStep.input),
-        labels: normalizeStringArray(rawStep.labels).map((label) => ({
-            __id: app.utils.randomString(),
-            value: label,
-        })),
-        schemaRows: schemaToRows(rawStep.schema),
+        inputText: rawStep.inputText !== undefined ? toString(rawStep.inputText) : stringifyLooseValue(rawStep.input),
+        labels: aiLabelRows(rawStep.labels),
+        schemaRows: Array.isArray(rawStep.schemaRows)
+            ? rawStep.schemaRows.map((row) => createSchemaRow(row))
+            : schemaToRows(rawStep.schema),
     };
+}
+
+function aiLabelRows(labels) {
+    if (Array.isArray(labels) && labels.some((label) => label && typeof label === "object")) {
+        return labels
+            .map((label) => toString(label?.value).trim())
+            .filter(Boolean)
+            .map((value) => ({
+                __id: app.utils.randomString(),
+                value,
+            }));
+    }
+
+    return normalizeStringArray(labels).map((label) => ({
+        __id: app.utils.randomString(),
+        value: label,
+    }));
 }
 
 function createReactiveEditorStep(type, rawStep = {}) {
@@ -2063,11 +2093,11 @@ function aiStepForm(step, context) {
                 { className: "col-md-5" },
                 t.div(
                     { className: "field" },
-                    t.label({ htmlFor: `${step.__id}_model` }, "Model"),
+                    t.label({ htmlFor: `${step.__id}_model` }, "Model override"),
                     t.input({
                         id: `${step.__id}_model`,
                         type: "text",
-                        placeholder: "Default",
+                        placeholder: () => app.store.settings?.ai?.model || "Application AI setting",
                         value: () => step.model,
                         oninput: (e) => (step.model = e.target.value),
                     }),
@@ -3239,12 +3269,12 @@ function schemaToRows(schema) {
     });
 }
 
-function createSchemaRow() {
+function createSchemaRow(raw = {}) {
     return {
         __id: app.utils.randomString(),
-        key: "",
-        type: "string",
-        required: false,
+        key: toString(raw.key),
+        type: toString(raw.type) || "string",
+        required: !!raw.required,
     };
 }
 

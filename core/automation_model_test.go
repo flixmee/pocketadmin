@@ -29,6 +29,7 @@ func TestAutomationCollectionsExist(t *testing.T) {
 				"name",
 				"tag",
 				"active",
+				"notifyOnCompletion",
 				"triggerType",
 				"collectionRef",
 				"cronExpr",
@@ -415,6 +416,7 @@ func TestAutomationFields(t *testing.T) {
 	automation.SetName("Sync orders")
 	automation.SetTag("operations")
 	automation.SetActive(true)
+	automation.SetNotifyOnCompletion(true)
 	automation.SetTriggerType(core.AutomationTriggerRecordCreate)
 	automation.SetCollectionRef("users")
 	automation.SetCronExpr("0 * * * *")
@@ -433,6 +435,9 @@ func TestAutomationFields(t *testing.T) {
 	}
 	if !automation.Active() {
 		t.Fatal("Expected active to be true")
+	}
+	if !automation.NotifyOnCompletion() {
+		t.Fatal("Expected notifyOnCompletion to be true")
 	}
 	if automation.TriggerType() != core.AutomationTriggerRecordCreate {
 		t.Fatalf("Expected trigger type to roundtrip, got %q", automation.TriggerType())

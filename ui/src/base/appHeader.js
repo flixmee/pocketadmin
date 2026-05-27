@@ -1,3 +1,5 @@
+import { notificationBell } from "../notifications/notificationBell";
+
 export function appHeader() {
     return () => {
         if (!app.store._ready || !app.store.showHeader || !app.store.superuser?.id) {
@@ -56,6 +58,7 @@ export function appHeader() {
                 },
             ),
             t.div({ className: "flex-fill app-header-separator" }),
+            notificationBell(),
             colorSchemeButton(),
             t.button(
                 {

@@ -699,6 +699,24 @@ type App interface {
 	// FindTranslationJobById returns a single translation job by id.
 	FindTranslationJobById(id string) (*TranslationJob, error)
 
+	// CreateNotification creates and persists a notification.
+	CreateNotification(options NotificationCreateOptions) (*Notification, error)
+
+	// FindNotificationById returns a single notification by id.
+	FindNotificationById(id string) (*Notification, error)
+
+	// FindNotificationsByRecipient returns recent notifications for a recipient.
+	FindNotificationsByRecipient(recipientCollection string, recipientRef string, limit int) ([]*Notification, error)
+
+	// CountUnreadNotifications returns the unread notification count for a recipient.
+	CountUnreadNotifications(recipientCollection string, recipientRef string) (int, error)
+
+	// MarkNotificationRead marks one recipient notification as read.
+	MarkNotificationRead(recipientCollection string, recipientRef string, id string) (*Notification, error)
+
+	// MarkAllNotificationsRead marks all recipient notifications as read.
+	MarkAllNotificationsRead(recipientCollection string, recipientRef string) (int, error)
+
 	// ---------------------------------------------------------------
 
 	// RecordQuery returns a new Record select query from a collection model, id or name.

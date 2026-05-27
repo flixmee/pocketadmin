@@ -220,7 +220,19 @@ func (app *BaseApp) rejectAutomationApprovalWorkflow(approval *Approval) error {
 		return err
 	}
 
-	return updateAutomationLastRunState(app, automation.Id, run.Status(), run.Finished())
+	if err := updateAutomationLastRunState(app, automation.Id, run.Status(), run.Finished()); err != nil {
+		return err
+	}
+	if err := notifyAutomationRunCompletion(app, automation, run); err != nil {
+		app.Logger().Warn(
+			"Failed to create automation run notification",
+			"automationId", automation.Id,
+			"runId", run.Id,
+			"error", err,
+		)
+	}
+
+	return nil
 }
 
 // FindApprovalById returns a single Approval model by id.

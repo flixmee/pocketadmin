@@ -59,6 +59,11 @@ func TestSettings_DBExport(t *testing.T) {
 			settings.Backups.S3.Enabled = true
 			settings.Backups.S3.Secret = ""
 			settings.Batch.Timeout = 15
+			settings.AI.Enabled = true
+			settings.AI.Provider = core.AIProviderCustom
+			settings.AI.APIKey = "ai_api_key"
+			settings.AI.Model = "test-model"
+			settings.AI.BaseURL = "https://example.com/v1"
 			settings.RateLimits.Enabled = true
 			settings.TrustedProxy.UseLeftmostIP = true
 
@@ -84,7 +89,7 @@ func TestSettings_DBExport(t *testing.T) {
 				valueStr = string(export["value"].([]byte))
 			}
 
-			expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"smtp_host","username":"smtp_username","password":"","authMethod":"","tls":false,"localName":""},"backups":{"cron":"* * * * *","cronMaxKeep":0,"s3":{"enabled":true,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"s3_endpoint","accessKey":"","secret":"s3_secret","forcePathStyle":false},"meta":{"accentColor":"","appName":"test_app_name","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":true},"trustedProxy":{"headers":[],"useLeftmostIP":true},"batch":{"enabled":false,"maxRequests":0,"timeout":15,"maxBodySize":0},"logs":{"maxDays":123,"minLevel":0,"logIP":false,"logAuthId":false}}`
+			expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"smtp_host","username":"smtp_username","password":"","authMethod":"","tls":false,"localName":""},"backups":{"cron":"* * * * *","cronMaxKeep":0,"s3":{"enabled":true,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"s3_endpoint","accessKey":"","secret":"s3_secret","forcePathStyle":false},"meta":{"accentColor":"","appName":"test_app_name","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":true},"trustedProxy":{"headers":[],"useLeftmostIP":true},"batch":{"enabled":false,"maxRequests":0,"timeout":15,"maxBodySize":0},"ai":{"enabled":true,"provider":"custom","apiKey":"ai_api_key","model":"test-model","baseURL":"https://example.com/v1"},"logs":{"maxDays":123,"minLevel":0,"logIP":false,"logAuthId":false}}`
 			if valueStr != expected {
 				t.Fatalf("Expected exported settings\n%s\ngot\n%s", expected, valueStr)
 			}
@@ -173,6 +178,7 @@ func TestSettingsMarshalJSON(t *testing.T) {
 	settings.SMTP.Password = testSecret
 	settings.S3.Secret = testSecret
 	settings.Backups.S3.Secret = testSecret
+	settings.AI.APIKey = testSecret
 
 	raw, err := json.Marshal(settings)
 	if err != nil {
@@ -180,7 +186,7 @@ func TestSettingsMarshalJSON(t *testing.T) {
 	}
 	rawStr := string(raw)
 
-	expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"","username":"abc","authMethod":"","tls":false,"localName":""},"backups":{"cron":"","cronMaxKeep":0,"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false},"meta":{"accentColor":"","appName":"test123","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":false},"trustedProxy":{"headers":[],"useLeftmostIP":false},"batch":{"enabled":false,"maxRequests":0,"timeout":0,"maxBodySize":0},"logs":{"maxDays":0,"minLevel":0,"logIP":false,"logAuthId":false}}`
+	expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"","username":"abc","authMethod":"","tls":false,"localName":""},"backups":{"cron":"","cronMaxKeep":0,"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false},"meta":{"accentColor":"","appName":"test123","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":false},"trustedProxy":{"headers":[],"useLeftmostIP":false},"batch":{"enabled":false,"maxRequests":0,"timeout":0,"maxBodySize":0},"ai":{"enabled":false,"provider":"","model":"","baseURL":""},"logs":{"maxDays":0,"minLevel":0,"logIP":false,"logAuthId":false}}`
 
 	if rawStr != expected {
 		t.Fatalf("Expected\n%v\ngot\n%v", expected, rawStr)
@@ -208,6 +214,9 @@ func TestSettingsValidate(t *testing.T) {
 	s.Batch.Enabled = true
 	s.Batch.MaxRequests = -1
 	s.Batch.Timeout = -1
+	s.AI.Enabled = true
+	s.AI.Provider = "invalid"
+	s.AI.BaseURL = "invalid"
 	s.RateLimits.Enabled = true
 	s.RateLimits.Rules = nil
 
@@ -225,6 +234,7 @@ func TestSettingsValidate(t *testing.T) {
 		`"s3":{`,
 		`"backups":{`,
 		`"batch":{`,
+		`"ai":{`,
 		`"rateLimits":{`,
 	}
 
@@ -562,6 +572,75 @@ func TestBatchConfigValidate(t *testing.T) {
 				MaxRequests: 10,
 				Timeout:     1,
 				MaxBodySize: 1,
+			},
+			[]string{},
+		},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.name, func(t *testing.T) {
+			result := s.config.Validate()
+
+			tests.TestValidationErrors(t, result, s.expectedErrors)
+		})
+	}
+}
+
+func TestAIConfigValidate(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []struct {
+		name           string
+		config         core.AIConfig
+		expectedErrors []string
+	}{
+		{
+			"zero value (disabled)",
+			core.AIConfig{},
+			[]string{},
+		},
+		{
+			"zero value (enabled)",
+			core.AIConfig{Enabled: true},
+			[]string{"provider", "apiKey"},
+		},
+		{
+			"invalid data",
+			core.AIConfig{
+				Enabled:  true,
+				Provider: "invalid",
+				BaseURL:  "test:test:test",
+				Model:    strings.Repeat("a", 300),
+			},
+			[]string{"provider", "apiKey", "model", "baseURL"},
+		},
+		{
+			"custom provider without base url",
+			core.AIConfig{
+				Enabled:  true,
+				Provider: core.AIProviderCustom,
+				APIKey:   "test",
+			},
+			[]string{"baseURL"},
+		},
+		{
+			"valid data",
+			core.AIConfig{
+				Enabled:  true,
+				Provider: core.AIProviderOpenAI,
+				APIKey:   "test",
+				Model:    "test-model",
+			},
+			[]string{},
+		},
+		{
+			"valid custom provider",
+			core.AIConfig{
+				Enabled:  true,
+				Provider: core.AIProviderCustom,
+				APIKey:   "test",
+				Model:    "test-model",
+				BaseURL:  "https://example.com/v1",
 			},
 			[]string{},
 		},

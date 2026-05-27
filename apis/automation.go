@@ -22,6 +22,7 @@ var automationAllowedFields = []string{
 	"name",
 	"tag",
 	"active",
+	"notifyOnCompletion",
 	"triggerType",
 	"collectionRef",
 	"cronExpr",

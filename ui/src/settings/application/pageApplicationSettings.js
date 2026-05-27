@@ -1,4 +1,5 @@
 import { settingsSidebar } from "../settingsSidebar";
+import { aiAccordion, defaultAIBaseURL } from "./aiAccordion";
 import { batchAccordion } from "./batchAccordion";
 import { rateLimitAccordion, sortRules } from "./rateLimitAccordion";
 import { superuserAccordion } from "./superuserAccordion";
@@ -139,10 +140,16 @@ export function pageApplicationSettings() {
             }
         }
 
+        const ai = { provider: "openai", ...(settings.ai || {}) };
+        if (!ai.baseURL) {
+            ai.baseURL = defaultAIBaseURL(ai.provider);
+        }
+
         data.originalFormSettings = {
             superuserIPs: settings.superuserIPs || [],
             meta: settings.meta || {},
             batch: settings.batch || {},
+            ai: ai,
             trustedProxy: settings.trustedProxy || { headers: [] },
             rateLimits: settings.rateLimits || { excludedIPs: [], rules: [] },
         };
@@ -231,6 +238,7 @@ export function pageApplicationSettings() {
                         t.div(
                             { className: "col-lg-12" },
                             () => batchAccordion(data),
+                            () => aiAccordion(data),
                             () => trustedProxyAccordion(data),
                             () => rateLimitAccordion(data),
                             () => superuserAccordion(data),

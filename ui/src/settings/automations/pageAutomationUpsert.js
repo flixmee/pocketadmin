@@ -510,6 +510,31 @@ export function pageAutomationUpsert(route) {
                             ),
                         ),
                         t.div(
+                            { className: "col-md-3" },
+                            t.div(
+                                { className: "field m-t-lg" },
+                                t.input({
+                                    id: formId + "_notifyOnCompletion",
+                                    name: "notifyOnCompletion",
+                                    type: "checkbox",
+                                    className: "switch",
+                                    checked: () => data.form.notifyOnCompletion,
+                                    onchange: (e) => (data.form.notifyOnCompletion = e.target.checked),
+                                }),
+                                t.label(
+                                    {
+                                        htmlFor: formId + "_notifyOnCompletion",
+                                        className: "automation-field-label",
+                                    },
+                                    t.span({ className: "txt" }, "Notify admins"),
+                                ),
+                            ),
+                            t.div(
+                                { className: "field-help automation-field-desc" },
+                                "Create admin notifications when this automation succeeds or fails.",
+                            ),
+                        ),
+                        t.div(
                             { className: "col-md-6" },
                             t.div(
                                 { className: "field" },
@@ -645,6 +670,7 @@ function normalizeAutomationForm(automation = null) {
         name: automation?.name || "",
         tag: automation?.tag || "",
         active: !!automation?.active,
+        notifyOnCompletion: !!automation?.notifyOnCompletion,
         triggerType: automation?.triggerType || "manual",
         collectionRef: automation?.collectionRef || "",
         cronExpr: automation?.cronExpr || "",
@@ -673,6 +699,7 @@ function buildAutomationPayload(form) {
         name: form.name.trim(),
         tag: form.tag.trim(),
         active: !!form.active,
+        notifyOnCompletion: !!form.notifyOnCompletion,
         triggerType: form.triggerType,
         collectionRef: isRecordAutomationTrigger(form.triggerType) || isI18nAutomationTrigger(form.triggerType)
             ? (form.collectionRef || "")

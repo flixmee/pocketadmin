@@ -131,6 +131,7 @@ type settings struct {
 	RateLimits   RateLimitsConfig   `form:"rateLimits" json:"rateLimits"`
 	TrustedProxy TrustedProxyConfig `form:"trustedProxy" json:"trustedProxy"`
 	Batch        BatchConfig        `form:"batch" json:"batch"`
+	AI           AIConfig           `form:"ai" json:"ai"`
 	Logs         LogsConfig         `form:"logs" json:"logs"`
 }
 
@@ -173,6 +174,10 @@ func newDefaultSettings() *Settings {
 				Enabled:     false,
 				MaxRequests: 50,
 				Timeout:     3,
+			},
+			AI: AIConfig{
+				Provider: AIProviderOpenAI,
+				BaseURL:  AIProviderOpenAIBaseURL,
 			},
 			RateLimits: RateLimitsConfig{
 				Enabled: false, // @todo once tested enough enable by default for new installations
@@ -297,6 +302,7 @@ func (s *Settings) PostValidate(ctx context.Context, app App) error {
 		validation.Field(&s.S3),
 		validation.Field(&s.Backups),
 		validation.Field(&s.Batch),
+		validation.Field(&s.AI),
 		validation.Field(&s.RateLimits),
 		validation.Field(&s.TrustedProxy),
 	)
@@ -345,6 +351,7 @@ func (s *Settings) MarshalJSON() ([]byte, error) {
 		&copy.SMTP.Password,
 		&copy.S3.Secret,
 		&copy.Backups.S3.Secret,
+		&copy.AI.APIKey,
 	}
 
 	// mask all sensitive fields
@@ -480,6 +487,45 @@ func (c BatchConfig) Validate() error {
 		validation.Field(&c.MaxRequests, validation.When(c.Enabled, validation.Required), validation.Min(0)),
 		validation.Field(&c.Timeout, validation.When(c.Enabled, validation.Required), validation.Min(0)),
 		validation.Field(&c.MaxBodySize, validation.Min(0)),
+	)
+}
+
+// -------------------------------------------------------------------
+
+const (
+	AIProviderOpenAI           = "openai"
+	AIProviderOpenAIBaseURL    = "https://api.openai.com/v1"
+	AIProviderGemini           = "gemini"
+	AIProviderGeminiBaseURL    = "https://generativelanguage.googleapis.com/v1beta"
+	AIProviderAnthropic        = "anthropic"
+	AIProviderAnthropicBaseURL = "https://api.anthropic.com/v1"
+	AIProviderCustom           = "custom"
+	AIProviderCustomBaseURL    = ""
+)
+
+type AIConfig struct {
+	Enabled  bool   `form:"enabled" json:"enabled"`
+	Provider string `form:"provider" json:"provider"`
+	APIKey   string `form:"apiKey" json:"apiKey,omitempty"`
+	Model    string `form:"model" json:"model"`
+	BaseURL  string `form:"baseURL" json:"baseURL"`
+}
+
+// Validate makes AIConfig validatable by implementing [validation.Validatable] interface.
+func (c AIConfig) Validate() error {
+	return validation.ValidateStruct(&c,
+		validation.Field(
+			&c.Provider,
+			validation.When(c.Enabled, validation.Required),
+			validation.In(AIProviderOpenAI, AIProviderGemini, AIProviderAnthropic, AIProviderCustom),
+		),
+		validation.Field(&c.APIKey, validation.When(c.Enabled, validation.Required)),
+		validation.Field(&c.Model, validation.Length(0, 255)),
+		validation.Field(
+			&c.BaseURL,
+			validation.When(c.Enabled && c.Provider == AIProviderCustom, validation.Required),
+			is.URL,
+		),
 	)
 }
 

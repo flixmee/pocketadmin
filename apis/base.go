@@ -38,6 +38,7 @@ func NewRouter(app core.App) (*router.Router[*core.RequestEvent], error) {
 	// API routes
 	apiGroup := pbRouter.Group("/api")
 	bindSettingsApi(app, apiGroup)
+	bindNotificationApi(app, apiGroup)
 	bindAutomationApi(app, apiGroup)
 	bindI18nApi(app, apiGroup)
 	bindCollectionApi(app, apiGroup)

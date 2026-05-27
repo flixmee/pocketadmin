@@ -27,6 +27,11 @@ app.pb.authStore.onChange((_, record) => {
     }
 
     app.store.superuser = record;
+
+    if (!record?.id) {
+        app.store.disposeNotificationsRealtime();
+        app.store.resetNotifications();
+    }
 });
 
 // refresh the token in the background
@@ -52,6 +57,8 @@ app.pb.authStore.onChange((_, record) => {
         app.store.loadCollections();
         app.store.loadSettings();
         app.store.loadOAuth2Providers();
+        app.store.loadNotificationState();
+        app.store.initNotificationsRealtime();
     }
 });
 

@@ -47,7 +47,7 @@ func TestCollectionsList(t *testing.T) {
 			ExpectedContent: []string{
 				`"page":1`,
 				`"perPage":30`,
-				`"totalItems":29`,
+				`"totalItems":30`,
 				`"items":[{`,
 				`"collectionGroup":""`,
 				`"name":"` + core.CollectionNameSuperusers + `"`,
@@ -65,6 +65,7 @@ func TestCollectionsList(t *testing.T) {
 				`"name":"` + core.CollectionNameAutomationEvents + `"`,
 				`"name":"` + core.CollectionNameWorkflowVersions + `"`,
 				`"name":"` + core.CollectionNameWorkflowTemplates + `"`,
+				`"name":"` + core.CollectionNameNotifications + `"`,
 				`"name":"` + core.CollectionNameLocales + `"`,
 				`"name":"` + core.CollectionNameI18nGroups + `"`,
 				`"name":"` + core.CollectionNameTranslationJobs + `"`,
@@ -99,9 +100,9 @@ func TestCollectionsList(t *testing.T) {
 			ExpectedContent: []string{
 				`"page":2`,
 				`"perPage":2`,
-				`"totalItems":29`,
+				`"totalItems":30`,
 				`"items":[{`,
-				`"name":"` + core.CollectionNameConnectors + `"`,
+				`"name":"` + core.CollectionNameWorkflowVersions + `"`,
 			},
 			ExpectedEvents: map[string]int{
 				"*":                        0,

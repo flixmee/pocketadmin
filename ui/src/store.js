@@ -324,6 +324,173 @@ window.app.store = store({
             }
         }
     },
+
+    notifications: [],
+    unreadNotifications: 0,
+    isLoadingNotifications: false,
+    isLoadingUnreadNotifications: false,
+    isMarkingNotificationsRead: false,
+    notificationsRealtimeUnsubscribe: null,
+    get currentNotificationRecipient() {
+        const superuser = app.store.superuser;
+        if (!superuser?.id) {
+            return null;
+        }
+
+        return {
+            collection: superuser.collectionId || superuser.collectionName || "_superusers",
+            record: superuser.id,
+        };
+    },
+    resetNotifications() {
+        app.store.notifications = [];
+        app.store.unreadNotifications = 0;
+        app.store.isLoadingNotifications = false;
+        app.store.isLoadingUnreadNotifications = false;
+        app.store.isMarkingNotificationsRead = false;
+    },
+    async loadNotifications() {
+        if (!app.store.currentNotificationRecipient) {
+            app.store.resetNotifications();
+            return;
+        }
+
+        app.store.isLoadingNotifications = true;
+
+        try {
+            app.store.notifications = await app.pb.send("/api/notifications", {
+                query: { limit: 20 },
+                requestKey: "appStore.loadNotifications",
+            });
+            app.store.isLoadingNotifications = false;
+        } catch (err) {
+            if (!err.isAbort) {
+                app.store.isLoadingNotifications = false;
+                app.checkApiError(err);
+            }
+        }
+    },
+    async loadUnreadNotifications() {
+        if (!app.store.currentNotificationRecipient) {
+            app.store.unreadNotifications = 0;
+            return;
+        }
+
+        app.store.isLoadingUnreadNotifications = true;
+
+        try {
+            const result = await app.pb.send("/api/notifications/unread-count", {
+                requestKey: "appStore.loadUnreadNotifications",
+            });
+            app.store.unreadNotifications = result?.count || 0;
+            app.store.isLoadingUnreadNotifications = false;
+        } catch (err) {
+            if (!err.isAbort) {
+                app.store.isLoadingUnreadNotifications = false;
+                app.checkApiError(err, false);
+            }
+        }
+    },
+    async loadNotificationState() {
+        await Promise.all([
+            app.store.loadNotifications(),
+            app.store.loadUnreadNotifications(),
+        ]);
+    },
+    async initNotificationsRealtime() {
+        app.store.disposeNotificationsRealtime();
+
+        const recipient = app.store.currentNotificationRecipient;
+        if (!recipient) {
+            return;
+        }
+
+        try {
+            const filter = app.pb.filter("recipientCollection={:collection} && recipientRef={:record}", {
+                collection: recipient.collection,
+                record: recipient.record,
+            });
+
+            app.store.notificationsRealtimeUnsubscribe = await app.pb.collection("_notifications").subscribe(
+                "*",
+                app.store.handleNotificationRealtimeEvent,
+                { filter },
+            );
+        } catch (err) {
+            if (!err.isAbort) {
+                console.warn("failed to initialize notifications realtime:", err);
+            }
+        }
+    },
+    disposeNotificationsRealtime() {
+        if (app.store.notificationsRealtimeUnsubscribe) {
+            app.store.notificationsRealtimeUnsubscribe().catch((err) => {
+                console.warn("failed to unsubscribe from notifications realtime:", err);
+            });
+            app.store.notificationsRealtimeUnsubscribe = null;
+        }
+    },
+    handleNotificationRealtimeEvent(event) {
+        const record = event?.record;
+        if (!record?.id) {
+            return;
+        }
+
+        const items = app.store.notifications.filter((item) => item.id != record.id);
+
+        if (event.action != "delete" && !record.archived) {
+            items.unshift(record);
+        }
+
+        app.store.notifications = items
+            .sort((a, b) => (a.created < b.created ? 1 : -1))
+            .slice(0, 20);
+
+        app.store.loadUnreadNotifications();
+    },
+    async markNotificationRead(id) {
+        if (!id) {
+            return;
+        }
+
+        app.store.isMarkingNotificationsRead = true;
+
+        try {
+            const notification = await app.pb.send(`/api/notifications/${encodeURIComponent(id)}/read`, {
+                method: "POST",
+                requestKey: "appStore.markNotificationRead." + id,
+            });
+            app.store.notifications = app.store.notifications.map((item) => item.id == id ? notification : item);
+            await app.store.loadUnreadNotifications();
+            app.store.isMarkingNotificationsRead = false;
+        } catch (err) {
+            if (!err.isAbort) {
+                app.store.isMarkingNotificationsRead = false;
+                app.checkApiError(err);
+            }
+        }
+    },
+    async markAllNotificationsRead() {
+        app.store.isMarkingNotificationsRead = true;
+
+        try {
+            await app.pb.send("/api/notifications/read", {
+                method: "POST",
+                requestKey: "appStore.markAllNotificationsRead",
+            });
+            const now = new Date().toISOString().replace("T", " ");
+            app.store.notifications = app.store.notifications.map((item) => {
+                return Object.assign({}, item, { read: true, readAt: item.readAt || now });
+            });
+            app.store.unreadNotifications = 0;
+            app.store.isMarkingNotificationsRead = false;
+        } catch (err) {
+            if (!err.isAbort) {
+                app.store.isMarkingNotificationsRead = false;
+                app.checkApiError(err);
+            }
+        }
+    },
 });
 
 // reset title and errors on route change

@@ -119,6 +119,16 @@ func (m *Automation) SetActive(active bool) {
 	m.Set("active", active)
 }
 
+// NotifyOnCompletion returns whether completed runs should notify admins.
+func (m *Automation) NotifyOnCompletion() bool {
+	return m.GetBool("notifyOnCompletion")
+}
+
+// SetNotifyOnCompletion updates the completed run admin notification setting.
+func (m *Automation) SetNotifyOnCompletion(notify bool) {
+	m.Set("notifyOnCompletion", notify)
+}
+
 // TriggerType returns the configured trigger type.
 func (m *Automation) TriggerType() string {
 	return m.GetString("triggerType")

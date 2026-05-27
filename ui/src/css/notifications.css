@@ -1,0 +1,151 @@
+.notification-bell {
+    position: relative;
+    min-width: 28px;
+    justify-content: center;
+}
+
+.notification-badge {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+    font-size: 9px;
+    line-height: 1;
+    font-weight: bold;
+    color: var(--dangerTxtColor);
+    background: var(--dangerColor);
+    border-radius: 999px;
+    box-shadow: 0 0 0 1px var(--accentColor);
+}
+
+.notifications-dropdown {
+    width: 360px;
+    max-width: min(360px, calc(100vw - 20px));
+    max-height: min(430px, calc(100vh - 70px));
+    gap: 0;
+    padding: 0;
+}
+
+.notifications-dropdown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px;
+    border-bottom: 1px solid var(--surfaceAlt2Color);
+}
+
+.notifications-empty {
+    display: flex;
+    min-height: 90px;
+    align-items: center;
+    justify-content: center;
+    padding: 15px;
+    color: var(--surfaceTxtHintColor);
+}
+
+.notification-row {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    min-height: 58px;
+    border-bottom: 1px solid var(--surfaceAlt1Color);
+    &:last-child {
+        border-bottom: 0;
+    }
+    &.unread {
+        background: color-mix(in srgb, var(--accentColor), transparent 94%);
+    }
+}
+
+.notification-row-link {
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr);
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    align-items: start;
+    padding: 10px 34px 10px 12px;
+    color: inherit;
+    text-align: left;
+    text-decoration: none;
+    background: transparent;
+    border: 0;
+    transition: background var(--animationSpeed);
+    &:hover,
+    &:focus-visible {
+        background: var(--surfaceAlt1Color);
+    }
+}
+
+.notification-severity {
+    width: 8px;
+    height: 8px;
+    margin-top: 5px;
+    border-radius: 50%;
+    background: var(--infoColor);
+    &.success {
+        background: var(--successColor);
+    }
+    &.warning {
+        background: var(--warningColor);
+    }
+    &.danger {
+        background: var(--dangerColor);
+    }
+}
+
+.notification-content {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.notification-title {
+    display: block;
+    font-weight: bold;
+    line-height: var(--smLineHeight);
+}
+
+.notification-message,
+.notification-date {
+    display: block;
+    font-size: var(--xsFontSize);
+    line-height: var(--xsLineHeight);
+    color: var(--surfaceTxtHintColor);
+}
+
+.notification-read-btn {
+    position: absolute;
+    top: 9px;
+    right: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    width: 24px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+    color: var(--surfaceTxtHintColor);
+    background: transparent;
+    border: 0;
+    border-radius: var(--borderRadius);
+    transition:
+        color var(--animationSpeed),
+        background var(--animationSpeed);
+    &:hover,
+    &:focus-visible {
+        color: var(--successColor);
+        background: var(--surfaceAlt2Color);
+    }
+    &[disabled] {
+        cursor: default;
+        opacity: 0.5;
+    }
+}

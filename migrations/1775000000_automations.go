@@ -56,6 +56,10 @@ func createAutomationsCollection(txApp core.App) error {
 		Name:   "active",
 		System: true,
 	})
+	col.Fields.Add(&core.BoolField{
+		Name:   "notifyOnCompletion",
+		System: true,
+	})
 	col.Fields.Add(&core.TextField{
 		Name:     "triggerType",
 		System:   true,

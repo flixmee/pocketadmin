@@ -1389,6 +1389,7 @@ func (app *BaseApp) registerBaseHooks() {
 	app.registerI18nHooks()
 	app.registerTranslationJobHooks()
 	app.registerMediaHooks()
+	app.registerNotificationHooks()
 	app.registerNotifyWatcherHooks()
 }
 

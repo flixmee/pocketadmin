@@ -19,6 +19,15 @@ import (
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
+type testAutomationAIProvider struct {
+	response core.AutomationAIResponse
+	err      error
+}
+
+func (p testAutomationAIProvider) RunAutomationAI(req core.AutomationAIRequest) (core.AutomationAIResponse, error) {
+	return p.response, p.err
+}
+
 func TestAutomationCronSyncOnSave(t *testing.T) {
 	t.Parallel()
 
@@ -94,6 +103,159 @@ func TestAutomationCronRunCreatesRunLog(t *testing.T) {
 	}
 	if latestAutomation.LastRunAt().IsZero() {
 		t.Fatal("Expected lastRunAt to be set")
+	}
+}
+
+func TestAutomationRunCompletionNotifications(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []struct {
+		name             string
+		steps            string
+		expectedStatus   string
+		expectedTitle    string
+		expectedSeverity string
+		expectRunErr     bool
+	}{
+		{
+			name:             "success",
+			steps:            `[{"type":"condition","path":"trigger.type","op":"exists"}]`,
+			expectedStatus:   core.AutomationRunStatusSuccess,
+			expectedTitle:    "Automation succeeded",
+			expectedSeverity: core.NotificationSeveritySuccess,
+		},
+		{
+			name:             "failure",
+			steps:            `[{"type":"code","code":"throw new Error('boom')"}]`,
+			expectedStatus:   core.AutomationRunStatusFailed,
+			expectedTitle:    "Automation failed",
+			expectedSeverity: core.NotificationSeverityDanger,
+			expectRunErr:     true,
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			app, _ := tests.NewTestApp()
+			defer app.Cleanup()
+
+			automation := core.NewAutomation(app)
+			populateValidAutomation(automation)
+			automation.SetName("Notify " + scenario.name)
+			automation.SetNotifyOnCompletion(true)
+			automation.SetSteps(mustParseJSONRaw(t, scenario.steps))
+
+			if err := app.Save(automation); err != nil {
+				t.Fatal(err)
+			}
+
+			err := app.RunAutomationManually(automation.Id)
+			if scenario.expectRunErr && err == nil {
+				t.Fatal("Expected automation run error")
+			}
+			if !scenario.expectRunErr && err != nil {
+				t.Fatalf("Expected automation run to succeed, got %v", err)
+			}
+
+			runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+			if runs[0].Status() != scenario.expectedStatus {
+				t.Fatalf("Expected run status %q, got %q", scenario.expectedStatus, runs[0].Status())
+			}
+
+			superusers, err := app.FindAllRecords(core.CollectionNameSuperusers)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			notifications, err := app.FindAllRecords(core.CollectionNameNotifications, dbx.HashExp{
+				"sourceCollection": core.CollectionNameAutomationRuns,
+				"sourceRecord":     runs[0].Id,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(notifications) != len(superusers) {
+				t.Fatalf("Expected %d notifications, got %d", len(superusers), len(notifications))
+			}
+
+			for _, notification := range notifications {
+				if notification.GetString("title") != scenario.expectedTitle {
+					t.Fatalf("Expected title %q, got %q", scenario.expectedTitle, notification.GetString("title"))
+				}
+				if notification.GetString("severity") != scenario.expectedSeverity {
+					t.Fatalf("Expected severity %q, got %q", scenario.expectedSeverity, notification.GetString("severity"))
+				}
+				if notification.GetString("type") != "automation" {
+					t.Fatalf("Expected automation type, got %q", notification.GetString("type"))
+				}
+				if notification.GetString("actionUrl") != "#/automations/"+automation.Id {
+					t.Fatalf("Expected automation actionUrl, got %q", notification.GetString("actionUrl"))
+				}
+			}
+		})
+	}
+}
+
+func TestAutomationRunCompletionNotificationsDisabled(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	notifications, err := app.FindAllRecords(core.CollectionNameNotifications, dbx.HashExp{
+		"sourceCollection": core.CollectionNameAutomationRuns,
+		"sourceRecord":     runs[0].Id,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notifications) != 0 {
+		t.Fatalf("Expected no notifications, got %d", len(notifications))
+	}
+}
+
+func TestAutomationRecordRunCompletionNotificationActionURL(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.FindCollectionByNameOrId("demo2")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation := newRecordTriggerAutomation(t, app, collection.Id, core.AutomationTriggerRecordCreate)
+	automation.SetNotifyOnCompletion(true)
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("title", "automation_notification_action_url")
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	notifications := waitForAutomationRunNotifications(t, app, runs[0])
+	expectedURL := "/_/#/collections?collection=demo2&record=" + record.Id
+
+	for _, notification := range notifications {
+		if notification.GetString("actionUrl") != expectedURL {
+			t.Fatalf("Expected actionUrl %q, got %q", expectedURL, notification.GetString("actionUrl"))
+		}
 	}
 }
 
@@ -2196,6 +2358,33 @@ func waitForCompletedAutomationRuns(t *testing.T, app *tests.TestApp, automation
 	return nil
 }
 
+func waitForAutomationRunNotifications(t *testing.T, app *tests.TestApp, run *core.AutomationRun) []*core.Record {
+	t.Helper()
+
+	var notifications []*core.Record
+	var err error
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		notifications, err = app.FindAllRecords(core.CollectionNameNotifications, dbx.HashExp{
+			"sourceCollection": core.CollectionNameAutomationRuns,
+			"sourceRecord":     run.Id,
+		})
+		if err == nil && len(notifications) > 0 {
+			return notifications
+		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if err != nil {
+		t.Fatalf("Failed to fetch automation run notifications: %v", err)
+	}
+
+	t.Fatal("Expected automation run notifications")
+	return nil
+}
+
 func hasCompletedAutomationRun(runs []*core.AutomationRun, expected int) bool {
 	if expected <= 0 {
 		return true
@@ -2598,6 +2787,18 @@ func TestAutomationAIStepsUseProviderAndValidateOutput(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	defer app.Cleanup()
 
+	app.Store().Set(core.StoreKeyAutomationAIProvider, testAutomationAIProvider{
+		response: core.AutomationAIResponse{
+			Output: map[string]any{"vendor": "invoice text"},
+			Model:  "test-provider",
+			TokenUsage: map[string]int{
+				"input":  12,
+				"output": 18,
+				"total":  30,
+			},
+		},
+	})
+
 	automation := core.NewAutomation(app)
 	populateValidAutomation(automation)
 	automation.SetActive(true)
@@ -2621,7 +2822,95 @@ func TestAutomationAIStepsUseProviderAndValidateOutput(t *testing.T) {
 	output := results[0]["output"].(map[string]any)
 	extracted := output["output"].(map[string]any)
 	if extracted["vendor"] != "invoice text" {
-		t.Fatalf("Expected deterministic vendor output, got %#v", extracted["vendor"])
+		t.Fatalf("Expected provider vendor output, got %#v", extracted["vendor"])
+	}
+}
+
+func TestAutomationAIGenerateUsesSettingsConfig(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	requests := make(chan map[string]any, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("Expected POST request, got %s", r.Method)
+		}
+		if r.URL.Path != "/chat/completions" {
+			t.Errorf("Expected /chat/completions path, got %s", r.URL.Path)
+		}
+		if r.Header.Get("authorization") != "Bearer test_key" {
+			t.Errorf("Expected bearer token auth, got %q", r.Header.Get("authorization"))
+		}
+
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("Failed to decode request body: %v", err)
+		}
+		requests <- body
+
+		w.Header().Set("content-type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"Generated from settings"}}],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}`)
+	}))
+	defer server.Close()
+
+	app.Settings().AI.Enabled = true
+	app.Settings().AI.Provider = core.AIProviderOpenAI
+	app.Settings().AI.APIKey = "test_key"
+	app.Settings().AI.Model = "settings-model"
+	app.Settings().AI.BaseURL = server.URL
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[{
+		"type":"ai.generate",
+		"input":"Generate a greeting"
+	}]`))
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case body := <-requests:
+		if body["model"] != "settings-model" {
+			t.Fatalf("Expected settings model in provider request, got %#v", body["model"])
+		}
+		messages, ok := body["messages"].([]any)
+		if !ok || len(messages) != 1 {
+			t.Fatalf("Expected one chat message, got %#v", body["messages"])
+		}
+		message, ok := messages[0].(map[string]any)
+		if !ok {
+			t.Fatalf("Expected message object, got %#v", messages[0])
+		}
+		if message["content"] != "Generate a greeting" {
+			t.Fatalf("Expected rendered step input as prompt, got %#v", message["content"])
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timed out waiting for AI provider request")
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected success, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+	results := decodeStepResults(t, runs[0])
+	output := results[0]["output"].(map[string]any)
+	if output["model"] != "settings-model" {
+		t.Fatalf("Expected settings model in step output, got %#v", output["model"])
+	}
+	generated := output["output"].(map[string]any)
+	if generated["text"] != "Generated from settings" {
+		t.Fatalf("Expected generated text, got %#v", generated["text"])
+	}
+	tokenUsage := output["tokenUsage"].(map[string]any)
+	if tokenUsage["total"] != float64(5) {
+		t.Fatalf("Expected total token usage 5, got %#v", tokenUsage["total"])
 	}
 }
 
