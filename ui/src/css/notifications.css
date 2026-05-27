@@ -61,6 +61,11 @@
     &.unread {
         background: color-mix(in srgb, var(--accentColor), transparent 94%);
     }
+
+    /* if has actions */
+    &:has(.notification-actions) {
+        min-height: 100px;
+    }
 }
 
 .notification-row-body {
@@ -170,7 +175,11 @@
 }
 
 .notification-message {
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    display: -webkit-box;
+    overflow: hidden;
 }
 
 .notification-read-btn {
