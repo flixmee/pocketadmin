@@ -54,6 +54,9 @@ func (app *BaseApp) FindAutomationEventById(id string) (*AutomationEventRecord, 
 }
 
 func publishRecordAutomationEvent(app App, name string, record *Record, original *Record) {
+	if automationRecordTriggersSuppressed(app) {
+		return
+	}
 	if record == nil || record.Collection() == nil || record.Collection().System || shouldSkipAutomationTriggerCollection(record.Collection().Name) {
 		return
 	}

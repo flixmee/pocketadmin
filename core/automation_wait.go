@@ -128,6 +128,16 @@ func createAutomationApproval(ctx *automationExecutionContext, step map[string]a
 		return nil, err
 	}
 
+	if err := notifyAutomationApprovalRequested(ctx.App, ctx.Automation, ctx.Run, approval); err != nil {
+		ctx.App.Logger().Warn(
+			"Failed to create automation approval notification",
+			"automationId", ctx.Automation.Id,
+			"runId", ctx.Run.Id,
+			"approvalId", approval.Id,
+			"error", err,
+		)
+	}
+
 	return approval, nil
 }
 

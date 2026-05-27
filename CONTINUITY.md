@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Refine automation success/failure notifications so record-triggered runs link to the related record.
-- Success: when a notification comes from a run with record trigger context, `ActionURL` points to the admin record route like `/_/#/collections?collection={collection_name}&record={record_id}`; otherwise it falls back to the automation page.
+- Fix notification dropdown row layout when a notification includes approve/reject buttons.
+- Success: notification rows with embedded action buttons render cleanly without broken spacing, nested interactive issues, or overlap with mark-read controls.
 
 Constraints/Assumptions:
 
@@ -35,10 +35,23 @@ State:
   - Added focused regression coverage for record-triggered automation notification links.
   - Documented the record-triggered automation `ActionURL` convention in `NOTIFICATION_PLAN.md`.
   - Verified focused Go test for completion notifications and record action URLs.
+  - Added automation approval request notifications for newly-created `wait.approval` approvals.
+  - Added approval notification payload fields/actions (`approvalId`, `approvalStatus`, approve/reject action list, etc.) sourced from `_approvals`.
+  - Added admin notification dropdown approve/reject buttons that call the existing approval decision endpoint and mark the notification read after success.
+  - Documented automation approval notification behavior in `NOTIFICATION_PLAN.md`.
+  - Added focused backend coverage for approval notification creation and payload.
+  - Verified focused approval tests and admin UI build.
+  - Fixed resumed `record.beforeUpdate` approval workflows by hydrating the saved trigger payload back to a live trigger record.
+  - Exposed hydrated trigger records to code steps as root `$record` and `trigger.$record`.
+  - Added autosave for changed trigger records in resumed before-record code steps, with record automation triggers suppressed for that internal save to avoid recursive approval loops.
+  - Added regression coverage for `record.beforeUpdate` + `wait.approval` + code step mutation.
+  - Verified focused before-update/approval tests.
+  - Fixed notification rows with approve/reject buttons by separating clickable row bodies from non-clickable action rows and using block content wrappers.
+  - Verified admin UI build after the notification row layout fix.
 - Now:
-  - Reporting the record-link notification update.
+  - Reporting the notification row UI fix.
 - Next:
-  - Optionally run broader test suites after the existing unrelated workspace changes settle.
+  - Optionally verify visually in a running admin UI with seeded approval notifications.
 
 Open questions (UNCONFIRMED if needed):
 
@@ -56,6 +69,10 @@ Working set (files/ids/commands):
 - `core/automation_notification.go`
 - `core/automation_runner.go`
 - `core/automation_workflow_runtime.go`
+- `core/automation_wait.go`
+- `core/automation_steps.go`
+- `core/automation_events.go`
+- `core/automation_templates.go`
 - `core/automation_model_test.go`
 - `core/automation_runner_test.go`
 - `apis/automation.go`
@@ -64,6 +81,11 @@ Working set (files/ids/commands):
 - `ui/src/settings/application/aiAccordion.js`
 - Focused checks passed: `go test ./core -run 'TestAutomation(CollectionsExist|Fields|RunCompletionNotifications)'`, `go test ./apis -run 'TestAutomations(Create|Update|List|View)'`, `cd ui && npm run build`.
 - Focused check passed: `go test ./core -run 'TestAutomation(RunCompletionNotifications|RecordRunCompletionNotificationActionURL)'`.
+- Focused check passed: `go test ./core -run 'TestAutomationWaitApproval(Decision|Notifications)'`.
+- Focused check passed: `go test ./core -run 'TestAutomation(BeforeRecordUpdateAfterWaitApprovalCanCustomizeRecord|BeforeRecordUpdateCodeStepCanCustomizeRecord|WaitApprovalDecision|WaitApprovalNotifications)'`.
+- Broad `go test ./core` failed in existing-looking `TestNotifyWatcher_CollectionsUpdate` / `TestNotifyWatcher_SettingsUpdate` with automation delay scheduler query interference and scheduler goroutine panic during teardown.
+- UI check passed: `cd ui && npm run build` (dprint reported a sandbox cache write warning but Vite build completed).
+- UI check passed: `cd ui && npm run build` after notification-row action layout fix.
 - `ui/src/base/appHeader.js`
 - `ui/src/store.js`
 - `ui/src/pb.js`

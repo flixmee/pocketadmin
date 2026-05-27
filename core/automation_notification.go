@@ -81,6 +81,69 @@ func notifyAutomationRunCompletion(app App, automation *Automation, run *Automat
 	return nil
 }
 
+func notifyAutomationApprovalRequested(app App, automation *Automation, run *AutomationRun, approval *Approval) error {
+	if automation == nil || run == nil || approval == nil {
+		return nil
+	}
+
+	superusersCollection, err := app.FindCachedCollectionByNameOrId(CollectionNameSuperusers)
+	if err != nil {
+		return err
+	}
+
+	superusers, err := app.FindAllRecords(superusersCollection)
+	if err != nil {
+		return err
+	}
+
+	automationName := strings.TrimSpace(automation.Name())
+	if automationName == "" {
+		automationName = automation.Id
+	}
+
+	message := fmt.Sprintf("Automation %q is waiting for approval.", automationName)
+	if role := strings.TrimSpace(approval.Role()); role != "" {
+		message += " Role: " + role + "."
+	}
+	if assignee := strings.TrimSpace(approval.Assignee()); assignee != "" {
+		message += " Assignee: " + assignee + "."
+	}
+
+	for _, superuser := range superusers {
+		if superuser == nil {
+			continue
+		}
+
+		_, err := app.CreateNotification(NotificationCreateOptions{
+			RecipientCollection: superusersCollection.Id,
+			RecipientRef:        superuser.Id,
+			Title:               "Automation approval required",
+			Message:             message,
+			Type:                "automation",
+			Severity:            NotificationSeverityWarning,
+			ActionURL:           "#/automations",
+			SourceCollection:    CollectionNameApprovals,
+			SourceRecord:        approval.Id,
+			Data: map[string]any{
+				"automationId":   automation.Id,
+				"automationName": automationName,
+				"runId":          run.Id,
+				"approvalId":     approval.Id,
+				"approvalStatus": approval.Status(),
+				"approvalRole":   approval.Role(),
+				"assignee":       approval.Assignee(),
+				"stepIndex":      approval.StepIndex(),
+				"actions":        []string{ApprovalStatusApproved, ApprovalStatusRejected},
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func automationNotificationActionURL(app App, automation *Automation, run *AutomationRun) string {
 	automationURL := "#/automations/" + automation.Id
 

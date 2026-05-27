@@ -2688,6 +2688,158 @@ func TestAutomationWaitApprovalDecision(t *testing.T) {
 	}
 }
 
+func TestAutomationBeforeRecordUpdateAfterWaitApprovalCanCustomizeRecord(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("text", "original")
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+	record, err = app.FindRecordById(collection.Id, record.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerRecordBeforeUpdate)
+	automation.SetCollectionRef(collection.Id)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"wait.approval","role":"manager"},
+		{
+			"type":"code",
+			"code":"$record.set('text', record.text + '_approved'); return { root: $record.get('text'), trigger: trigger.$record.get('text') };"
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	record.Set("text", "updated")
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+
+	waitingRuns := waitForAutomationRuns(t, app, automation, 1)
+	if waitingRuns[0].Status() != core.AutomationRunStatusWaiting {
+		t.Fatalf("Expected waiting run, got %q (%s)", waitingRuns[0].Status(), waitingRuns[0].Error())
+	}
+	if refreshed, err := app.FindRecordById(collection.Id, record.Id); err != nil {
+		t.Fatal(err)
+	} else if refreshed.GetString("text") != "updated" {
+		t.Fatalf("Expected initial update to persist before approval, got %q", refreshed.GetString("text"))
+	}
+
+	state := findWorkflowStateByRunForTest(t, app, waitingRuns[0].Id)
+	approval := findPendingApprovalByStateForTest(t, app, state.Id)
+	if err := app.ResolveAutomationApproval(approval.Id, core.AutomationApprovalDecision{Decision: "approved"}); err != nil {
+		t.Fatal(err)
+	}
+
+	resumedRun, err := app.FindAutomationRunById(waitingRuns[0].Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumedRun.Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful resumed run, got %q (%s)", resumedRun.Status(), resumedRun.Error())
+	}
+
+	refreshed, err := app.FindRecordById(collection.Id, record.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refreshed.GetString("text") != "updated_approved" {
+		t.Fatalf("Expected resumed approval code to customize record, got %q", refreshed.GetString("text"))
+	}
+
+	results := decodeStepResults(t, resumedRun)
+	output, ok := results[1]["output"].(map[string]any)
+	if !ok || output["root"] != "updated_approved" || output["trigger"] != "updated_approved" {
+		t.Fatalf("Expected $record and trigger.$record output, got %#v", results[1]["output"])
+	}
+}
+
+func TestAutomationWaitApprovalNotifications(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetName("Approval notice")
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"wait.approval","role":"manager","assignee":"owner@example.com"},
+		{"type":"condition","path":"trigger.type","op":"eq","value":"manual"}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForAutomationRuns(t, app, automation, 1)
+	state := findWorkflowStateByRunForTest(t, app, runs[0].Id)
+	approval := findPendingApprovalByStateForTest(t, app, state.Id)
+
+	superusers, err := app.FindAllRecords(core.CollectionNameSuperusers)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	notifications, err := app.FindAllRecords(core.CollectionNameNotifications, dbx.HashExp{
+		"sourceCollection": core.CollectionNameApprovals,
+		"sourceRecord":     approval.Id,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notifications) != len(superusers) {
+		t.Fatalf("Expected %d approval notifications, got %d", len(superusers), len(notifications))
+	}
+
+	for _, notification := range notifications {
+		if notification.GetString("title") != "Automation approval required" {
+			t.Fatalf("Expected approval title, got %q", notification.GetString("title"))
+		}
+		if notification.GetString("severity") != core.NotificationSeverityWarning {
+			t.Fatalf("Expected warning severity, got %q", notification.GetString("severity"))
+		}
+		if notification.GetString("actionUrl") != "#/automations" {
+			t.Fatalf("Expected automations actionUrl, got %q", notification.GetString("actionUrl"))
+		}
+
+		data := map[string]any{}
+		if err := json.Unmarshal([]byte(notification.Get("data").(types.JSONRaw).String()), &data); err != nil {
+			t.Fatalf("Failed to decode notification data: %v", err)
+		}
+		if data["approvalId"] != approval.Id {
+			t.Fatalf("Expected approvalId %q, got %v", approval.Id, data["approvalId"])
+		}
+		if data["approvalStatus"] != core.ApprovalStatusPending {
+			t.Fatalf("Expected pending approvalStatus, got %v", data["approvalStatus"])
+		}
+		actions, ok := data["actions"].([]any)
+		if !ok || len(actions) != 2 || actions[0] != core.ApprovalStatusApproved || actions[1] != core.ApprovalStatusRejected {
+			t.Fatalf("Expected approve/reject actions, got %#v", data["actions"])
+		}
+	}
+}
+
 func TestAutomationConnectorBackedCapability(t *testing.T) {
 	t.Parallel()
 

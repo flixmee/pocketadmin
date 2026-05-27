@@ -147,9 +147,25 @@ func automationTemplateJSContext(ctx map[string]any) map[string]any {
 
 	if record := automationTemplateContextRecord(app, ctx, "record", automationTemplateRecordModelKey); record != nil {
 		result["record"] = automationTemplateRecordDataWithRelations(app, record)
+		result["trigger"] = automationTemplateTriggerDataWithRecord(result["trigger"], "$record", record)
 	}
 	if record := automationTemplateContextRecord(app, ctx, "recordOriginal", automationTemplateOriginalRecordKey); record != nil {
 		result["recordOriginal"] = automationTemplateRecordDataWithRelations(app, record)
+		result["trigger"] = automationTemplateTriggerDataWithRecord(result["trigger"], "$recordOriginal", record)
+	}
+
+	return result
+}
+
+func automationTemplateTriggerDataWithRecord(trigger any, key string, record *Record) map[string]any {
+	result := map[string]any{}
+	if triggerData, _ := trigger.(map[string]any); triggerData != nil {
+		for k, v := range triggerData {
+			result[k] = v
+		}
+	}
+	if record != nil {
+		result[key] = record
 	}
 
 	return result

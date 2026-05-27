@@ -124,6 +124,7 @@ func (app *BaseApp) resumeAutomationWorkflowState(state *WorkflowState, input ma
 	if err != nil {
 		return err
 	}
+	hydrateAutomationTriggerRecords(app, &payload)
 	if input != nil {
 		payload.Request = mergeAutomationResumeInput(payload.Request, input)
 	}

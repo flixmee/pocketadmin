@@ -52,6 +52,14 @@ type automationExecutionContext struct {
 }
 
 func newAutomationExecutionContext(app App, automation *Automation, run *AutomationRun, payload automationTriggerPayload) *automationExecutionContext {
+	triggerData := map[string]any{
+		"type":           payload.TriggerType,
+		"collectionId":   payload.CollectionId,
+		"collectionName": payload.CollectionName,
+		"request":        payload.Request,
+		"i18n":           payload.I18n,
+	}
+
 	return &automationExecutionContext{
 		App:            app,
 		Automation:     automation,
@@ -60,13 +68,7 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 		TriggerRecord:  payload.triggerRecord,
 		OriginalRecord: payload.originalRecord,
 		TemplateData: map[string]any{
-			"trigger": map[string]any{
-				"type":           payload.TriggerType,
-				"collectionId":   payload.CollectionId,
-				"collectionName": payload.CollectionName,
-				"request":        payload.Request,
-				"i18n":           payload.I18n,
-			},
+			"trigger":                           triggerData,
 			"request":                           payload.Request,
 			"i18n":                              payload.I18n,
 			"record":                            payload.Record,
@@ -257,6 +259,7 @@ func executeAutomationCodeStep(ctx *automationExecutionContext, step map[string]
 	if code == "" {
 		return nil, fmt.Errorf("code step is missing JavaScript code")
 	}
+	triggerRecordSnapshot, autosaveTriggerRecord := automationCodeStepTriggerRecordSnapshot(ctx)
 
 	vm := goja.New()
 	if err := bindAutomationCodeStepJsvmGlobals(vm, ctx.App); err != nil {
@@ -303,11 +306,59 @@ func executeAutomationCodeStep(ctx *automationExecutionContext, step map[string]
 	if err := checkAutomationCodeStepValueForError(ctx.App, result); err != nil {
 		return nil, fmt.Errorf("failed to execute automation code step: %w", err)
 	}
+
+	var outputResult map[string]any
 	if goja.IsUndefined(result) {
-		return output, nil
+		outputResult = output
+	} else {
+		var normalizeErr error
+		outputResult, normalizeErr = normalizeAutomationCodeStepOutput(result)
+		if normalizeErr != nil {
+			return nil, normalizeErr
+		}
 	}
 
-	return normalizeAutomationCodeStepOutput(result)
+	if autosaveTriggerRecord {
+		if err := persistAutomationCodeStepTriggerRecord(ctx, triggerRecordSnapshot); err != nil {
+			return nil, err
+		}
+	}
+
+	return outputResult, nil
+}
+
+func automationCodeStepTriggerRecordSnapshot(ctx *automationExecutionContext) (string, bool) {
+	if ctx == nil || ctx.TriggerRecord == nil || ctx.StartStepIndex <= 0 {
+		return "", false
+	}
+	switch ctx.Payload.TriggerType {
+	case AutomationTriggerRecordBeforeCreate, AutomationTriggerRecordBeforeUpdate:
+	default:
+		return "", false
+	}
+
+	raw, err := toJSONRaw(automationTemplateRecordData(ctx.TriggerRecord))
+	if err != nil {
+		return "", false
+	}
+
+	return raw.String(), true
+}
+
+func persistAutomationCodeStepTriggerRecord(ctx *automationExecutionContext, before string) error {
+	if ctx == nil || ctx.TriggerRecord == nil {
+		return nil
+	}
+
+	raw, err := toJSONRaw(automationTemplateRecordData(ctx.TriggerRecord))
+	if err != nil {
+		return err
+	}
+	if raw.String() == before {
+		return nil
+	}
+
+	return saveAutomationTriggerRecordWithoutAutomationTriggers(ctx.App, ctx.TriggerRecord)
 }
 
 func automationCodeStepContextArg(jsContext map[string]any) map[string]any {

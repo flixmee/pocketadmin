@@ -219,6 +219,27 @@ Use a helper such as `notifySuperusers(...)` if the same producer pattern appear
 - `Data`: optional machine payload for future UI behavior; keep it small and non-sensitive.
 - `ExpiresAt`: optional cleanup boundary; current query helpers do not hide expired records automatically yet.
 
+### Automation Approval Notifications
+
+When an automation enters a `wait.approval` step, the automation runtime should create a warning notification for every superuser so the approval can be resolved from the admin header.
+
+Approval notifications use:
+
+- `Title`: `Automation approval required`
+- `Type`: `automation`
+- `Severity`: `warning`
+- `ActionURL`: `#/automations`
+- `SourceCollection`: `_approvals`
+- `SourceRecord`: the pending approval id
+- `Data`: machine fields including `automationId`, `automationName`, `runId`, `approvalId`, `approvalStatus`, `approvalRole`, `assignee`, `stepIndex`, and `actions: ["approved", "rejected"]`
+
+The admin notification dropdown should render `Approve` and `Reject` buttons when a notification references a pending approval. Those buttons call the existing approval decision endpoint:
+
+- `POST /api/automations/approvals/{approvalId}/decision` with `{"decision":"approved"}`
+- `POST /api/automations/approvals/{approvalId}/decision` with `{"decision":"rejected"}`
+
+After a successful decision, the notification should be marked read. If the approval was resolved elsewhere first, the endpoint should return the existing "already resolved" error and the UI should surface the API error.
+
 ### Reading And Marking Notifications
 
 Authenticated clients should use the dedicated endpoints:

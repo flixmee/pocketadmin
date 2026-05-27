@@ -29,6 +29,8 @@ type automationTriggerPayload struct {
 	originalRecord *Record        `json:"-"`
 }
 
+const storeKeyAutomationRecordTriggersSuppressed = "__automationRecordTriggersSuppressed"
+
 // AutomationWebhookRequest defines the normalized inbound webhook request payload.
 type AutomationWebhookRequest struct {
 	Method   string            `json:"method"`
@@ -116,6 +118,9 @@ func runRecordAutomationRuns(app App, triggerType string, record *Record, origin
 }
 
 func recordAutomationRuns(app App, triggerType string, record *Record, original *Record) ([]*Automation, automationTriggerPayload, error) {
+	if automationRecordTriggersSuppressed(app) {
+		return nil, automationTriggerPayload{}, nil
+	}
 	if record == nil || record.Collection() == nil {
 		return nil, automationTriggerPayload{}, nil
 	}
@@ -271,6 +276,7 @@ func (app *BaseApp) RunAutomationFromRun(runID string) error {
 	if err != nil {
 		return err
 	}
+	hydrateAutomationTriggerRecords(app, &payload)
 
 	return runAutomation(app, automation, payload)
 }
@@ -749,6 +755,71 @@ func decodeAutomationRunPayload(run *AutomationRun) (automationTriggerPayload, e
 	}
 
 	return payload, nil
+}
+
+func hydrateAutomationTriggerRecords(app App, payload *automationTriggerPayload) {
+	if app == nil || payload == nil || payload.triggerRecord != nil {
+		return
+	}
+
+	recordId := strings.TrimSpace(toString(payload.Record["id"]))
+	if recordId == "" {
+		return
+	}
+
+	collectionIdOrName := strings.TrimSpace(payload.CollectionId)
+	if collectionIdOrName == "" {
+		collectionIdOrName = strings.TrimSpace(payload.CollectionName)
+	}
+	if collectionIdOrName == "" {
+		collectionIdOrName = strings.TrimSpace(toString(payload.Record["collectionId"]))
+	}
+	if collectionIdOrName == "" {
+		collectionIdOrName = strings.TrimSpace(toString(payload.Record["collectionName"]))
+	}
+	if collectionIdOrName == "" {
+		return
+	}
+
+	record, err := app.FindRecordById(collectionIdOrName, recordId)
+	if err != nil {
+		return
+	}
+
+	payload.triggerRecord = record
+	payload.Record = automationTemplateRecordData(record)
+	if record.Collection() != nil {
+		payload.CollectionId = record.Collection().Id
+		payload.CollectionName = record.Collection().Name
+	}
+}
+
+func automationRecordTriggersSuppressed(app App) bool {
+	if app == nil {
+		return false
+	}
+
+	suppressed, _ := app.Store().Get(storeKeyAutomationRecordTriggersSuppressed).(bool)
+	return suppressed
+}
+
+func saveAutomationTriggerRecordWithoutAutomationTriggers(app App, record *Record) error {
+	if app == nil || record == nil {
+		return nil
+	}
+
+	previous, hadPrevious := app.Store().Get(storeKeyAutomationRecordTriggersSuppressed).(bool)
+	app.Store().Set(storeKeyAutomationRecordTriggersSuppressed, true)
+	defer func() {
+		if hadPrevious {
+			app.Store().Set(storeKeyAutomationRecordTriggersSuppressed, previous)
+		} else {
+			app.Store().Remove(storeKeyAutomationRecordTriggersSuppressed)
+		}
+	}()
+
+	record.IgnoreUnchangedFields(true)
+	return app.Save(record)
 }
 
 func shouldSkipAutomationTriggerCollection(collectionName string) bool {
