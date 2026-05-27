@@ -63,8 +63,7 @@
     }
 }
 
-.notification-row-link {
-    cursor: pointer;
+.notification-row-body {
     display: grid;
     grid-template-columns: 8px minmax(0, 1fr);
     gap: 10px;
@@ -78,8 +77,15 @@
     background: transparent;
     border: 0;
     transition: background var(--animationSpeed);
-    &:hover,
-    &:focus-visible {
+    &.clickable {
+        cursor: pointer;
+    }
+    &.with-actions {
+        cursor: default;
+        padding-bottom: 12px;
+    }
+    &.clickable:hover,
+    &.clickable:focus-visible {
         background: var(--surfaceAlt1Color);
     }
 }
@@ -108,6 +114,47 @@
     gap: 2px;
 }
 
+.notification-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-top: 7px;
+}
+
+.notification-action-btn {
+    cursor: pointer;
+    display: inline-flex;
+    min-height: 26px;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 3px 8px;
+    font-size: var(--xsFontSize);
+    line-height: var(--xsLineHeight);
+    color: var(--surfaceTxtColor);
+    background: var(--surfaceColor);
+    border: 1px solid var(--surfaceAlt2Color);
+    border-radius: var(--borderRadius);
+    transition:
+        color var(--animationSpeed),
+        border-color var(--animationSpeed),
+        background var(--animationSpeed);
+    &.success:hover,
+    &.success:focus-visible {
+        color: var(--successColor);
+        border-color: var(--successColor);
+    }
+    &.danger:hover,
+    &.danger:focus-visible {
+        color: var(--dangerColor);
+        border-color: var(--dangerColor);
+    }
+    &[disabled] {
+        cursor: default;
+        opacity: 0.6;
+    }
+}
+
 .notification-title {
     display: block;
     font-weight: bold;
@@ -120,6 +167,10 @@
     font-size: var(--xsFontSize);
     line-height: var(--xsLineHeight);
     color: var(--surfaceTxtHintColor);
+}
+
+.notification-message {
+    overflow-wrap: anywhere;
 }
 
 .notification-read-btn {
@@ -148,4 +199,10 @@
         cursor: default;
         opacity: 0.5;
     }
+}
+
+.btn-corner {
+    position: absolute;
+    top: 3px;
+    right: 3px;
 }

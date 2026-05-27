@@ -188,7 +188,7 @@ export function aiAccordion(pageData) {
                             {
                                 type: "button",
                                 className: () =>
-                                    `btn sm transparent secondary circle m-l-auto ${
+                                    `btn btn-corner xs transparent secondary circle m-l-auto ${
                                         local.isFetchingModels ? "loading" : ""
                                     }`,
                                 ariaLabel: app.attrs.tooltip("Refresh models"),

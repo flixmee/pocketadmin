@@ -330,6 +330,7 @@ window.app.store = store({
     isLoadingNotifications: false,
     isLoadingUnreadNotifications: false,
     isMarkingNotificationsRead: false,
+    resolvingNotificationApprovals: {},
     notificationsRealtimeUnsubscribe: null,
     get currentNotificationRecipient() {
         const superuser = app.store.superuser;
@@ -348,6 +349,7 @@ window.app.store = store({
         app.store.isLoadingNotifications = false;
         app.store.isLoadingUnreadNotifications = false;
         app.store.isMarkingNotificationsRead = false;
+        app.store.resolvingNotificationApprovals = {};
     },
     async loadNotifications() {
         if (!app.store.currentNotificationRecipient) {
@@ -491,7 +493,41 @@ window.app.store = store({
             }
         }
     },
+    async resolveNotificationApproval(notification, decision) {
+        const approvalId = notificationApprovalId(notification);
+        if (!approvalId || app.store.resolvingNotificationApprovals[approvalId]) {
+            return;
+        }
+
+        app.store.resolvingNotificationApprovals[approvalId] = decision;
+
+        try {
+            await app.pb.send(`/api/automations/approvals/${encodeURIComponent(approvalId)}/decision`, {
+                method: "POST",
+                body: { decision },
+                requestKey: "appStore.resolveNotificationApproval." + approvalId,
+            });
+
+            app.toasts.success(decision == "approved" ? "Approval accepted." : "Approval rejected.");
+            if (notification?.id) {
+                await app.store.markNotificationRead(notification.id);
+            } else {
+                await app.store.loadNotificationState();
+            }
+        } catch (err) {
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+            }
+        }
+
+        delete app.store.resolvingNotificationApprovals[approvalId];
+    },
 });
+
+function notificationApprovalId(notification) {
+    const data = notification?.data || {};
+    return data.approvalId || (notification?.sourceCollection == "_approvals" ? notification?.sourceRecord : "");
+}
 
 // reset title and errors on route change
 window.addEventListener("hashchange", () => {

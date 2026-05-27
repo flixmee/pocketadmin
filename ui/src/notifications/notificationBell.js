@@ -62,23 +62,25 @@ export function notificationBell() {
 }
 
 function notificationRow(notification) {
+    const approvalId = notificationApprovalId(notification);
     const rowContent = [
         t.span({
             className: () => `notification-severity ${notification.severity || "info"}`,
             ariaHidden: true,
         }),
-        t.span(
+        t.div(
             { className: "notification-content" },
-            t.span({ className: "notification-title txt-ellipsis" }, notification.title || "Untitled"),
+            t.div({ className: "notification-title txt-ellipsis" }, notification.title || "Untitled"),
             () => {
                 if (notification.message) {
-                    return t.span({ className: "notification-message txt-ellipsis" }, notification.message);
+                    return t.div({ className: "notification-message" }, notification.message);
                 }
             },
             t.time(
                 { className: "notification-date", dateTime: notification.created },
                 formatNotificationDate(notification.created),
             ),
+            () => notificationApprovalActions(notification),
         ),
     ];
 
@@ -86,34 +88,7 @@ function notificationRow(notification) {
         {
             className: () => `notification-row ${notification.read ? "" : "unread"}`,
         },
-        notification.actionUrl
-            ? t.a(
-                {
-                    className: "notification-row-link",
-                    href: notification.actionUrl,
-                    target: () => notification.actionUrl.startsWith("#/") ? undefined : "_blank",
-                    rel: () => notification.actionUrl.startsWith("#/") ? undefined : "noopener noreferrer",
-                    onclick: (e) => {
-                        e.target.closest(".dropdown")?.hidePopover();
-                        if (!notification.read) {
-                            app.store.markNotificationRead(notification.id);
-                        }
-                    },
-                },
-                rowContent,
-            )
-            : t.button(
-                {
-                    type: "button",
-                    className: "notification-row-link",
-                    onclick: () => {
-                        if (!notification.read) {
-                            app.store.markNotificationRead(notification.id);
-                        }
-                    },
-                },
-                rowContent,
-            ),
+        notificationRowBody(notification, rowContent, approvalId),
         t.button(
             {
                 type: "button",
@@ -131,6 +106,98 @@ function notificationRow(notification) {
             t.i({ className: "ri-check-line", ariaHidden: true }),
         ),
     );
+}
+
+function notificationRowBody(notification, rowContent, approvalId) {
+    if (notification.actionUrl && !approvalId) {
+        return t.a(
+            {
+                className: "notification-row-body clickable",
+                href: notification.actionUrl,
+                target: () => notification.actionUrl.startsWith("#/") ? undefined : "_blank",
+                rel: () => notification.actionUrl.startsWith("#/") ? undefined : "noopener noreferrer",
+                onclick: (e) => {
+                    e.target.closest(".dropdown")?.hidePopover();
+                    if (!notification.read) {
+                        app.store.markNotificationRead(notification.id);
+                    }
+                },
+            },
+            rowContent,
+        );
+    }
+
+    if (approvalId) {
+        return t.div({ className: "notification-row-body with-actions" }, rowContent);
+    }
+
+    return t.button(
+        {
+            type: "button",
+            className: "notification-row-body clickable",
+            onclick: () => {
+                if (!notification.read) {
+                    app.store.markNotificationRead(notification.id);
+                }
+            },
+        },
+        rowContent,
+    );
+}
+
+function notificationApprovalActions(notification) {
+    const approvalId = notificationApprovalId(notification);
+    if (!approvalId || notification?.data?.approvalStatus && notification.data.approvalStatus != "pending") {
+        return;
+    }
+
+    const resolvingDecision = app.store.resolvingNotificationApprovals[approvalId];
+
+    return t.div(
+        { className: "notification-actions" },
+        t.button(
+            {
+                type: "button",
+                className: () => `notification-action-btn success ${resolvingDecision == "approved" ? "loading" : ""}`,
+                title: "Approve",
+                ariaLabel: "Approve",
+                disabled: () => !!resolvingDecision,
+                onclick: (e) => confirmApprovalDecision(e, notification, "approved"),
+            },
+            t.i({ className: "ri-check-line", ariaHidden: true }),
+            t.span({ className: "txt" }, "Approve"),
+        ),
+        t.button(
+            {
+                type: "button",
+                className: () => `notification-action-btn danger ${resolvingDecision == "rejected" ? "loading" : ""}`,
+                title: "Reject",
+                ariaLabel: "Reject",
+                disabled: () => !!resolvingDecision,
+                onclick: (e) => confirmApprovalDecision(e, notification, "rejected"),
+            },
+            t.i({ className: "ri-close-line", ariaHidden: true }),
+            t.span({ className: "txt" }, "Reject"),
+        ),
+    );
+}
+
+function confirmApprovalDecision(e, notification, decision) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const label = decision == "approved" ? "Approve" : "Reject";
+    app.modals.confirm(
+        `${label} automation approval?`,
+        () => app.store.resolveNotificationApproval(notification, decision),
+        null,
+        { yesButton: label, noButton: "Cancel" },
+    );
+}
+
+function notificationApprovalId(notification) {
+    const data = notification?.data || {};
+    return data.approvalId || (notification?.sourceCollection == "_approvals" ? notification?.sourceRecord : "");
 }
 
 function notificationBellLabel() {

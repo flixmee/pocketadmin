@@ -207,7 +207,7 @@ function configureMonacoTypeDefinitions(monaco) {
     }
 
     if (!monacoTypeDefinitionsPromise) {
-        monacoTypeDefinitionsPromise = fetch(resolvePublicAssetURL("types.d.ts"), {
+        monacoTypeDefinitionsPromise = fetch(resolvePublicAssetURL("types.d.ts?v=2"), {
             cache: "force-cache",
         })
             .then((res) => {
