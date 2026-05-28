@@ -448,6 +448,8 @@ window.app.store = store({
             .sort((a, b) => (a.created < b.created ? 1 : -1))
             .slice(0, 20);
 
+        showRealtimeNotificationToast(event);
+
         app.store.loadUnreadNotifications();
     },
     async markNotificationRead(id) {
@@ -527,6 +529,128 @@ window.app.store = store({
 function notificationApprovalId(notification) {
     const data = notification?.data || {};
     return data.approvalId || (notification?.sourceCollection == "_approvals" ? notification?.sourceRecord : "");
+}
+
+function showRealtimeNotificationToast(event) {
+    const notification = event?.record;
+    if (event?.action != "create" || !notification?.id || notification.read || notification.archived) {
+        return;
+    }
+
+    const toastOptions = notificationToastOptions(notification);
+    const toast = app.toasts?.toast || app.toasts?.[toastOptions.type] || app.toasts?.info;
+    if (typeof toast != "function") {
+        return;
+    }
+
+    toast(toastOptions);
+}
+
+function notificationToastOptions(notification) {
+    const actions = notificationToastActions(notification);
+
+    return {
+        key: "notification:" + notification.id,
+        type: notificationToastType(notification.severity),
+        title: notification.title || "Notification",
+        description: notification.message || "",
+        duration: actions.length ? 10000 : 4000,
+        actions,
+    };
+}
+
+function notificationToastActions(notification) {
+    const actions = [];
+    const dataActions = app.utils.toArray(notification?.data?.actions);
+
+    dataActions.forEach((action) => {
+        const value = String(action || "").trim();
+        if (!value) {
+            return;
+        }
+
+        actions.push({
+            label: notificationActionLabel(value),
+            dismissOnClick: false,
+            onClick: () => runNotificationAction(notification, value),
+        });
+    });
+
+    if (notification?.actionUrl && actions.length < 2) {
+        actions.push({
+            label: "Open",
+            onClick: () => openNotificationActionURL(notification),
+        });
+    }
+
+    return actions;
+}
+
+function notificationToastType(severity) {
+    if (severity == "danger") {
+        return "error";
+    }
+
+    return severity || "info";
+}
+
+function notificationActionLabel(action) {
+    switch (action) {
+        case "approved":
+        case "approve":
+            return "Approve";
+        case "rejected":
+        case "reject":
+            return "Reject";
+        default:
+            return action.charAt(0).toUpperCase() + action.slice(1);
+    }
+}
+
+function runNotificationAction(notification, action) {
+    switch (action) {
+        case "approved":
+        case "approve":
+            confirmNotificationApproval(notification, "approved");
+            break;
+        case "rejected":
+        case "reject":
+            confirmNotificationApproval(notification, "rejected");
+            break;
+    }
+}
+
+function confirmNotificationApproval(notification, decision) {
+    const approvalId = notificationApprovalId(notification);
+    if (!approvalId) {
+        return;
+    }
+
+    const label = decision == "approved" ? "Approve" : "Reject";
+    app.modals.confirm(
+        `${label} automation approval?`,
+        () => app.store.resolveNotificationApproval(notification, decision),
+        null,
+        { yesButton: label, noButton: "Cancel" },
+    );
+}
+
+function openNotificationActionURL(notification) {
+    const actionUrl = notification?.actionUrl;
+    if (!actionUrl) {
+        return;
+    }
+
+    if (!notification.read) {
+        app.store.markNotificationRead(notification.id);
+    }
+
+    if (actionUrl.startsWith("#/")) {
+        window.location.hash = actionUrl.substring(1);
+        return;
+    }
+
+    window.open(actionUrl, "_blank", "noopener,noreferrer");
 }
 
 // reset title and errors on route change

@@ -2838,6 +2838,32 @@ func TestAutomationWaitApprovalNotifications(t *testing.T) {
 			t.Fatalf("Expected approve/reject actions, got %#v", data["actions"])
 		}
 	}
+
+	if err := app.ResolveAutomationApproval(approval.Id, core.AutomationApprovalDecision{Decision: "approved"}); err != nil {
+		t.Fatal(err)
+	}
+
+	resolvedNotifications, err := app.FindAllRecords(core.CollectionNameNotifications, dbx.HashExp{
+		"sourceCollection": core.CollectionNameApprovals,
+		"sourceRecord":     approval.Id,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, notification := range resolvedNotifications {
+		data := map[string]any{}
+		if err := json.Unmarshal([]byte(notification.Get("data").(types.JSONRaw).String()), &data); err != nil {
+			t.Fatalf("Failed to decode resolved notification data: %v", err)
+		}
+		if data["approvalStatus"] != core.ApprovalStatusApproved {
+			t.Fatalf("Expected approved approvalStatus, got %v", data["approvalStatus"])
+		}
+		actions, ok := data["actions"].([]any)
+		if !ok || len(actions) != 0 {
+			t.Fatalf("Expected resolved notification actions to be empty, got %#v", data["actions"])
+		}
+	}
 }
 
 func TestAutomationConnectorBackedCapability(t *testing.T) {

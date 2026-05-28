@@ -2,6 +2,7 @@ package core
 
 import (
 	"database/sql"
+	"encoding/json"
 	"strings"
 
 	"github.com/pocketbase/dbx"
@@ -132,6 +133,50 @@ func (app *BaseApp) MarkAllNotificationsRead(recipientCollection string, recipie
 	for _, notification := range notifications {
 		notification.SetRead(true)
 		notification.Set("readAt", types.NowDateTime())
+		if err := app.Save(notification); err != nil {
+			return 0, err
+		}
+	}
+
+	return len(notifications), nil
+}
+
+// ResolveApprovalNotifications updates the action payload of approval notifications after a decision.
+func (app *BaseApp) ResolveApprovalNotifications(approvalID string, status string) (int, error) {
+	approvalID = strings.TrimSpace(approvalID)
+	status = strings.TrimSpace(status)
+	if approvalID == "" || status == "" {
+		return 0, nil
+	}
+
+	notifications := []*Notification{}
+	err := app.RecordQuery(CollectionNameNotifications).
+		AndWhere(dbx.HashExp{
+			"sourceCollection": CollectionNameApprovals,
+			"sourceRecord":     approvalID,
+		}).
+		All(&notifications)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, notification := range notifications {
+		data := map[string]any{}
+		if raw := notification.Data(); len(raw) > 0 {
+			if err := json.Unmarshal(raw, &data); err != nil {
+				return 0, err
+			}
+		}
+
+		data["approvalStatus"] = status
+		data["actions"] = []string{}
+
+		raw, err := toJSONRaw(data)
+		if err != nil {
+			return 0, err
+		}
+		notification.SetData(raw)
+
 		if err := app.Save(notification); err != nil {
 			return 0, err
 		}

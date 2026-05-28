@@ -12,7 +12,7 @@ import "./base/confirm";
 import "./base/dragline";
 import "./base/slide";
 import "./base/modal";
-import "./base/toast";
+import "./base/toastv2";
 import "./base/sortable";
 import "./base/copyButton";
 import "./base/codeBlock";

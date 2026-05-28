@@ -186,6 +186,9 @@ func (app *BaseApp) ResolveAutomationApproval(approvalID string, decision Automa
 	if err := app.Save(approval); err != nil {
 		return err
 	}
+	if _, err := app.ResolveApprovalNotifications(approval.Id, normalized); err != nil {
+		return err
+	}
 
 	if normalized == ApprovalStatusApproved {
 		return app.ResumeAutomationWorkflowState(approval.WorkflowStateRef(), AutomationResumeInput{Input: decision.Input})

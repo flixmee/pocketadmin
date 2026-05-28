@@ -717,6 +717,9 @@ type App interface {
 	// MarkAllNotificationsRead marks all recipient notifications as read.
 	MarkAllNotificationsRead(recipientCollection string, recipientRef string) (int, error)
 
+	// ResolveApprovalNotifications updates approval notification payloads after a decision.
+	ResolveApprovalNotifications(approvalID string, status string) (int, error)
+
 	// ---------------------------------------------------------------
 
 	// RecordQuery returns a new Record select query from a collection model, id or name.
