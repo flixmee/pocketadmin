@@ -22,6 +22,10 @@ type AutomationApprovalDecision struct {
 	Input    map[string]any `json:"input,omitempty"`
 }
 
+type automationResumeOptions struct {
+	BranchKey string
+}
+
 func createAutomationWorkflowState(app App, automation *Automation, run *AutomationRun, payload automationTriggerPayload) (*WorkflowState, error) {
 	state := NewWorkflowState(app)
 	state.SetAutomationRef(automation.Id)
@@ -103,6 +107,10 @@ func (app *BaseApp) ResumeAutomationWorkflowByToken(token string, input map[stri
 }
 
 func (app *BaseApp) resumeAutomationWorkflowState(state *WorkflowState, input map[string]any) error {
+	return app.resumeAutomationWorkflowStateWithOptions(state, input, automationResumeOptions{})
+}
+
+func (app *BaseApp) resumeAutomationWorkflowStateWithOptions(state *WorkflowState, input map[string]any, options automationResumeOptions) error {
 	if state.Status() != WorkflowStateStatusWaiting {
 		return fmt.Errorf("workflow state %q is not waiting", state.Id)
 	}
@@ -148,6 +156,16 @@ func (app *BaseApp) resumeAutomationWorkflowState(state *WorkflowState, input ma
 	ctx := newAutomationExecutionContext(app, automation, run, payload)
 	ctx.State = state
 	ctx.StartStepIndex = state.CurrentStepIndex() + 1
+	if options.BranchKey != "" {
+		steps, err := decodeAutomationSteps(automation.Steps().String())
+		if err != nil {
+			return err
+		}
+		index := state.CurrentStepIndex()
+		if index >= 0 && index < len(steps) {
+			ctx.ResumeBranches = automationStepBranchSteps(steps[index], options.BranchKey)
+		}
+	}
 	setCurrentAutomationPolicyContext(app, run)
 	defer clearCurrentAutomationPolicyContext(app, run.Id)
 
@@ -191,10 +209,65 @@ func (app *BaseApp) ResolveAutomationApproval(approvalID string, decision Automa
 	}
 
 	if normalized == ApprovalStatusApproved {
-		return app.ResumeAutomationWorkflowState(approval.WorkflowStateRef(), AutomationResumeInput{Input: decision.Input})
+		return app.resumeAutomationApprovalWorkflow(approval, decision.Input, "true")
+	}
+
+	hasFalseBranch, err := app.approvalWorkflowHasBranch(approval, "false")
+	if err != nil {
+		return err
+	}
+	if hasFalseBranch {
+		return app.resumeAutomationApprovalWorkflow(approval, decision.Input, "false")
 	}
 
 	return app.rejectAutomationApprovalWorkflow(approval)
+}
+
+func (app *BaseApp) resumeAutomationApprovalWorkflow(approval *Approval, input map[string]any, branchKey string) error {
+	state, err := app.FindWorkflowStateById(approval.WorkflowStateRef())
+	if err != nil {
+		return err
+	}
+	input = mergeAutomationApprovalResumeInput(input, approval, branchKey)
+	return app.resumeAutomationWorkflowStateWithOptions(state, input, automationResumeOptions{BranchKey: branchKey})
+}
+
+func (app *BaseApp) approvalWorkflowHasBranch(approval *Approval, branchKey string) (bool, error) {
+	run, err := app.FindAutomationRunById(approval.RunRef())
+	if err != nil {
+		return false, err
+	}
+	automation, err := app.FindAutomationById(approval.AutomationRef())
+	if err != nil {
+		return false, err
+	}
+	if snapshotAutomation, err := applyAutomationVersionSnapshot(automation, run.WorkflowVersionSnapshot()); err == nil {
+		automation = snapshotAutomation
+	}
+	steps, err := decodeAutomationSteps(automation.Steps().String())
+	if err != nil {
+		return false, err
+	}
+	index := approval.StepIndex()
+	if index < 0 || index >= len(steps) {
+		return false, nil
+	}
+
+	return len(automationStepBranchSteps(steps[index], branchKey)) > 0, nil
+}
+
+func mergeAutomationApprovalResumeInput(input map[string]any, approval *Approval, branchKey string) map[string]any {
+	if input == nil {
+		input = map[string]any{}
+	}
+	input["approval"] = map[string]any{
+		"id":       approval.Id,
+		"decision": approval.Decision(),
+		"status":   approval.Status(),
+		"comment":  approval.Comment(),
+		"branch":   branchKey,
+	}
+	return input
 }
 
 func (app *BaseApp) rejectAutomationApprovalWorkflow(approval *Approval) error {

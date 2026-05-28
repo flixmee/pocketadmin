@@ -49,6 +49,7 @@ type automationExecutionContext struct {
 	DryRun          bool
 	State           *WorkflowState
 	StartStepIndex  int
+	ResumeBranches  []map[string]any
 }
 
 func newAutomationExecutionContext(app App, automation *Automation, run *AutomationRun, payload automationTriggerPayload) *automationExecutionContext {
@@ -478,6 +479,9 @@ func executeAutomationConditionStep(ctx *automationExecutionContext, step map[st
 		if matched {
 			return automationStepStatusSuccess, output, nil
 		}
+		if hasAutomationStepBranches(step) {
+			return automationStepStatusSuccess, output, nil
+		}
 
 		return automationStepStatusStopped, output, nil
 	}
@@ -489,8 +493,58 @@ func executeAutomationConditionStep(ctx *automationExecutionContext, step map[st
 	if matched {
 		return automationStepStatusSuccess, output, nil
 	}
+	if hasAutomationStepBranches(step) {
+		return automationStepStatusSuccess, output, nil
+	}
 
 	return automationStepStatusStopped, output, nil
+}
+
+func hasAutomationStepBranches(step map[string]any) bool {
+	return len(automationStepBranchSteps(step, "true")) > 0 || len(automationStepBranchSteps(step, "false")) > 0
+}
+
+func automationStepBranchSteps(step map[string]any, branch string) []map[string]any {
+	branchesRaw, ok := step["branches"]
+	if !ok || branchesRaw == nil {
+		return nil
+	}
+
+	var rawBranch any
+	switch branches := branchesRaw.(type) {
+	case map[string]any:
+		rawBranch = branches[branch]
+	case map[any]any:
+		rawBranch = branches[branch]
+	}
+
+	items, ok := rawBranch.([]any)
+	if !ok {
+		if typed, ok := rawBranch.([]map[string]any); ok {
+			return typed
+		}
+		return nil
+	}
+
+	result := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		step, ok := item.(map[string]any)
+		if ok {
+			result = append(result, step)
+		}
+	}
+
+	return result
+}
+
+func automationConditionBranchKey(output any) string {
+	if result, ok := output.(map[string]any); ok {
+		if matched, ok := result["matched"].(bool); ok && matched {
+			return "true"
+		}
+	}
+
+	return "false"
 }
 
 func automationConditionRules(step map[string]any) []map[string]any {

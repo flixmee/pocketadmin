@@ -52,6 +52,9 @@ const waitDurationUnitOptions = [
     { value: "h", label: "Hours" },
 ];
 
+const rootBranchPath = "root";
+const branchPathSeparator = "::";
+
 export function stepEditor(propsArg = {}) {
     const props = store({
         steps: [],
@@ -83,6 +86,7 @@ export function stepEditor(propsArg = {}) {
         dragStepId: "",
         dragActionType: "",
         dragInsertIndex: -1,
+        dragInsertPath: rootBranchPath,
     });
 
     async function loadSchemas() {
@@ -110,7 +114,7 @@ export function stepEditor(propsArg = {}) {
         props.onchange?.(steps);
     }
 
-    function addStep(type, insertIndex = -1) {
+    function addStep(type, insertIndex = -1, branchPath = rootBranchPath) {
         const nextStep = createReactiveEditorStep(type);
         data.expandedById[nextStep.__id] = true;
         data.selectedStepId = nextStep.__id;
@@ -118,8 +122,11 @@ export function stepEditor(propsArg = {}) {
         data.drawerActiveTab = "settings";
 
         const nextSteps = [...(props.steps || [])];
-        if (insertIndex >= 0 && insertIndex <= nextSteps.length) {
-            nextSteps.splice(insertIndex, 0, nextStep);
+        const targetSteps = getStepListByPath(nextSteps, branchPath);
+        if (targetSteps && insertIndex >= 0 && insertIndex <= targetSteps.length) {
+            targetSteps.splice(insertIndex, 0, nextStep);
+        } else if (targetSteps) {
+            targetSteps.push(nextStep);
         } else {
             nextSteps.push(nextStep);
         }
@@ -127,7 +134,7 @@ export function stepEditor(propsArg = {}) {
         openStepEditModal(nextStep);
     }
 
-    function addCapabilityStep(capabilityKey, insertIndex = -1) {
+    function addCapabilityStep(capabilityKey, insertIndex = -1, branchPath = rootBranchPath) {
         const nextStep = createReactiveEditorStep("capability");
         nextStep.capability = capabilityKey;
         data.expandedById[nextStep.__id] = true;
@@ -136,8 +143,11 @@ export function stepEditor(propsArg = {}) {
         data.drawerActiveTab = "settings";
 
         const nextSteps = [...(props.steps || [])];
-        if (insertIndex >= 0 && insertIndex <= nextSteps.length) {
-            nextSteps.splice(insertIndex, 0, nextStep);
+        const targetSteps = getStepListByPath(nextSteps, branchPath);
+        if (targetSteps && insertIndex >= 0 && insertIndex <= targetSteps.length) {
+            targetSteps.splice(insertIndex, 0, nextStep);
+        } else if (targetSteps) {
+            targetSteps.push(nextStep);
         } else {
             nextSteps.push(nextStep);
         }
@@ -146,10 +156,10 @@ export function stepEditor(propsArg = {}) {
     }
 
     function removeStep(stepId) {
-        const nextSteps = (props.steps || []).filter((step) => step.__id !== stepId);
+        const nextSteps = removeStepFromList([...(props.steps || [])], stepId);
         delete data.expandedById[stepId];
         if (data.selectedStepId === stepId) {
-            data.selectedStepId = nextSteps[0]?.__id || "";
+            data.selectedStepId = firstStepInList(nextSteps)?.__id || "";
             data.drawerOpen = !!data.selectedStepId;
             closeDrawer();
         }
@@ -361,6 +371,7 @@ export function stepEditor(propsArg = {}) {
             dragState = null;
             data.dragActionType = "";
             data.dragInsertIndex = -1;
+            data.dragInsertPath = rootBranchPath;
             stopPointerDrag = null;
         };
 
@@ -434,16 +445,24 @@ export function stepEditor(propsArg = {}) {
         dragState.frame = 0;
         updateDragOverlay(dragState);
         const scrolled = autoScrollForDrag(dragState);
-        const insertIndex = resolvePointerDropIndex(dragState.clientY);
         const isActionDrag = dragState.kind === "action";
-        const canInsertAction = isActionDrag
-            && isPointerInsideElement(dragState.canvasEl, dragState.clientX, dragState.clientY);
         if (isActionDrag) {
-            data.dragInsertIndex = canInsertAction ? insertIndex : -1;
+            const dropTarget = resolvePointerDropTarget(dragState.clientX, dragState.clientY);
+            const canInsertAction = !!dropTarget
+                && isPointerInsideElement(dragState.canvasEl, dragState.clientX, dragState.clientY);
+            data.dragInsertPath = canInsertAction ? dropTarget.path : rootBranchPath;
+            data.dragInsertIndex = canInsertAction ? dropTarget.index : -1;
             if (isFinal && canInsertAction) {
-                addStep(dragState.type, insertIndex);
+                addStep(dragState.type, dropTarget.index, dropTarget.path);
             }
-        } else if (insertIndex !== dragState.lastInsertIndex || isFinal) {
+        } else {
+            const insertIndex = resolvePointerDropIndex(dragState.clientY);
+            if (insertIndex === dragState.lastInsertIndex && !isFinal) {
+                if (scrolled) {
+                    queueDragFrame();
+                }
+                return;
+            }
             dragState.lastInsertIndex = insertIndex;
             moveStep(dragState.stepId, insertIndex, true);
         }
@@ -603,6 +622,7 @@ export function stepEditor(propsArg = {}) {
                     moveStep,
                     dragActionType: data.dragActionType,
                     dragInsertIndex: data.dragInsertIndex,
+                    dragInsertPath: data.dragInsertPath,
                     errors: props.errors,
                     triggerCollectionRef: props.triggerCollectionRef,
                 })
@@ -829,7 +849,22 @@ function renderVisualBuilder(options) {
         ),
     );
 
-    const selectedStep = options.steps.find((step) => step.__id === options.selectedStepId) || options.steps[0] || null;
+    options.openContextMenu = (e, stepId) => {
+        e.preventDefault();
+        e.stopPropagation();
+        contextMenuIndex = stepId;
+        contextMenu.style.left = `${e.clientX}px`;
+        contextMenu.style.top = `${e.clientY}px`;
+        if (contextMenu.showPopover) {
+            setTimeout(() => {
+                try {
+                    contextMenu.showPopover();
+                } catch (_) {}
+            }, 100);
+        }
+    };
+
+    const selectedStep = findStepById(options.steps, options.selectedStepId) || options.steps[0] || null;
     return t.div(
         { className: "automation-n8n-builder" },
         contextMenu,
@@ -838,111 +873,27 @@ function renderVisualBuilder(options) {
             { className: "automation-builder-canvas" },
             renderTriggerNode(options),
             renderBuilderConnector({
+                path: rootBranchPath,
+                index: 0,
                 title: "Add step after trigger",
-                onclick: () => options.addStep("condition", 0),
+                onclick: () => options.addStep("condition", 0, rootBranchPath),
+                active: isDropTargetActive(options, rootBranchPath, 0),
             }),
             () => {
                 if (!options.steps.length) {
                     return t.div(
                         { className: "automation-builder-empty" },
-                        () => options.dragInsertIndex === 0 ? renderActionDropMarker(options.dragActionType) : null,
+                        () =>
+                            isDropTargetActive(options, rootBranchPath, 0)
+                                ? renderActionDropMarker(options.dragActionType)
+                                : null,
                         t.i({ className: "ri-node-tree", ariaHidden: true }),
                         t.div({ className: "txt-bold" }, "Start with a step"),
                         t.div({ className: "txt-sm txt-hint" }, "Use the action palette to add workflow blocks."),
                     );
                 }
 
-                return t.div(
-                    { className: "automation-builder-step-nodes" },
-                    ...options.steps.flatMap((step, index) => {
-                        const validation = clientValidateStep(step);
-                        const children = [];
-                        if (options.dragInsertIndex === index) {
-                            children.push(renderActionDropMarker(options.dragActionType));
-                        }
-
-                        children.push(
-                            t.div(
-                                { className: "automation-builder-node-wrap" },
-                                t.button(
-                                    {
-                                        rid: step.__id,
-                                        type: "button",
-                                        "html-data-automation-step-node": "true",
-                                        "html-data-automation-step-id": step.__id,
-                                        className: () =>
-                                            `automation-builder-node ${
-                                                selectedStep?.__id === step.__id ? "selected" : ""
-                                            } ${isAIStep(step.type) ? "ai-step" : ""} ${
-                                                validation.length ? "has-issues" : ""
-                                            } ${options.dragStepId === step.__id ? "dragging" : ""}`,
-                                        onpointerdown: (e) => options.beginNodePointerDrag(e, step.__id),
-                                        oncontextmenu: (e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            contextMenuIndex = step.__id;
-                                            contextMenu.style.left = `${e.clientX}px`;
-                                            contextMenu.style.top = `${e.clientY}px`;
-                                            if (contextMenu.showPopover) {
-                                                setTimeout(() => {
-                                                    try {
-                                                        contextMenu.showPopover();
-                                                    } catch (_) {}
-                                                }, 100);
-                                            }
-                                        },
-                                        onclick: (e) => {
-                                            if (options.isClickSuppressed(step.__id)) {
-                                                e.preventDefault();
-                                                return;
-                                            }
-                                            options.selectStep(step.__id);
-                                        },
-                                    },
-                                    t.span(
-                                        {
-                                            className: "automation-builder-drag-handle",
-                                            title: "Drag to reorder",
-                                        },
-                                        "⠿",
-                                    ),
-                                    t.div(
-                                        { className: "automation-builder-node-icon" },
-                                        t.i({ className: stepTypeIcon(step.type), ariaHidden: true }),
-                                    ),
-                                    t.div(
-                                        { className: "content block txt-left" },
-                                        t.div(
-                                            { className: "automation-node-title m-b-5" },
-                                            () => stepTypeLabel(step.type),
-                                        ),
-                                        t.div(
-                                            { className: "automation-node-desc txt-ellipsis" },
-                                            () => summarizeStep(step),
-                                        ),
-                                    ),
-                                    t.div(
-                                        { className: "automation-node-metadata" },
-                                        t.span({ className: "automation-step-label" }, `Step ${index + 1}`),
-                                        renderStepStatusBadge(validation),
-                                    ),
-                                    t.span({ className: "automation-builder-port input-port" }),
-                                    t.span({ className: "automation-builder-port output-port" }),
-                                ),
-                                renderBuilderConnector({
-                                    title: "Add connected step",
-                                    onclick: () => options.addStep("condition", index + 1),
-                                }),
-                            ),
-                        );
-
-                        if (index === options.steps.length - 1 && options.dragInsertIndex === index + 1) {
-                            children.push(renderActionDropMarker(options.dragActionType));
-                        }
-
-                        return children;
-                    }),
-                );
+                return renderBuilderStepList(options, options.steps, rootBranchPath, selectedStep, 0);
             },
         ),
     );
@@ -950,7 +901,12 @@ function renderVisualBuilder(options) {
 
 function renderBuilderConnector(attrs) {
     return t.div(
-        { className: "automation-builder-connector" },
+        {
+            className: () =>
+                `automation-builder-connector automation-builder-drop-zone ${attrs.active ? "active" : ""}`,
+            "html-data-automation-drop-path": attrs.path || rootBranchPath,
+            "html-data-automation-drop-index": String(attrs.index ?? 0),
+        },
         t.span({ className: "automation-builder-connector-line" }),
         t.button(
             {
@@ -963,6 +919,162 @@ function renderBuilderConnector(attrs) {
         ),
         t.span({ className: "automation-builder-connector-line" }),
     );
+}
+
+function renderBuilderStepList(options, steps, path, selectedStep, depth = 0) {
+    return t.div(
+        { className: () => `automation-builder-step-nodes ${depth > 0 ? "branch-step-nodes" : ""}` },
+        ...steps.flatMap((step, index) => {
+            const validation = clientValidateStep(step);
+            const children = [];
+            if (isDropTargetActive(options, path, index)) {
+                children.push(renderActionDropMarker(options.dragActionType));
+            }
+
+            children.push(
+                t.div(
+                    { className: "automation-builder-node-wrap" },
+                    renderBuilderStepNode(options, step, index, selectedStep, validation, path),
+                    isBranchingStepType(step.type)
+                        ? renderBranchPaths(options, step, selectedStep, depth + 1)
+                        : null,
+                    renderBuilderConnector({
+                        path,
+                        index: index + 1,
+                        title: "Add connected step",
+                        onclick: () => options.addStep("condition", index + 1, path),
+                        active: isDropTargetActive(options, path, index + 1),
+                    }),
+                ),
+            );
+
+            if (index === steps.length - 1 && isDropTargetActive(options, path, index + 1)) {
+                children.push(renderActionDropMarker(options.dragActionType));
+            }
+
+            return children;
+        }),
+    );
+}
+
+function renderBuilderStepNode(options, step, index, selectedStep, validation, path) {
+    return t.button(
+        {
+            rid: step.__id,
+            type: "button",
+            "html-data-automation-step-node": "true",
+            "html-data-automation-step-id": step.__id,
+            "html-data-automation-step-path": path,
+            className: () =>
+                `automation-builder-node ${selectedStep?.__id === step.__id ? "selected" : ""} ${
+                    isAIStep(step.type) ? "ai-step" : ""
+                } ${isBranchingStepType(step.type) ? "branching-step" : ""} ${validation.length ? "has-issues" : ""} ${
+                    options.dragStepId === step.__id ? "dragging" : ""
+                }`,
+            onpointerdown: (e) => options.beginNodePointerDrag(e, step.__id),
+            oncontextmenu: (e) => options.openContextMenu?.(e, step.__id),
+            onclick: (e) => {
+                if (options.isClickSuppressed(step.__id)) {
+                    e.preventDefault();
+                    return;
+                }
+                options.selectStep(step.__id);
+            },
+        },
+        t.span(
+            {
+                className: "automation-builder-drag-handle",
+                title: "Drag to reorder",
+            },
+            "⠿",
+        ),
+        t.div(
+            { className: "automation-builder-node-icon" },
+            t.i({ className: stepTypeIcon(step.type), ariaHidden: true }),
+        ),
+        t.div(
+            { className: "content block txt-left" },
+            t.div(
+                { className: "automation-node-title m-b-5" },
+                () => stepTypeLabel(step.type),
+            ),
+            t.div(
+                { className: "automation-node-desc txt-ellipsis" },
+                () => summarizeStep(step),
+            ),
+        ),
+        t.div(
+            { className: "automation-node-metadata" },
+            t.span({ className: "automation-step-label" }, `Step ${index + 1}`),
+            renderStepStatusBadge(validation),
+        ),
+        t.span({ className: "automation-builder-port input-port" }),
+        t.span({ className: "automation-builder-port output-port" }),
+    );
+}
+
+function renderBranchPaths(options, step, selectedStep, depth) {
+    const branches = ensureEditorBranches(step);
+    return t.div(
+        { className: "automation-branch-paths" },
+        ...["true", "false"].map((branchKey) => {
+            const path = branchPath(step.__id, branchKey);
+            const steps = branches[branchKey] || [];
+            const label = branchKey === "true" ? branchTrueLabel(step.type) : branchFalseLabel(step.type);
+            return t.div(
+                { className: `automation-branch-lane ${branchKey}-lane` },
+                t.div(
+                    { className: "automation-branch-lane-header" },
+                    t.span({ className: `automation-branch-badge ${branchKey}` }, label),
+                    t.button(
+                        {
+                            type: "button",
+                            className: "btn sm secondary transparent circle",
+                            title: `Add ${label.toLowerCase()} step`,
+                            onclick: () => options.addStep("condition", steps.length, path),
+                        },
+                        t.i({ className: "ri-add-line", ariaHidden: true }),
+                    ),
+                ),
+                renderBuilderConnector({
+                    path,
+                    index: 0,
+                    title: `Add ${label.toLowerCase()} step`,
+                    onclick: () => options.addStep("condition", 0, path),
+                    active: isDropTargetActive(options, path, 0),
+                }),
+                steps.length
+                    ? renderBuilderStepList(options, steps, path, selectedStep, depth)
+                    : t.div(
+                        {
+                            className: () =>
+                                `automation-branch-empty automation-builder-drop-zone ${
+                                    isDropTargetActive(options, path, 0) ? "active" : ""
+                                }`,
+                            "html-data-automation-drop-path": path,
+                            "html-data-automation-drop-index": "0",
+                        },
+                        () =>
+                            isDropTargetActive(options, path, 0)
+                                ? renderActionDropMarker(options.dragActionType)
+                                : null,
+                        t.div({ className: "txt-sm txt-hint" }, `No ${label.toLowerCase()} steps`),
+                    ),
+            );
+        }),
+    );
+}
+
+function isDropTargetActive(options, path, index) {
+    return options.dragInsertPath === path && options.dragInsertIndex === index;
+}
+
+function branchTrueLabel(type) {
+    return type === "wait.approval" ? "Approved" : "True";
+}
+
+function branchFalseLabel(type) {
+    return type === "wait.approval" ? "Rejected" : "False";
 }
 
 function renderStepStatusBadge(validation) {
@@ -983,6 +1095,10 @@ function renderStepStatusBadge(validation) {
 
 function isAIStep(type) {
     return String(type || "").startsWith("ai.");
+}
+
+function isBranchingStepType(type) {
+    return type === "condition" || type === "wait.approval";
 }
 
 function renderActionPalette(options) {
@@ -1205,7 +1321,9 @@ function animateStepNodeLayout(previousRects, draggedStepId) {
 
 function resolvePointerDropIndex(clientY) {
     const nodes = Array.from(
-        document.querySelectorAll(".automation-step-editor .automation-builder-node[data-automation-step-node='true']"),
+        document.querySelectorAll(
+            ".automation-step-editor .automation-builder-node[data-automation-step-node='true'][data-automation-step-path='root']",
+        ),
     );
 
     if (!nodes.length) {
@@ -1222,6 +1340,31 @@ function resolvePointerDropIndex(clientY) {
     return nodes.length;
 }
 
+function resolvePointerDropTarget(clientX, clientY) {
+    const zones = Array.from(
+        document.querySelectorAll(".automation-step-editor .automation-builder-drop-zone[data-automation-drop-path]"),
+    );
+
+    let best = null;
+    for (const zone of zones) {
+        const rect = zone.getBoundingClientRect();
+        const contains = clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+        if (!contains) {
+            continue;
+        }
+        const area = rect.width * rect.height;
+        if (!best || area < best.area) {
+            best = {
+                area,
+                path: zone.dataset.automationDropPath || rootBranchPath,
+                index: Number(zone.dataset.automationDropIndex || 0),
+            };
+        }
+    }
+
+    return best ? { path: best.path, index: best.index } : null;
+}
+
 function isPointerInsideElement(el, clientX, clientY) {
     if (!el) {
         return false;
@@ -1229,6 +1372,84 @@ function isPointerInsideElement(el, clientX, clientY) {
 
     const rect = el.getBoundingClientRect();
     return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+}
+
+function branchPath(stepId, branchKey) {
+    return ["branch", stepId, branchKey].join(branchPathSeparator);
+}
+
+function parseBranchPath(path) {
+    if (!path || path === rootBranchPath) {
+        return null;
+    }
+    const parts = String(path).split(branchPathSeparator);
+    if (parts.length !== 3 || parts[0] !== "branch") {
+        return null;
+    }
+    return { stepId: parts[1], branchKey: parts[2] };
+}
+
+function getStepListByPath(rootSteps, path) {
+    const parsed = parseBranchPath(path);
+    if (!parsed) {
+        return rootSteps;
+    }
+
+    const parent = findStepById(rootSteps, parsed.stepId);
+    if (!parent) {
+        return null;
+    }
+
+    const branches = ensureEditorBranches(parent);
+    return branches[parsed.branchKey] || null;
+}
+
+function findStepById(steps, stepId) {
+    if (!stepId) {
+        return null;
+    }
+    for (const step of steps || []) {
+        if (step?.__id === stepId) {
+            return step;
+        }
+        const branches = step?.branches;
+        for (const branchKey of ["true", "false"]) {
+            const found = findStepById(branches?.[branchKey], stepId);
+            if (found) {
+                return found;
+            }
+        }
+    }
+
+    return null;
+}
+
+function removeStepFromList(steps, stepId) {
+    return (steps || [])
+        .filter((step) => step.__id !== stepId)
+        .map((step) => {
+            if (step.branches) {
+                step.branches.true = removeStepFromList(step.branches.true || [], stepId);
+                step.branches.false = removeStepFromList(step.branches.false || [], stepId);
+            }
+            return step;
+        });
+}
+
+function firstStepInList(steps) {
+    for (const step of steps || []) {
+        if (step) {
+            return step;
+        }
+        for (const branchKey of ["true", "false"]) {
+            const nested = firstStepInList(step?.branches?.[branchKey]);
+            if (nested) {
+                return nested;
+            }
+        }
+    }
+
+    return null;
 }
 
 function renderStepEditModal(step, options) {
@@ -1657,6 +1878,7 @@ function createEditorStep(type, rawStep = {}) {
                     : stringifyLooseValue(rawStep.value),
                 match: ["and", "or"].includes(rawStep.match) ? rawStep.match : "and",
                 conditions: normalizeConditionRows(rawStep),
+                branches: normalizeEditorBranches(rawStep.branches),
             };
         case "code":
             return {
@@ -1770,6 +1992,7 @@ function createWaitApprovalStep(base, rawStep = {}) {
         assignee: toString(rawStep.assignee),
         role: toString(rawStep.role),
         comment: toString(rawStep.comment),
+        branches: normalizeEditorBranches(rawStep.branches),
     };
 }
 
@@ -2484,7 +2707,7 @@ function buildWaitApprovalPayload(step, index) {
         payload.comment = step.comment.trim();
     }
 
-    return payload;
+    return withBranchPayload(step, payload, index);
 }
 
 function buildAIPayload(step, index) {
@@ -2512,6 +2735,24 @@ function buildAIPayload(step, index) {
     const schema = schemaRowsToObject(step.schemaRows);
     if (schema) {
         payload.schema = schema;
+    }
+
+    return payload;
+}
+
+function withBranchPayload(step, payload, index) {
+    if (!isBranchingStepType(step.type)) {
+        return payload;
+    }
+
+    const branches = step.branches || {};
+    const trueSteps = buildAutomationStepsPayload(branches.true || []);
+    const falseSteps = buildAutomationStepsPayload(branches.false || []);
+    if (trueSteps.length || falseSteps.length) {
+        payload.branches = {
+            true: trueSteps,
+            false: falseSteps,
+        };
     }
 
     return payload;
@@ -2560,17 +2801,17 @@ function buildConditionPayload(step, index) {
     });
 
     if (payloadConditions.length === 1) {
-        return {
+        return withBranchPayload(step, {
             type: "condition",
             ...payloadConditions[0],
-        };
+        }, index);
     }
 
-    return {
+    return withBranchPayload(step, {
         type: "condition",
         match: step.match === "or" ? "or" : "and",
         conditions: payloadConditions,
-    };
+    }, index);
 }
 
 function buildHTTPPayload(step, index) {
@@ -3146,6 +3387,27 @@ function normalizeConditionRows(rawStep = {}) {
     }
 
     return [createConditionRow(rawStep)];
+}
+
+function normalizeEditorBranches(rawBranches = {}) {
+    return {
+        true: normalizeAutomationEditorSteps(rawBranches?.true),
+        false: normalizeAutomationEditorSteps(rawBranches?.false),
+    };
+}
+
+function ensureEditorBranches(step) {
+    if (!step.branches || typeof step.branches !== "object") {
+        step.branches = normalizeEditorBranches();
+    }
+    if (!Array.isArray(step.branches.true)) {
+        step.branches.true = [];
+    }
+    if (!Array.isArray(step.branches.false)) {
+        step.branches.false = [];
+    }
+
+    return step.branches;
 }
 
 function normalizeStringArray(value) {

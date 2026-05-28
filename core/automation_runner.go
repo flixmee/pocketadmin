@@ -613,6 +613,20 @@ func executeAutomationSteps(ctx *automationExecutionContext) ([]AutomationStepRe
 	if err != nil {
 		return nil, err
 	}
+	if len(ctx.ResumeBranches) > 0 {
+		insertIndex := ctx.StartStepIndex
+		if insertIndex < 0 {
+			insertIndex = 0
+		}
+		if insertIndex > len(steps) {
+			insertIndex = len(steps)
+		}
+		nextSteps := make([]map[string]any, 0, len(steps)+len(ctx.ResumeBranches))
+		nextSteps = append(nextSteps, steps[:insertIndex]...)
+		nextSteps = append(nextSteps, ctx.ResumeBranches...)
+		nextSteps = append(nextSteps, steps[insertIndex:]...)
+		steps = nextSteps
+	}
 
 	results := make([]AutomationStepResult, 0, len(steps))
 	if ctx.StartStepIndex > 0 {
@@ -669,6 +683,16 @@ func executeAutomationSteps(ctx *automationExecutionContext) ([]AutomationStepRe
 
 		if stepType == AutomationStepResponse {
 			return results, nil
+		}
+
+		if stepType == AutomationStepCondition {
+			if branchSteps := automationStepBranchSteps(step, automationConditionBranchKey(output)); len(branchSteps) > 0 {
+				nextSteps := make([]map[string]any, 0, len(steps)+len(branchSteps))
+				nextSteps = append(nextSteps, steps[:i+1]...)
+				nextSteps = append(nextSteps, branchSteps...)
+				nextSteps = append(nextSteps, steps[i+1:]...)
+				steps = nextSteps
+			}
 		}
 
 		if status == automationStepStatusStopped {

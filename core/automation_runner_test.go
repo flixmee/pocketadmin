@@ -2532,6 +2532,50 @@ func TestAutomationWorkflowStateCheckpointsSynchronousRun(t *testing.T) {
 	}
 }
 
+func TestAutomationConditionBranchesExecuteSelectedPath(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"condition",
+			"path":"trigger.type",
+			"op":"eq",
+			"value":"webhook",
+			"branches":{
+				"true":[{"type":"code","code":"return { branch: 'true' };"}],
+				"false":[{"type":"code","code":"return { branch: 'false' };"}]
+			}
+		},
+		{"type":"code","code":"return { after: true };"}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q (%s)", runs[0].Status(), runs[0].Error())
+	}
+	results := decodeStepResults(t, runs[0])
+	if len(results) != 3 {
+		t.Fatalf("Expected condition, selected branch, and following step results, got %d", len(results))
+	}
+	output, ok := results[1]["output"].(map[string]any)
+	if !ok || output["branch"] != "false" {
+		t.Fatalf("Expected false branch output, got %#v", results[1]["output"])
+	}
+}
+
 func TestAutomationWaitWebhookResume(t *testing.T) {
 	t.Parallel()
 
@@ -2685,6 +2729,60 @@ func TestAutomationWaitApprovalDecision(t *testing.T) {
 
 	if err := app.ResolveAutomationApproval(approval.Id, core.AutomationApprovalDecision{Decision: "approved"}); err == nil {
 		t.Fatal("Expected duplicate approval decision to fail")
+	}
+}
+
+func TestAutomationWaitApprovalRejectedBranch(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"wait.approval",
+			"role":"manager",
+			"branches":{
+				"true":[{"type":"code","code":"return { approvalBranch: 'approved' };"}],
+				"false":[{"type":"code","code":"return { approvalBranch: 'rejected' };"}]
+			}
+		},
+		{"type":"code","code":"return { afterApproval: true };"}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunAutomationManually(automation.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForAutomationRuns(t, app, automation, 1)
+	state := findWorkflowStateByRunForTest(t, app, runs[0].Id)
+	approval := findPendingApprovalByStateForTest(t, app, state.Id)
+
+	if err := app.ResolveAutomationApproval(approval.Id, core.AutomationApprovalDecision{Decision: "rejected"}); err != nil {
+		t.Fatal(err)
+	}
+
+	resumedRun, err := app.FindAutomationRunById(runs[0].Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumedRun.Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected rejected branch to complete successfully, got %q (%s)", resumedRun.Status(), resumedRun.Error())
+	}
+
+	results := decodeStepResults(t, resumedRun)
+	if len(results) != 3 {
+		t.Fatalf("Expected wait, rejected branch, and following step results, got %d", len(results))
+	}
+	output, ok := results[1]["output"].(map[string]any)
+	if !ok || output["approvalBranch"] != "rejected" {
+		t.Fatalf("Expected rejected branch output, got %#v", results[1]["output"])
 	}
 }
 

@@ -1,49 +1,48 @@
 Goal (incl. success criteria):
 
-- Show realtime notifications as toast messages.
-- Success: when a new unread `_notifications` realtime record arrives for the current recipient, the admin UI calls `app.toasts` with the notification title/message/severity, and notification actions are passed through as toast action options.
+- Generate a React + TypeScript workflow builder canvas implementation using AntV X6 v2.
+- Success: includes `WorkflowGraph.tsx`, `Sidebar.tsx`, `WorkflowBuilder.tsx`, `nodes/` registrations, and `types.ts`; supports trigger/action/approval/placeholder nodes, edge plus buttons, drag/drop, selection, layout, and step counter per user spec.
 
 Constraints/Assumptions:
 
 - Follow `AGENTS.md` and UI guidance.
 - Existing unrelated changes may be present; do not revert them.
-- `toast.js` is the current app-integrated implementation, imported from `ui/src/main.js`.
-- `toastv2.js` is currently a standalone Sonner-style global `toast` helper and is not imported by the app.
-- Assumption: "treat it like toast.js" means expose v2 through `window.app.toasts` with compatible methods (`info`, `success`, `error`, `remove`, `removeAll`) and switch the app import to v2.
-- Realtime notification actions should reuse existing dropdown behavior where possible, especially automation approval decisions.
+- When updating admin UI, consult `UI_DOCS.md`; do not introduce native HTML `<select>`.
+- Need inspect existing Automation implementation before deciding exact migration/backward compatibility path.
 
 Key decisions:
 
-- Keep app call sites unchanged by adding a compatibility layer in `toastv2.js`.
-- Preserve v2's richer API on `window.app.toasts.toast` and, where present, `window.toast`.
-- Put realtime toast triggering in `app.store.handleNotificationRealtimeEvent`, the existing central handler for `_notifications` realtime records.
+- UNCONFIRMED target location until frontend structure is inspected.
+- Prefer repo/frontend conventions where compatible; user explicitly requested React functional components, TypeScript, Tailwind, and X6 custom nodes.
 
 State:
   - Done:
-    - Read existing ledger and refreshed it for the toast v2 integration task.
-    - Compared `ui/src/base/toast.js` and `ui/src/base/toastv2.js`.
-    - Searched UI usage; app code calls `app.toasts.*`, and `ui/src/main.js` imports `./base/toast`.
-    - Updated `toastv2.js` with `app.toasts` compatibility methods, keyed replacement/removal, DOM node content support, app-themed CSS variables, bottom-center defaults, and richer v2 helper passthroughs.
-    - Switched `ui/src/main.js` to import `./base/toastv2`.
-    - Verified `npm run build` from `ui/`; Vite completed successfully. dprint reported the known sandbox cache write warning.
-    - Read notification realtime/store and notification dropdown approval action handling.
-    - Added realtime toast triggering for new unread notifications in `app.store.handleNotificationRealtimeEvent`.
-    - Mapped notification severity `danger` to toast `error`, `data.actions` to toast actions, approval actions to the existing confirmation/decision flow, and `actionUrl` to an `Open` toast action.
-    - Verified `npm run build` from `ui/`; Vite completed successfully. dprint reported the known sandbox cache write warning.
+    - Read the existing ledger and refreshed it for the X6 workflow canvas implementation request.
+    - Confirmed the existing admin UI is Vite/module-based JavaScript, not React; kept the React/X6 migration slice self-contained under `ui/src/settings/automations/x6/`.
+    - Added React/TypeScript workflow types, X6 custom HTML node registrations, node React views, `WorkflowGraph`, `Sidebar`, `WorkflowBuilder`, and barrel exports.
+    - Added React, ReactDOM, AntV X6 v2, TypeScript, React type packages, `ui/tsconfig.json`, and `npm run typecheck`.
+    - Verified `npm run typecheck` from `ui/`.
+    - Verified `npm run build` from `ui/`; build succeeded. dprint still printed the sandbox cache write warning but continued successfully.
   - Now:
-    - Reporting the realtime notification toast integration.
+    - Final diff sanity pass and reporting results.
   - Next:
-    - Optionally visual-check a seeded realtime notification in the running admin UI.
+    - Wire the new React/X6 builder into an admin route or adapter when desired.
 
 Open questions (UNCONFIRMED if needed):
 
-- Whether the old `toast.js` file should remain in place for fallback/reference is UNCONFIRMED.
+- Exact integration path into the current non-React automation route is UNCONFIRMED; implementation is exported but not automatically routed.
 
 Working set (files/ids/commands):
 
 - `CONTINUITY.md`
-- `ui/src/base/toast.js`
-- `ui/src/base/toastv2.js`
-- `ui/src/main.js`
-- `ui/src/store.js`
-- Check passed: `npm run build` from `ui/` (dprint cache write warning, Vite success).
+- `ui/package.json`
+- `ui/package-lock.json`
+- `ui/tsconfig.json`
+- `ui/src/settings/automations/x6/types.ts`
+- `ui/src/settings/automations/x6/nodes/registerNodes.tsx`
+- `ui/src/settings/automations/x6/nodes/components.tsx`
+- `ui/src/settings/automations/x6/WorkflowGraph.tsx`
+- `ui/src/settings/automations/x6/Sidebar.tsx`
+- `ui/src/settings/automations/x6/WorkflowBuilder.tsx`
+- `ui/src/settings/automations/x6/index.ts`
+- Checks passed: `npm run typecheck` from `ui/`; `npm run build` from `ui/` (with dprint sandbox cache warning).

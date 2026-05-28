@@ -345,7 +345,7 @@ func validateAutomationSteps(app App, automationRecord *Record) error {
 	if len(steps) == 0 {
 		return nil
 	}
-	if len(steps) > AutomationMaxSteps {
+	if automationStepCount(steps) > AutomationMaxSteps {
 		return validation.Errors{
 			"steps": validation.NewError(
 				"validation_automation_steps_limit",
@@ -356,9 +356,23 @@ func validateAutomationSteps(app App, automationRecord *Record) error {
 
 	stepErrs := validation.Errors{}
 
+	validateAutomationStepList(app, automationRecord, steps, "", stepErrs)
+
+	if len(stepErrs) > 0 {
+		return validation.Errors{"steps": stepErrs}
+	}
+
+	return nil
+}
+
+func validateAutomationStepList(app App, automationRecord *Record, steps []map[string]any, prefix string, stepErrs validation.Errors) {
 	for i, step := range steps {
+		key := strconv.Itoa(i)
+		if prefix != "" {
+			key = prefix + "." + key
+		}
 		if step == nil {
-			stepErrs[strconv.Itoa(i)] = validation.NewError("validation_invalid_automation_step", "Each step must be a JSON object.")
+			stepErrs[key] = validation.NewError("validation_invalid_automation_step", "Each step must be a JSON object.")
 			continue
 		}
 
@@ -375,14 +389,62 @@ func validateAutomationSteps(app App, automationRecord *Record) error {
 		if err := validateAutomationStepDefinition(app, automationRecord, step); err != nil {
 			fieldErrs["config"] = err
 		}
+		if err := validateAutomationStepBranches(app, automationRecord, step, key, stepErrs); err != nil {
+			fieldErrs["branches"] = err
+		}
 
 		if len(fieldErrs) > 0 {
-			stepErrs[strconv.Itoa(i)] = fieldErrs
+			stepErrs[key] = fieldErrs
 		}
 	}
+}
 
-	if len(stepErrs) > 0 {
-		return validation.Errors{"steps": stepErrs}
+func automationStepCount(steps []map[string]any) int {
+	count := len(steps)
+	for _, step := range steps {
+		for _, branch := range []string{"true", "false"} {
+			count += automationStepCount(automationStepBranchSteps(step, branch))
+		}
+	}
+	return count
+}
+
+func validateAutomationStepBranches(app App, automationRecord *Record, step map[string]any, prefix string, stepErrs validation.Errors) error {
+	branchesRaw, ok := step["branches"]
+	if !ok || branchesRaw == nil {
+		return nil
+	}
+	if strings.TrimSpace(toString(step["type"])) != AutomationStepCondition && strings.TrimSpace(toString(step["type"])) != AutomationStepWaitApproval {
+		return validation.NewError("validation_invalid_automation_branches", "Only condition and approval wait steps can define true/false branches.")
+	}
+
+	branches, ok := branchesRaw.(map[string]any)
+	if !ok {
+		return validation.NewError("validation_invalid_automation_branches", "Branches must be an object with true and false arrays.")
+	}
+	for key := range branches {
+		if key != "true" && key != "false" {
+			return validation.NewError("validation_invalid_automation_branches", `Branches can only contain "true" and "false" paths.`)
+		}
+	}
+	for _, branch := range []string{"true", "false"} {
+		rawSteps, exists := branches[branch]
+		if !exists || rawSteps == nil {
+			continue
+		}
+		items, ok := rawSteps.([]any)
+		if !ok {
+			return validation.NewError("validation_invalid_automation_branches", "Branch paths must be arrays of steps.")
+		}
+		branchSteps := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			branchStep, ok := item.(map[string]any)
+			if !ok {
+				return validation.NewError("validation_invalid_automation_branches", "Branch path entries must be step objects.")
+			}
+			branchSteps = append(branchSteps, branchStep)
+		}
+		validateAutomationStepList(app, automationRecord, branchSteps, prefix+".branches."+branch, stepErrs)
 	}
 
 	return nil

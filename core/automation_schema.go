@@ -145,6 +145,7 @@ func waitApprovalStepSchema() AutomationSchema {
 			"type":     constStringSchema(AutomationStepWaitApproval),
 			"assignee": stringSchema(),
 			"role":     stringSchema(),
+			"branches": branchPathsSchema(),
 		}),
 		OutputSchema: objectSchema(map[string]any{
 			"waiting":    boolSchema(),
@@ -285,6 +286,7 @@ func conditionStepSchema() AutomationSchema {
 				}),
 				"value": map[string]any{},
 			})),
+			"branches": branchPathsSchema(),
 		}),
 		OutputSchema: objectSchema(map[string]any{
 			"path":     stringSchema(),
@@ -295,6 +297,13 @@ func conditionStepSchema() AutomationSchema {
 			"expected": map[string]any{},
 		}),
 	}
+}
+
+func branchPathsSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"true":  arraySchema(objectSchema(nil)),
+		"false": arraySchema(objectSchema(nil)),
+	})
 }
 
 func httpStepSchema() AutomationSchema {
