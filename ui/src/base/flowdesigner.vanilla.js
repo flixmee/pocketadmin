@@ -56,6 +56,7 @@ const FlowDesigner = (function() {
     const ZOOM_MIN = 0.1;
     const ZOOM_MAX = 2.5;
     const ZOOM_SPEED = 0.0012;
+    const CLICK_MOVE_THRESHOLD = 4;
 
     // ─── Default themes ───────────────────────────────────────────────────────
 
@@ -307,6 +308,11 @@ const FlowDesigner = (function() {
             el.querySelectorAll(".fd-handle").forEach(h => {
                 h.addEventListener("mousedown", e => {
                     e.stopPropagation();
+                    if (this.flow._spacePanning && e.button === 0) {
+                        e.preventDefault();
+                        this.flow._startPanning(e);
+                        return;
+                    }
                     this.flow._onHandleMouseDown(e, node.id, h.dataset.handleId, h.dataset.handleType);
                 });
                 h.addEventListener("mouseenter", () => {
@@ -624,13 +630,14 @@ const FlowDesigner = (function() {
                     nodeTypes: {},
                     allowDblClickAdd: true,
                     allowDelete: true,
+                    defaultZoom: 1,
                 },
                 options,
             );
 
             this.nodes = [];
             this.edges = [];
-            this.viewport = { x: 0, y: 0, scale: 1 };
+            this.viewport = { x: 0, y: 0, scale: clamp(Number(this._options.defaultZoom) || 1, ZOOM_MIN, ZOOM_MAX) };
 
             this._selectedNodeIds = new Set();
             this._selectedEdgeIds = new Set();
@@ -641,6 +648,7 @@ const FlowDesigner = (function() {
             this._panning = null; // { startMouse, startViewport }
             this._connecting = null; // { sourceNodeId, handleId, startPos }
             this._selecting = null; // { startX, startY }
+            this._spacePanning = false;
 
             this._init();
         }
@@ -745,6 +753,7 @@ const FlowDesigner = (function() {
                 mouseup: e => this._onMouseUp(e),
                 dblclick: e => this._onDblClick(e),
                 keydown: e => this._onKeyDown(e),
+                keyup: e => this._onKeyUp(e),
                 contextmenu: e => e.preventDefault(),
                 mouseover: e => {
                     const h = e.target.closest(".fd-handle");
@@ -771,6 +780,7 @@ const FlowDesigner = (function() {
 
             // Keyboard
             document.addEventListener("keydown", this._boundEvents.keydown);
+            document.addEventListener("keyup", this._boundEvents.keyup);
 
             // Context menu
             root.addEventListener("contextmenu", this._boundEvents.contextmenu);
@@ -805,6 +815,12 @@ const FlowDesigner = (function() {
 
         _onMouseDown(e) {
             if (e.button !== 0 && e.button !== 1) return;
+
+            if (this._spacePanning && e.button === 0) {
+                e.preventDefault();
+                this._startPanning(e);
+                return;
+            }
 
             const nodeEl = e.target.closest(".fd-node");
             const edgeEl = e.target.closest("[data-edge-id]");
@@ -854,6 +870,15 @@ const FlowDesigner = (function() {
             }
 
             if (this._dragging) {
+                const movedDistance = Math.hypot(
+                    e.clientX - this._dragging.startMouse.x,
+                    e.clientY - this._dragging.startMouse.y,
+                );
+                if (!this._dragging.hasMoved && movedDistance <= CLICK_MOVE_THRESHOLD) {
+                    return;
+                }
+                this._dragging.hasMoved = true;
+
                 const dx = (e.clientX - this._dragging.startMouse.x) / this.viewport.scale;
                 const dy = (e.clientY - this._dragging.startMouse.y) / this.viewport.scale;
 
@@ -920,15 +945,25 @@ const FlowDesigner = (function() {
 
         _onMouseUp(e) {
             if (this._dragging) {
+                const draggedNodeId = this._dragging.clickedNodeId;
+                const isClick = !this._dragging.hasMoved;
+
                 for (const nodeId of this._dragging.nodeIds) {
                     const node = this._getNode(nodeId);
                     if (node) delete node._dragging;
                 }
-                this._options.onNodeDragStop && this._options.onNodeDragStop(
-                    this._dragging.nodeIds.map(id => this._getNode(id)),
-                );
-                this._fireChange();
+                if (!isClick) {
+                    this._options.onNodeDragStop && this._options.onNodeDragStop(
+                        this._dragging.nodeIds.map(id => this._getNode(id)),
+                    );
+                    this._fireChange();
+                }
                 this._dragging = null;
+                if (isClick) {
+                    const node = this._getNode(draggedNodeId);
+                    this._options.onNodeClick && this._options.onNodeClick(node, e);
+                    emit(this._container, "fd:nodeclick", { node });
+                }
                 this._renderAll();
             }
 
@@ -983,8 +1018,14 @@ const FlowDesigner = (function() {
         _onKeyDown(e) {
             if (!this._root.contains(document.activeElement) && document.activeElement !== document.body) return;
 
+            if ((e.key === " " || e.code === "Space") && !this._isTextInput(document.activeElement)) {
+                e.preventDefault();
+                this._setSpacePanning(true);
+                return;
+            }
+
             if ((e.key === "Delete" || e.key === "Backspace") && this._options.editable) {
-                if (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA") return;
+                if (this._isTextInput(document.activeElement)) return;
                 if (!this._options.allowDelete) return;
                 this._deleteSelected();
             }
@@ -997,6 +1038,12 @@ const FlowDesigner = (function() {
             if (e.key === "Escape") {
                 this._clearSelection();
                 this._renderAll();
+            }
+        }
+
+        _onKeyUp(e) {
+            if (e.key === " " || e.code === "Space") {
+                this._setSpacePanning(false);
             }
         }
 
@@ -1027,10 +1074,10 @@ const FlowDesigner = (function() {
                 nodeIds,
                 startPositions,
                 startMouse: { x: e.clientX, y: e.clientY },
+                clickedNodeId: nodeId,
+                hasMoved: false,
             };
 
-            this._options.onNodeClick && this._options.onNodeClick(this._getNode(nodeId), e);
-            emit(this._container, "fd:nodeclick", { node: this._getNode(nodeId) });
             this._renderAll();
         }
 
@@ -1067,6 +1114,20 @@ const FlowDesigner = (function() {
                 startViewport: { ...this.viewport },
             };
             this._root.style.cursor = "grabbing";
+        }
+
+        _setSpacePanning(isPanning) {
+            if (this._spacePanning === isPanning) return;
+            this._spacePanning = isPanning;
+            this._root.classList.toggle("fd-root--space-panning", isPanning);
+        }
+
+        _isTextInput(el) {
+            if (!el) return false;
+            return el.tagName === "INPUT"
+                || el.tagName === "TEXTAREA"
+                || el.tagName === "SELECT"
+                || el.isContentEditable;
         }
 
         _startSelecting(e) {
@@ -1517,6 +1578,7 @@ const FlowDesigner = (function() {
                 window.removeEventListener("mouseup", this._boundEvents.mouseup);
                 this._root.removeEventListener("dblclick", this._boundEvents.dblclick);
                 document.removeEventListener("keydown", this._boundEvents.keydown);
+                document.removeEventListener("keyup", this._boundEvents.keyup);
                 this._root.removeEventListener("contextmenu", this._boundEvents.contextmenu);
                 this._root.removeEventListener("mouseover", this._boundEvents.mouseover);
                 this._root.removeEventListener("mouseout", this._boundEvents.mouseout);
@@ -1547,6 +1609,12 @@ const FlowDesigner = (function() {
       inset: 0;
       overflow: hidden;
       cursor: default;
+    }
+
+    .fd-root--space-panning,
+    .fd-root--space-panning .fd-node,
+    .fd-root--space-panning .fd-handle {
+      cursor: grab !important;
     }
 
     .fd-viewport {

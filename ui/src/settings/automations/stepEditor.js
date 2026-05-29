@@ -595,39 +595,11 @@ export function stepEditor(propsArg = {}) {
             data.mode === "visual"
                 ? renderVisualBuilder({
                     getSteps: () => props.steps || [],
-                    schemas: data.schemas,
-                    isLoadingSchemas: data.isLoadingSchemas,
-                    schemaError: data.schemaError,
                     getSelectedStepId: () => data.selectedStepId,
                     getTriggerType: () => props.triggerType,
-                    triggerType: () => props.triggerType,
-                    capabilityQuery: data.capabilityQuery,
-                    capabilityCategory: data.capabilityCategory,
-                    setCapabilityQuery: (value) => (data.capabilityQuery = value),
-                    setCapabilityCategory: (value) => (data.capabilityCategory = value),
-                    drawerOpen: data.drawerOpen,
-                    drawerActiveTab: data.drawerActiveTab,
-                    setDrawerActiveTab: (tab) => (data.drawerActiveTab = tab),
-                    dragStepId: data.dragStepId,
                     selectStep,
-                    closeDrawer,
                     addStep,
-                    addCapabilityStep,
-                    removeStep,
-                    changeStepType,
                     setSteps,
-                    beginDrag,
-                    endDrag,
-                    beginNodePointerDrag,
-                    beginActionPointerDrag,
-                    isClickSuppressed,
-                    isPaletteActionClickSuppressed: () => Date.now() < suppressedPaletteActionUntil,
-                    moveStep,
-                    dragActionType: data.dragActionType,
-                    dragInsertIndex: data.dragInsertIndex,
-                    dragInsertPath: data.dragInsertPath,
-                    errors: props.errors,
-                    triggerCollectionRef: props.triggerCollectionRef,
                 })
                 : null,
         () =>
@@ -833,6 +805,9 @@ function renderVisualBuilder(options) {
     let stopSelectionWatch = null;
     let fitTimer = 0;
     const positions = {};
+    const local = store({
+        actionsOpen: false,
+    });
 
     const getSteps = () => options.getSteps?.() || options.steps || [];
     const getTriggerType = () => {
@@ -872,11 +847,6 @@ function renderVisualBuilder(options) {
             return;
         }
 
-        if (node.type === "automation-placeholder") {
-            options.addStep("condition", node.data?.insertIndex || 0, node.data?.path || rootBranchPath);
-            return;
-        }
-
         if (node.id === automationTriggerNodeId) {
             return;
         }
@@ -897,14 +867,17 @@ function renderVisualBuilder(options) {
         const location = findStepLocation(getSteps(), selectedStepId);
         if (location) {
             options.addStep(type, location.index + 1, location.path);
+            local.actionsOpen = false;
             return;
         }
         options.addStep(type, getSteps().length, rootBranchPath);
+        local.actionsOpen = false;
     }
+
+    const actionDrawer = renderFlowActionDrawer(options, addPaletteStep, getTriggerType, local);
 
     return t.div(
         { className: "automation-flow-builder" },
-        renderFlowActionPalette(options, addPaletteStep, getTriggerType),
         t.div(
             {
                 className: "automation-flow-surface",
@@ -934,7 +907,6 @@ function renderVisualBuilder(options) {
                         nodeTypes: {
                             "automation-trigger": renderAutomationFlowNodeContent,
                             "automation-step": renderAutomationFlowNodeContent,
-                            "automation-placeholder": renderAutomationFlowPlaceholderContent,
                         },
                         onNodeClick: selectFlowNode,
                         onNodeDragStop: (nodes) => {
@@ -967,48 +939,90 @@ function renderVisualBuilder(options) {
                     stopSelectionWatch?.unwatch?.();
                     flow?.destroy?.();
                     flow = null;
+                    actionDrawer?.remove();
                 },
             },
+            t.button(
+                {
+                    type: "button",
+                    className: "btn automation-flow-add-node-btn",
+                    onclick: () => (local.actionsOpen = true),
+                },
+                t.i({ className: "ri-add-line", ariaHidden: true }),
+                t.span({ className: "txt" }, "Add node"),
+            ),
         ),
+        actionDrawer,
     );
 }
 
 const automationTriggerNodeId = "__automation_trigger";
-const automationPlaceholderPrefix = "__automation_placeholder";
 const automationNodeWidth = 260;
 const automationColumnGap = 330;
 const automationBranchGap = 190;
 const automationRootY = 180;
 
-function renderFlowActionPalette(options, addStep, getTriggerType) {
-    return t.aside(
-        { className: "automation-builder-palette automation-flow-palette" },
-        t.div({ className: "txt-bold m-b-xs" }, "Actions"),
-        t.div({ className: "txt-sm txt-hint m-b-sm" }, "Pick an action, then connect nodes on the canvas."),
-        t.div(
-            { className: "automation-builder-palette-actions" },
-            () =>
-                t.div(
-                    { className: "automation-builder-palette-actions-inner" },
-                    ...stepTypeAddOptions(getTriggerType()).map((option) =>
-                        t.button(
-                            {
-                                type: "button",
-                                className: "automation-builder-palette-action",
-                                onclick: () => addStep(option.value),
-                            },
-                            t.div(
-                                { className: "automation-palette-icon-wrap" },
-                                t.i({ className: option.icon || "ri-add-line", ariaHidden: true }),
-                            ),
-                            t.div(
-                                { className: "content block txt-left" },
-                                t.div({ className: "automation-node-title" }, option.label),
-                                t.div({ className: "automation-node-meta" }, option.category || "step"),
-                            ),
-                        )
-                    ),
+function renderFlowActionDrawer(options, addStep, getTriggerType, local) {
+    return t.div(
+        {
+            className: "automation-flow-drawer-portal",
+            onmount: (el) => document.body.appendChild(el),
+            onunmount: (el) => el?.remove(),
+        },
+        () =>
+            local.actionsOpen
+                ? t.button({
+                    type: "button",
+                    className: "automation-flow-drawer-backdrop",
+                    ariaLabel: app.attrs.tooltip("Close actions"),
+                    onclick: () => (local.actionsOpen = false),
+                })
+                : null,
+        t.aside(
+            {
+                className: () =>
+                    `automation-builder-palette automation-flow-action-drawer ${local.actionsOpen ? "open" : ""}`,
+                inert: () => !local.actionsOpen,
+                ariaHidden: () => !local.actionsOpen,
+            },
+            t.div(
+                { className: "automation-flow-action-drawer-header" },
+                t.div({ className: "txt-bold" }, "Actions"),
+                t.button(
+                    {
+                        type: "button",
+                        className: "btn sm secondary transparent circle",
+                        ariaLabel: app.attrs.tooltip("Close"),
+                        onclick: () => (local.actionsOpen = false),
+                    },
+                    t.i({ className: "ri-close-line", ariaHidden: true }),
                 ),
+            ),
+            t.div(
+                { className: "automation-builder-palette-actions" },
+                () =>
+                    t.div(
+                        { className: "automation-builder-palette-actions-inner" },
+                        ...stepTypeAddOptions(getTriggerType()).map((option) =>
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "automation-builder-palette-action",
+                                    onclick: () => addStep(option.value),
+                                },
+                                t.div(
+                                    { className: "automation-palette-icon-wrap" },
+                                    t.i({ className: option.icon || "ri-add-line", ariaHidden: true }),
+                                ),
+                                t.div(
+                                    { className: "content block txt-left" },
+                                    t.div({ className: "automation-node-title" }, option.label),
+                                    t.div({ className: "automation-node-meta" }, option.category || "step"),
+                                ),
+                            )
+                        ),
+                    ),
+            ),
         ),
     );
 }
@@ -1052,9 +1066,6 @@ function layoutAutomationSequence(args) {
     const safeSteps = steps || [];
 
     if (!safeSteps.length) {
-        const placeholder = createAutomationPlaceholderNode(path, 0, startX, y, positions);
-        nodes.push(placeholder);
-        edges.push(createAutomationFlowEdge(sourceId, sourceHandle, placeholder.id, "in", placeholder.data?.label));
         return;
     }
 
@@ -1078,7 +1089,7 @@ function layoutAutomationSequence(args) {
                     selected: selectedStepId === step.__id,
                     stepType: step.type,
                 },
-                handles: automationStepHandles(step, index < safeSteps.length - 1),
+                handles: automationStepHandles(step),
             }),
         );
         edges.push(createAutomationFlowEdge(previousId, previousHandle, step.__id, "in"));
@@ -1114,24 +1125,14 @@ function layoutAutomationSequence(args) {
         previousId = step.__id;
         previousHandle = "out";
     });
-
-    const placeholder = createAutomationPlaceholderNode(
-        path,
-        safeSteps.length,
-        startX + safeSteps.length * automationColumnGap,
-        y,
-        positions,
-    );
-    nodes.push(placeholder);
-    edges.push(createAutomationFlowEdge(previousId, previousHandle, placeholder.id, "in", "Add"));
 }
 
-function automationStepHandles(step, hasNext) {
+function automationStepHandles(step) {
     const handles = [{ id: "in", type: "target" }];
     if (isBranchingStepType(step.type)) {
         handles.push(
             { id: "true", type: "source", label: branchTrueLabel(step.type), position: 25 },
-            { id: "out", type: "source", label: hasNext ? "Next" : "Add", position: 50 },
+            { id: "out", type: "source", label: "Next", position: 50 },
             { id: "false", type: "source", label: branchFalseLabel(step.type), position: 75 },
         );
         return handles;
@@ -1146,25 +1147,6 @@ function createAutomationFlowNode(config) {
         width: automationNodeWidth,
         ...config,
     };
-}
-
-function createAutomationPlaceholderNode(path, insertIndex, x, y, positions) {
-    const label = path === rootBranchPath ? "Add step" : `Add ${branchPathLabel(path)} step`;
-    return createAutomationFlowNode({
-        id: automationPlaceholderId(path, insertIndex),
-        type: "automation-placeholder",
-        label,
-        badge: "Add",
-        position: positionForNode(automationPlaceholderId(path, insertIndex), { x, y }, positions),
-        data: {
-            path,
-            insertIndex,
-            label,
-            icon: "ri-add-line",
-            summary: "Click to insert a workflow block.",
-        },
-        handles: [{ id: "in", type: "target" }],
-    });
 }
 
 function createAutomationFlowEdge(source, sourceHandle, target, targetHandle, label = "") {
@@ -1182,12 +1164,8 @@ function positionForNode(id, fallback, positions) {
     return positions?.[id] ? { ...positions[id] } : fallback;
 }
 
-function automationPlaceholderId(path, insertIndex) {
-    return `${automationPlaceholderPrefix}${branchPathSeparator}${path}${branchPathSeparator}${insertIndex}`;
-}
-
 function isAutomationVirtualNodeId(id) {
-    return id === automationTriggerNodeId || String(id || "").startsWith(automationPlaceholderPrefix);
+    return id === automationTriggerNodeId;
 }
 
 function branchPathLabel(path) {
@@ -1238,25 +1216,11 @@ function renderAutomationFlowNodeContent(node) {
     `;
 }
 
-function renderAutomationFlowPlaceholderContent(node) {
-    const data = node.data || {};
-    return `
-        <div class="automation-flow-node-content placeholder">
-            <div class="automation-flow-node-icon"><i class="${
-        escapeAutomationHtml(data.icon || "ri-add-line")
-    }"></i></div>
-            <div class="automation-flow-node-copy">
-                <div class="automation-flow-node-summary">${escapeAutomationHtml(data.summary || "")}</div>
-            </div>
-        </div>
-    `;
-}
-
 function moveStepByFlowEdge(options, steps, edge) {
     if (!edge?.target || edge.target === automationTriggerNodeId || isAutomationVirtualNodeId(edge.target)) {
         return false;
     }
-    if (!edge.source || edge.source === edge.target || String(edge.source).startsWith(automationPlaceholderPrefix)) {
+    if (!edge.source || edge.source === edge.target) {
         return false;
     }
 
