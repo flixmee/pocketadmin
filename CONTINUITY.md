@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Generate a React + TypeScript workflow builder canvas implementation using AntV X6 v2.
-- Success: includes `WorkflowGraph.tsx`, `Sidebar.tsx`, `WorkflowBuilder.tsx`, `nodes/` registrations, and `types.ts`; supports trigger/action/approval/placeholder nodes, edge plus buttons, drag/drop, selection, layout, and step counter per user spec.
+- Fix automation visual builder showing "Flow designer failed to load."
+- Success: FlowDesigner loads reliably in the Vite/admin UI, the automation visual builder instantiates it without relying on a missing global, and frontend build passes.
 
 Constraints/Assumptions:
 
@@ -12,37 +12,36 @@ Constraints/Assumptions:
 
 Key decisions:
 
-- UNCONFIRMED target location until frontend structure is inspected.
-- Prefer repo/frontend conventions where compatible; user explicitly requested React functional components, TypeScript, Tailwind, and X6 custom nodes.
+- Prefer a real ES module export from `flowdesigner.vanilla.js` and keep `window.FlowDesigner` only as a compatibility/demo global.
+- Automation `stepEditor.js` should import `FlowDesigner` directly instead of checking only `window.FlowDesigner`.
 
 State:
   - Done:
-    - Read the existing ledger and refreshed it for the X6 workflow canvas implementation request.
-    - Confirmed the existing admin UI is Vite/module-based JavaScript, not React; kept the React/X6 migration slice self-contained under `ui/src/settings/automations/x6/`.
-    - Added React/TypeScript workflow types, X6 custom HTML node registrations, node React views, `WorkflowGraph`, `Sidebar`, `WorkflowBuilder`, and barrel exports.
-    - Added React, ReactDOM, AntV X6 v2, TypeScript, React type packages, `ui/tsconfig.json`, and `npm run typecheck`.
-    - Verified `npm run typecheck` from `ui/`.
-    - Verified `npm run build` from `ui/`; build succeeded. dprint still printed the sandbox cache write warning but continued successfully.
+    - Read the existing ledger and updated it for the new request to remake the automation builder using `flowdesigner.vanilla.js`.
+    - Inspected `UI_DOCS.md`, the automation upsert page/modal, `stepEditor.js`, automation CSS, and the FlowDesigner API.
+    - Added FlowDesigner embed options for disabling double-click node creation and delete-key graph deletion, plus selection event emission.
+    - Imported `flowdesigner.vanilla.js` from `ui/src/main.js`.
+    - Reworked `stepEditor.js` visual mode to render trigger/step/branch/placeholder nodes through FlowDesigner, with palette adds, node selection/editing, branch placeholders, graph connection-based step movement, and position retention while mounted.
+    - Added CSS for the FlowDesigner automation surface and node content.
+    - Verified `npm run build` from `ui/`; build succeeded. dprint still printed the sandbox cache write warning but continued.
+    - Converted `flowdesigner.vanilla.js` from UMD-only side effect to an ES module default export while still assigning `window.FlowDesigner`.
+    - Updated `stepEditor.js` to import and instantiate `FlowDesigner` directly.
+    - Verified `npm run build` from `ui/` after the load fix; build succeeded with the same dprint cache warning.
   - Now:
-    - Final diff sanity pass and reporting results.
+    - Reporting the fix.
   - Next:
-    - Wire the new React/X6 builder into an admin route or adapter when desired.
+    - Manual browser smoke test to confirm the builder no longer shows the load failure.
 
 Open questions (UNCONFIRMED if needed):
 
-- Exact integration path into the current non-React automation route is UNCONFIRMED; implementation is exported but not automatically routed.
+- None.
 
 Working set (files/ids/commands):
 
 - `CONTINUITY.md`
-- `ui/package.json`
-- `ui/package-lock.json`
-- `ui/tsconfig.json`
-- `ui/src/settings/automations/x6/types.ts`
-- `ui/src/settings/automations/x6/nodes/registerNodes.tsx`
-- `ui/src/settings/automations/x6/nodes/components.tsx`
-- `ui/src/settings/automations/x6/WorkflowGraph.tsx`
-- `ui/src/settings/automations/x6/Sidebar.tsx`
-- `ui/src/settings/automations/x6/WorkflowBuilder.tsx`
-- `ui/src/settings/automations/x6/index.ts`
-- Checks passed: `npm run typecheck` from `ui/`; `npm run build` from `ui/` (with dprint sandbox cache warning).
+- `ui/src/base/flowdesigner.vanilla.js`
+- `ui/src/main.js`
+- `ui/src/settings/automations/stepEditor.js`
+- `ui/src/css/automations.css`
+- `UI_DOCS.md`
+- Check passed: `npm run build` from `ui/` (with dprint sandbox cache warning).

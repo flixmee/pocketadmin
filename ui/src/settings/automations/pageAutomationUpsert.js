@@ -344,7 +344,7 @@ export function pageAutomationUpsert(route) {
                 ),
             ),
             t.div(
-                { className: "wrapper m-b-base" },
+                { className: "m-b-base" },
                 t.div(
                     {
                         hidden: () => !data.isLoading,

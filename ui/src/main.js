@@ -19,6 +19,7 @@ import "./base/codeBlock";
 import "./base/codeEditor";
 import "./base/monacoEditor";
 import "./base/automationInput";
+import "./base/flowdesigner.vanilla";
 import "./base/codeBlockTabs";
 import "./base/select";
 import "./base/formattedDate";

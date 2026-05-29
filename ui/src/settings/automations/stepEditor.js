@@ -1,3 +1,4 @@
+import FlowDesigner from "../../base/flowdesigner.vanilla";
 import { conditionStepForm } from "./conditionStepForm";
 import { httpStepForm } from "./httpStepForm";
 import { mailStepForm } from "./mailStepForm";
@@ -593,12 +594,13 @@ export function stepEditor(propsArg = {}) {
         () =>
             data.mode === "visual"
                 ? renderVisualBuilder({
-                    steps: props.steps || [],
+                    getSteps: () => props.steps || [],
                     schemas: data.schemas,
                     isLoadingSchemas: data.isLoadingSchemas,
                     schemaError: data.schemaError,
-                    selectedStepId: data.selectedStepId,
-                    triggerType: props.triggerType,
+                    getSelectedStepId: () => data.selectedStepId,
+                    getTriggerType: () => props.triggerType,
+                    triggerType: () => props.triggerType,
                     capabilityQuery: data.capabilityQuery,
                     capabilityCategory: data.capabilityCategory,
                     setCapabilityQuery: (value) => (data.capabilityQuery = value),
@@ -613,6 +615,7 @@ export function stepEditor(propsArg = {}) {
                     addCapabilityStep,
                     removeStep,
                     changeStepType,
+                    setSteps,
                     beginDrag,
                     endDrag,
                     beginNodePointerDrag,
@@ -825,78 +828,590 @@ function renderStructuredStepList(options) {
 }
 
 function renderVisualBuilder(options) {
-    let contextMenuIndex = null;
-    const contextMenu = t.div(
-        {
-            className: "dropdown sm popover",
-            popover: "auto",
-            style:
-                "margin: 0; position: fixed; inset: auto; background: var(--surfaceColor); border: 1px solid var(--surfaceAlt2Color); border-radius: var(--borderRadius); box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 5px; z-index: 9999; min-width: 140px;",
-        },
-        t.button(
+    let flow = null;
+    let stopGraphWatch = null;
+    let stopSelectionWatch = null;
+    let fitTimer = 0;
+    const positions = {};
+
+    const getSteps = () => options.getSteps?.() || options.steps || [];
+    const getTriggerType = () => {
+        const triggerType = typeof options.getTriggerType === "function"
+            ? options.getTriggerType()
+            : options.triggerType;
+        return typeof triggerType === "function" ? triggerType() : triggerType;
+    };
+    const getSelectedStepId = () => options.getSelectedStepId?.() || options.selectedStepId || "";
+
+    function refreshGraph(shouldFit = false) {
+        if (!flow) {
+            return;
+        }
+
+        const graph = buildAutomationFlowGraph({
+            steps: getSteps(),
+            triggerType: getTriggerType(),
+            selectedStepId: getSelectedStepId(),
+            positions,
+        });
+        flow.setGraph(graph);
+
+        const selectedStepId = getSelectedStepId();
+        if (selectedStepId && graph.nodes.some((node) => node.id === selectedStepId)) {
+            flow.select({ nodeIds: [selectedStepId] });
+        }
+
+        if (shouldFit) {
+            clearTimeout(fitTimer);
+            fitTimer = setTimeout(() => flow?.fitView(70), 40);
+        }
+    }
+
+    function selectFlowNode(node) {
+        if (!node) {
+            return;
+        }
+
+        if (node.type === "automation-placeholder") {
+            options.addStep("condition", node.data?.insertIndex || 0, node.data?.path || rootBranchPath);
+            return;
+        }
+
+        if (node.id === automationTriggerNodeId) {
+            return;
+        }
+
+        options.selectStep(node.id);
+    }
+
+    function connectFlowNodes(edge) {
+        const moved = moveStepByFlowEdge(options, getSteps(), edge);
+        if (moved) {
+            setTimeout(() => refreshGraph(true), 0);
+        }
+        return false;
+    }
+
+    function addPaletteStep(type) {
+        const selectedStepId = getSelectedStepId();
+        const location = findStepLocation(getSteps(), selectedStepId);
+        if (location) {
+            options.addStep(type, location.index + 1, location.path);
+            return;
+        }
+        options.addStep(type, getSteps().length, rootBranchPath);
+    }
+
+    return t.div(
+        { className: "automation-flow-builder" },
+        renderFlowActionPalette(options, addPaletteStep, getTriggerType),
+        t.div(
             {
-                type: "button",
-                className: "dropdown-item txt-danger",
-                onclick: () => {
-                    if (contextMenuIndex) {
-                        options.removeStep(contextMenuIndex);
+                className: "automation-flow-surface",
+                tabIndex: 0,
+                onmount: (el) => {
+                    if (!FlowDesigner) {
+                        el.appendChild(
+                            t.div(
+                                { className: "alert danger" },
+                                t.div({ className: "content" }, "Flow designer failed to load."),
+                            ),
+                        );
+                        return;
                     }
-                    if (contextMenu.hidePopover) contextMenu.hidePopover();
+
+                    flow = new FlowDesigner(el, {
+                        theme: automationFlowTheme(),
+                        gridType: "dots",
+                        snapToGrid: true,
+                        snapSize: 20,
+                        minimap: true,
+                        allowDblClickAdd: false,
+                        allowDelete: false,
+                        defaultEdgeOptions: {
+                            markerEnd: true,
+                        },
+                        nodeTypes: {
+                            "automation-trigger": renderAutomationFlowNodeContent,
+                            "automation-step": renderAutomationFlowNodeContent,
+                            "automation-placeholder": renderAutomationFlowPlaceholderContent,
+                        },
+                        onNodeClick: selectFlowNode,
+                        onNodeDragStop: (nodes) => {
+                            (nodes || []).forEach((node) => {
+                                if (node?.id && !isAutomationVirtualNodeId(node.id)) {
+                                    positions[node.id] = { ...node.position };
+                                }
+                            });
+                        },
+                        onConnect: connectFlowNodes,
+                    });
+
+                    refreshGraph(true);
+                    stopGraphWatch = watch(
+                        () =>
+                            JSON.stringify({
+                                triggerType: getTriggerType(),
+                                steps: graphStepSnapshot(getSteps()),
+                            }),
+                        () => refreshGraph(),
+                    );
+                    stopSelectionWatch = watch(
+                        () => getSelectedStepId(),
+                        () => refreshGraph(),
+                    );
+                },
+                onunmount: () => {
+                    clearTimeout(fitTimer);
+                    stopGraphWatch?.unwatch?.();
+                    stopSelectionWatch?.unwatch?.();
+                    flow?.destroy?.();
+                    flow = null;
                 },
             },
-            t.i({ className: "ri-delete-bin-line" }),
-            t.span({ className: "txt" }, "Delete step"),
         ),
     );
+}
 
-    options.openContextMenu = (e, stepId) => {
-        e.preventDefault();
-        e.stopPropagation();
-        contextMenuIndex = stepId;
-        contextMenu.style.left = `${e.clientX}px`;
-        contextMenu.style.top = `${e.clientY}px`;
-        if (contextMenu.showPopover) {
-            setTimeout(() => {
-                try {
-                    contextMenu.showPopover();
-                } catch (_) {}
-            }, 100);
-        }
-    };
+const automationTriggerNodeId = "__automation_trigger";
+const automationPlaceholderPrefix = "__automation_placeholder";
+const automationNodeWidth = 260;
+const automationColumnGap = 330;
+const automationBranchGap = 190;
+const automationRootY = 180;
 
-    const selectedStep = findStepById(options.steps, options.selectedStepId) || options.steps[0] || null;
-    return t.div(
-        { className: "automation-n8n-builder" },
-        contextMenu,
-        renderActionPalette(options),
+function renderFlowActionPalette(options, addStep, getTriggerType) {
+    return t.aside(
+        { className: "automation-builder-palette automation-flow-palette" },
+        t.div({ className: "txt-bold m-b-xs" }, "Actions"),
+        t.div({ className: "txt-sm txt-hint m-b-sm" }, "Pick an action, then connect nodes on the canvas."),
         t.div(
-            { className: "automation-builder-canvas" },
-            renderTriggerNode(options),
-            renderBuilderConnector({
-                path: rootBranchPath,
-                index: 0,
-                title: "Add step after trigger",
-                onclick: () => options.addStep("condition", 0, rootBranchPath),
-                active: isDropTargetActive(options, rootBranchPath, 0),
-            }),
-            () => {
-                if (!options.steps.length) {
-                    return t.div(
-                        { className: "automation-builder-empty" },
-                        () =>
-                            isDropTargetActive(options, rootBranchPath, 0)
-                                ? renderActionDropMarker(options.dragActionType)
-                                : null,
-                        t.i({ className: "ri-node-tree", ariaHidden: true }),
-                        t.div({ className: "txt-bold" }, "Start with a step"),
-                        t.div({ className: "txt-sm txt-hint" }, "Use the action palette to add workflow blocks."),
-                    );
-                }
-
-                return renderBuilderStepList(options, options.steps, rootBranchPath, selectedStep, 0);
-            },
+            { className: "automation-builder-palette-actions" },
+            () =>
+                t.div(
+                    { className: "automation-builder-palette-actions-inner" },
+                    ...stepTypeAddOptions(getTriggerType()).map((option) =>
+                        t.button(
+                            {
+                                type: "button",
+                                className: "automation-builder-palette-action",
+                                onclick: () => addStep(option.value),
+                            },
+                            t.div(
+                                { className: "automation-palette-icon-wrap" },
+                                t.i({ className: option.icon || "ri-add-line", ariaHidden: true }),
+                            ),
+                            t.div(
+                                { className: "content block txt-left" },
+                                t.div({ className: "automation-node-title" }, option.label),
+                                t.div({ className: "automation-node-meta" }, option.category || "step"),
+                            ),
+                        )
+                    ),
+                ),
         ),
     );
+}
+
+function buildAutomationFlowGraph({ steps, triggerType, selectedStepId, positions }) {
+    const nodes = [
+        createAutomationFlowNode({
+            id: automationTriggerNodeId,
+            type: "automation-trigger",
+            label: "Trigger",
+            badge: "Start",
+            position: positionForNode(automationTriggerNodeId, { x: 0, y: automationRootY }, positions),
+            data: {
+                icon: "ri-flashlight-line",
+                summary: triggerType || "manual",
+                status: "Ready",
+            },
+            handles: [{ id: "out", type: "source" }],
+        }),
+    ];
+    const edges = [];
+
+    layoutAutomationSequence({
+        nodes,
+        edges,
+        steps: steps || [],
+        path: rootBranchPath,
+        sourceId: automationTriggerNodeId,
+        sourceHandle: "out",
+        startX: automationColumnGap,
+        y: automationRootY,
+        positions,
+        selectedStepId,
+    });
+
+    return { nodes, edges };
+}
+
+function layoutAutomationSequence(args) {
+    const { nodes, edges, steps, path, sourceId, sourceHandle, startX, y, positions, selectedStepId } = args;
+    const safeSteps = steps || [];
+
+    if (!safeSteps.length) {
+        const placeholder = createAutomationPlaceholderNode(path, 0, startX, y, positions);
+        nodes.push(placeholder);
+        edges.push(createAutomationFlowEdge(sourceId, sourceHandle, placeholder.id, "in", placeholder.data?.label));
+        return;
+    }
+
+    let previousId = sourceId;
+    let previousHandle = sourceHandle;
+    safeSteps.forEach((step, index) => {
+        const x = startX + index * automationColumnGap;
+        const validation = clientValidateStep(step);
+        nodes.push(
+            createAutomationFlowNode({
+                id: step.__id,
+                type: "automation-step",
+                label: stepTypeLabel(step.type),
+                badge: path === rootBranchPath ? `Step ${index + 1}` : branchPathLabel(path),
+                position: positionForNode(step.__id, { x, y }, positions),
+                data: {
+                    icon: stepTypeIcon(step.type),
+                    summary: summarizeStep(step),
+                    status: validation.length ? `${validation.length} issue(s)` : "Valid",
+                    hasIssues: validation.length > 0,
+                    selected: selectedStepId === step.__id,
+                    stepType: step.type,
+                },
+                handles: automationStepHandles(step, index < safeSteps.length - 1),
+            }),
+        );
+        edges.push(createAutomationFlowEdge(previousId, previousHandle, step.__id, "in"));
+
+        if (isBranchingStepType(step.type)) {
+            const branches = ensureEditorBranches(step);
+            layoutAutomationSequence({
+                nodes,
+                edges,
+                steps: branches.true || [],
+                path: branchPath(step.__id, "true"),
+                sourceId: step.__id,
+                sourceHandle: "true",
+                startX: x + automationColumnGap,
+                y: y - automationBranchGap,
+                positions,
+                selectedStepId,
+            });
+            layoutAutomationSequence({
+                nodes,
+                edges,
+                steps: branches.false || [],
+                path: branchPath(step.__id, "false"),
+                sourceId: step.__id,
+                sourceHandle: "false",
+                startX: x + automationColumnGap,
+                y: y + automationBranchGap,
+                positions,
+                selectedStepId,
+            });
+        }
+
+        previousId = step.__id;
+        previousHandle = "out";
+    });
+
+    const placeholder = createAutomationPlaceholderNode(
+        path,
+        safeSteps.length,
+        startX + safeSteps.length * automationColumnGap,
+        y,
+        positions,
+    );
+    nodes.push(placeholder);
+    edges.push(createAutomationFlowEdge(previousId, previousHandle, placeholder.id, "in", "Add"));
+}
+
+function automationStepHandles(step, hasNext) {
+    const handles = [{ id: "in", type: "target" }];
+    if (isBranchingStepType(step.type)) {
+        handles.push(
+            { id: "true", type: "source", label: branchTrueLabel(step.type), position: 25 },
+            { id: "out", type: "source", label: hasNext ? "Next" : "Add", position: 50 },
+            { id: "false", type: "source", label: branchFalseLabel(step.type), position: 75 },
+        );
+        return handles;
+    }
+
+    handles.push({ id: "out", type: "source" });
+    return handles;
+}
+
+function createAutomationFlowNode(config) {
+    return {
+        width: automationNodeWidth,
+        ...config,
+    };
+}
+
+function createAutomationPlaceholderNode(path, insertIndex, x, y, positions) {
+    const label = path === rootBranchPath ? "Add step" : `Add ${branchPathLabel(path)} step`;
+    return createAutomationFlowNode({
+        id: automationPlaceholderId(path, insertIndex),
+        type: "automation-placeholder",
+        label,
+        badge: "Add",
+        position: positionForNode(automationPlaceholderId(path, insertIndex), { x, y }, positions),
+        data: {
+            path,
+            insertIndex,
+            label,
+            icon: "ri-add-line",
+            summary: "Click to insert a workflow block.",
+        },
+        handles: [{ id: "in", type: "target" }],
+    });
+}
+
+function createAutomationFlowEdge(source, sourceHandle, target, targetHandle, label = "") {
+    return {
+        id: `edge_${source}_${sourceHandle}_${target}_${targetHandle}`,
+        source,
+        sourceHandle,
+        target,
+        targetHandle,
+        label,
+    };
+}
+
+function positionForNode(id, fallback, positions) {
+    return positions?.[id] ? { ...positions[id] } : fallback;
+}
+
+function automationPlaceholderId(path, insertIndex) {
+    return `${automationPlaceholderPrefix}${branchPathSeparator}${path}${branchPathSeparator}${insertIndex}`;
+}
+
+function isAutomationVirtualNodeId(id) {
+    return id === automationTriggerNodeId || String(id || "").startsWith(automationPlaceholderPrefix);
+}
+
+function branchPathLabel(path) {
+    const parsed = parseBranchPath(path);
+    if (!parsed) {
+        return "Root";
+    }
+
+    const branchKey = parsed.branchKey === "true" ? "True" : "False";
+    return branchKey;
+}
+
+function graphStepSnapshot(steps) {
+    return (steps || []).map((step) => ({
+        id: step.__id,
+        type: step.type,
+        summary: summarizeStep(step),
+        validation: clientValidateStep(step).length,
+        branches: {
+            true: graphStepSnapshot(step.branches?.true),
+            false: graphStepSnapshot(step.branches?.false),
+        },
+    }));
+}
+
+function renderAutomationFlowNodeContent(node) {
+    const data = node.data || {};
+    const classNames = [
+        "automation-flow-node-content",
+        data.selected ? "selected" : "",
+        data.hasIssues ? "has-issues" : "",
+        isAIStep(data.stepType) ? "ai-step" : "",
+        isBranchingStepType(data.stepType) ? "branching-step" : "",
+    ].filter(Boolean).join(" ");
+
+    return `
+        <div class="${classNames}">
+            <div class="automation-flow-node-icon"><i class="${
+        escapeAutomationHtml(data.icon || "ri-node-tree")
+    }"></i></div>
+            <div class="automation-flow-node-copy">
+                <div class="automation-flow-node-summary">${escapeAutomationHtml(data.summary || "")}</div>
+                <div class="automation-flow-node-status ${data.hasIssues ? "has-issues" : ""}">
+                    ${escapeAutomationHtml(data.status || "")}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderAutomationFlowPlaceholderContent(node) {
+    const data = node.data || {};
+    return `
+        <div class="automation-flow-node-content placeholder">
+            <div class="automation-flow-node-icon"><i class="${
+        escapeAutomationHtml(data.icon || "ri-add-line")
+    }"></i></div>
+            <div class="automation-flow-node-copy">
+                <div class="automation-flow-node-summary">${escapeAutomationHtml(data.summary || "")}</div>
+            </div>
+        </div>
+    `;
+}
+
+function moveStepByFlowEdge(options, steps, edge) {
+    if (!edge?.target || edge.target === automationTriggerNodeId || isAutomationVirtualNodeId(edge.target)) {
+        return false;
+    }
+    if (!edge.source || edge.source === edge.target || String(edge.source).startsWith(automationPlaceholderPrefix)) {
+        return false;
+    }
+
+    if (edge.source === automationTriggerNodeId) {
+        return moveStepToPath(options, steps, edge.target, rootBranchPath, 0);
+    }
+
+    const sourceStep = findStepById(steps, edge.source);
+    if (!sourceStep) {
+        return false;
+    }
+
+    if ((edge.sourceHandle === "true" || edge.sourceHandle === "false") && isBranchingStepType(sourceStep.type)) {
+        return moveStepToPath(options, steps, edge.target, branchPath(edge.source, edge.sourceHandle), 0);
+    }
+
+    const rootSteps = [...(steps || [])];
+    const movingStep = findStepById(rootSteps, edge.target);
+    if (!movingStep || stepContainsStep(movingStep, edge.source)) {
+        return false;
+    }
+    const extracted = extractStepFromList(rootSteps, edge.target);
+    if (!extracted) {
+        return false;
+    }
+
+    const sourceLocation = findStepLocation(rootSteps, edge.source);
+    if (!sourceLocation) {
+        return false;
+    }
+
+    const targetList = getStepListByPath(rootSteps, sourceLocation.path);
+    if (!targetList) {
+        return false;
+    }
+
+    targetList.splice(sourceLocation.index + 1, 0, extracted);
+    options.setSteps(rootSteps);
+    return true;
+}
+
+function moveStepToPath(options, steps, stepId, path, insertIndex) {
+    const rootSteps = [...(steps || [])];
+    const movingStep = findStepById(rootSteps, stepId);
+    const parsed = parseBranchPath(path);
+    if (!movingStep || parsed?.stepId === stepId || stepContainsStep(movingStep, parsed?.stepId)) {
+        return false;
+    }
+
+    const extracted = extractStepFromList(rootSteps, stepId);
+    if (!extracted) {
+        return false;
+    }
+
+    const targetList = getStepListByPath(rootSteps, path);
+    if (!targetList) {
+        return false;
+    }
+
+    const safeIndex = Math.max(0, Math.min(Number(insertIndex) || 0, targetList.length));
+    targetList.splice(safeIndex, 0, extracted);
+    options.setSteps(rootSteps);
+    return true;
+}
+
+function extractStepFromList(steps, stepId) {
+    for (let i = 0; i < (steps || []).length; i++) {
+        const step = steps[i];
+        if (step?.__id === stepId) {
+            return steps.splice(i, 1)[0];
+        }
+
+        for (const branchKey of ["true", "false"]) {
+            const found = extractStepFromList(step?.branches?.[branchKey], stepId);
+            if (found) {
+                return found;
+            }
+        }
+    }
+
+    return null;
+}
+
+function findStepLocation(steps, stepId, path = rootBranchPath) {
+    if (!stepId) {
+        return null;
+    }
+
+    for (let i = 0; i < (steps || []).length; i++) {
+        const step = steps[i];
+        if (step?.__id === stepId) {
+            return { path, index: i };
+        }
+
+        for (const branchKey of ["true", "false"]) {
+            const found = findStepLocation(step?.branches?.[branchKey], stepId, branchPath(step.__id, branchKey));
+            if (found) {
+                return found;
+            }
+        }
+    }
+
+    return null;
+}
+
+function stepContainsStep(step, stepId) {
+    if (!step || !stepId) {
+        return false;
+    }
+
+    for (const branchKey of ["true", "false"]) {
+        for (const child of step.branches?.[branchKey] || []) {
+            if (child?.__id === stepId || stepContainsStep(child, stepId)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function escapeAutomationHtml(value) {
+    return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function automationFlowTheme() {
+    return {
+        "--fd-bg": "var(--surfaceAlt1Color)",
+        "--fd-grid": "var(--surfaceAlt2Color)",
+        "--fd-grid-dot": "color-mix(in srgb, var(--surfaceAlt3Color) 65%, transparent)",
+        "--fd-node-bg": "var(--surfaceColor)",
+        "--fd-node-border": "color-mix(in srgb, var(--surfaceAlt2Color) 85%, transparent)",
+        "--fd-node-border-selected": "var(--primaryColor)",
+        "--fd-node-header": "var(--surfaceColor)",
+        "--fd-node-text": "var(--txtColor)",
+        "--fd-node-subtext": "var(--surfaceTxtHintColor)",
+        "--fd-handle": "var(--primaryColor)",
+        "--fd-handle-hover": "var(--primaryColor)",
+        "--fd-handle-connected": "var(--successColor)",
+        "--fd-edge": "color-mix(in srgb, var(--surfaceTxtHintColor) 55%, transparent)",
+        "--fd-edge-selected": "var(--primaryColor)",
+        "--fd-edge-hover": "var(--primaryColor)",
+        "--fd-shadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+        "--fd-selection-bg": "color-mix(in srgb, var(--primaryColor) 8%, transparent)",
+        "--fd-selection-border": "var(--primaryColor)",
+        "--fd-minimap-bg": "var(--surfaceColor)",
+        "--fd-controls-bg": "var(--surfaceColor)",
+        "--fd-controls-border": "var(--surfaceAlt2Color)",
+        "--fd-controls-text": "var(--txtColor)",
+    };
 }
 
 function renderBuilderConnector(attrs) {
