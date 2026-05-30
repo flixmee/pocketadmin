@@ -164,6 +164,106 @@
     border-bottom-color: color-mix(in srgb, var(--surfaceAlt2Color) 80%, transparent);
 }
 
+.automation-flow-surface .fd-node--automation-empty {
+    min-width: 210px;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.automation-flow-surface .fd-node--automation-empty .fd-node__header {
+    display: none;
+}
+
+.automation-flow-surface .fd-node--automation-empty .fd-node__content {
+    padding: 0;
+}
+
+.automation-flow-empty-node {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 52px;
+    padding: 9px 12px;
+    border: 1.5px dashed color-mix(in srgb, var(--primaryColor) 45%, transparent);
+    border-radius: 8px;
+    background: var(--surfaceColor);
+    color: var(--txtColor);
+    cursor: pointer;
+    text-align: left;
+    transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.automation-flow-empty-node:hover {
+    transform: scale(1.035);
+    border-color: var(--primaryColor);
+    background: color-mix(in srgb, var(--primaryColor) 8%, var(--surfaceColor));
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--primaryColor) 12%, transparent);
+}
+
+.automation-flow-empty-node.true-branch {
+    border-color: color-mix(in srgb, var(--successColor) 55%, transparent);
+}
+
+.automation-flow-empty-node.true-branch:hover {
+    border-color: var(--successColor);
+    background: color-mix(in srgb, var(--successColor) 8%, var(--surfaceColor));
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--successColor) 12%, transparent);
+}
+
+.automation-flow-empty-node.false-branch {
+    border-color: color-mix(in srgb, var(--warningColor) 58%, transparent);
+}
+
+.automation-flow-empty-node.false-branch:hover {
+    border-color: var(--warningColor);
+    background: color-mix(in srgb, var(--warningColor) 8%, var(--surfaceColor));
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--warningColor) 12%, transparent);
+}
+
+.automation-flow-empty-plus {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--primaryColor) 18%, transparent);
+    color: var(--primaryColor);
+}
+
+.automation-flow-empty-node.true-branch .automation-flow-empty-plus {
+    background: color-mix(in srgb, var(--successColor) 18%, transparent);
+    color: var(--successColor);
+}
+
+.automation-flow-empty-node.false-branch .automation-flow-empty-plus {
+    background: color-mix(in srgb, var(--warningColor) 18%, transparent);
+    color: var(--warningColor);
+}
+
+.automation-flow-empty-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.automation-flow-empty-title {
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.2;
+}
+
+.automation-flow-empty-meta {
+    margin-top: 2px;
+    color: var(--surfaceTxtHintColor);
+    font-size: 11px;
+    line-height: 1.2;
+}
+
 .automation-flow-node-content {
     display: flex;
     align-items: center;

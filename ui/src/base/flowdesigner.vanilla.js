@@ -57,6 +57,7 @@ const FlowDesigner = (function() {
     const ZOOM_MAX = 2.5;
     const ZOOM_SPEED = 0.0012;
     const CLICK_MOVE_THRESHOLD = 4;
+    const INSERT_PREVIEW_DISTANCE = 44;
 
     // ─── Default themes ───────────────────────────────────────────────────────
 
@@ -74,6 +75,9 @@ const FlowDesigner = (function() {
             "--fd-handle": "#6366f1",
             "--fd-handle-hover": "#818cf8",
             "--fd-handle-connected": "#22d3ee",
+            "--fd-branch-true": "#22c55e",
+            "--fd-branch-false": "#f97316",
+            "--fd-insert": "#8b5cf6",
             "--fd-edge": "#4f5a7a",
             "--fd-edge-selected": "#6366f1",
             "--fd-edge-hover": "#818cf8",
@@ -98,6 +102,9 @@ const FlowDesigner = (function() {
             "--fd-handle": "#6366f1",
             "--fd-handle-hover": "#4f46e5",
             "--fd-handle-connected": "#0891b2",
+            "--fd-branch-true": "#16a34a",
+            "--fd-branch-false": "#ea580c",
+            "--fd-insert": "#7c3aed",
             "--fd-edge": "#c5cde0",
             "--fd-edge-selected": "#6366f1",
             "--fd-edge-hover": "#4f46e5",
@@ -136,38 +143,29 @@ const FlowDesigner = (function() {
         }
 
         _createArrowMarker() {
-            const marker = svgEl("marker", {
-                id: "fd-arrow",
-                markerWidth: "10",
-                markerHeight: "10",
-                refX: "9",
-                refY: "3",
-                orient: "auto",
-                markerUnits: "userSpaceOnUse",
-            });
-            const path = svgEl("path", {
-                d: "M0,0 L0,6 L9,3 z",
-                fill: "var(--fd-edge)",
-            });
-            marker.appendChild(path);
-            this.defs.appendChild(marker);
+            const createMarker = (id, fill) => {
+                const marker = svgEl("marker", {
+                    id,
+                    markerWidth: "10",
+                    markerHeight: "10",
+                    refX: "9",
+                    refY: "3",
+                    orient: "auto",
+                    markerUnits: "userSpaceOnUse",
+                });
+                const path = svgEl("path", {
+                    d: "M0,0 L0,6 L9,3 z",
+                    fill,
+                });
+                marker.appendChild(path);
+                this.defs.appendChild(marker);
+            };
 
-            // Arrow selected
-            const markerSel = svgEl("marker", {
-                id: "fd-arrow-sel",
-                markerWidth: "10",
-                markerHeight: "10",
-                refX: "9",
-                refY: "3",
-                orient: "auto",
-                markerUnits: "userSpaceOnUse",
-            });
-            const pathSel = svgEl("path", {
-                d: "M0,0 L0,6 L9,3 z",
-                fill: "var(--fd-edge-selected)",
-            });
-            markerSel.appendChild(pathSel);
-            this.defs.appendChild(markerSel);
+            createMarker("fd-arrow", "var(--fd-edge)");
+            createMarker("fd-arrow-sel", "var(--fd-edge-selected)");
+            createMarker("fd-arrow-true", "var(--fd-branch-true)");
+            createMarker("fd-arrow-false", "var(--fd-branch-false)");
+            createMarker("fd-arrow-insert", "var(--fd-insert)");
         }
 
         render(edges, selectedEdgeIds = new Set()) {
@@ -184,24 +182,55 @@ const FlowDesigner = (function() {
                 if (!this.edgeEls.has(edge.id)) {
                     this._createEdgeEl(edge);
                 }
-                const { path, hitPath, label } = this.edgeEls.get(edge.id);
+                const { group, path, hitPath, label, deleteBtn } = this.edgeEls.get(edge.id);
 
-                const stroke = isSelected ? "var(--fd-edge-selected)" : edge.style?.stroke || "var(--fd-edge)";
-                const strokeW = isSelected ? 2.5 : edge.style?.strokeWidth || 2;
-                const marker = isSelected ? "url(#fd-arrow-sel)" : "url(#fd-arrow)";
+                const branch = edge.sourceHandle === "true" || edge.sourceHandle === "false" ? edge.sourceHandle : "";
+                const isInsert = this.flow._dropPreview?.edgeId === edge.id;
+                const isDimmed = !!this.flow._dragging && this.flow._dragging.hasMoved && !isInsert;
+                const stroke = isInsert
+                    ? "var(--fd-insert)"
+                    : isSelected
+                    ? "var(--fd-edge-selected)"
+                    : branch === "true"
+                    ? "var(--fd-branch-true)"
+                    : branch === "false"
+                    ? "var(--fd-branch-false)"
+                    : edge.style?.stroke || "var(--fd-edge)";
+                const strokeW = isInsert ? 3 : isSelected ? 2.5 : edge.style?.strokeWidth || 2;
+                const marker = isInsert
+                    ? "url(#fd-arrow-insert)"
+                    : isSelected
+                    ? "url(#fd-arrow-sel)"
+                    : branch === "true"
+                    ? "url(#fd-arrow-true)"
+                    : branch === "false"
+                    ? "url(#fd-arrow-false)"
+                    : "url(#fd-arrow)";
 
+                group.classList.toggle("fd-edge--selected", isSelected);
+                group.classList.toggle("fd-edge--branch-true", branch === "true");
+                group.classList.toggle("fd-edge--branch-false", branch === "false");
+                group.classList.toggle("fd-edge--insert-target", isInsert);
+                group.classList.toggle("fd-edge--dimmed", isDimmed);
                 path.setAttribute("d", d);
                 path.setAttribute("stroke", stroke);
                 path.setAttribute("stroke-width", strokeW);
                 path.setAttribute("marker-end", edge.markerEnd !== false ? marker : "");
                 hitPath.setAttribute("d", d);
 
+                const mx = (x1 + x2) / 2;
+                const my = (y1 + y2) / 2;
+
                 if (edge.label && label) {
-                    const mx = (x1 + x2) / 2;
-                    const my = (y1 + y2) / 2;
                     label.setAttribute("x", mx);
                     label.setAttribute("y", my - 8);
                     label.textContent = edge.label;
+                    label.classList.toggle("fd-edge__label--true", branch === "true");
+                    label.classList.toggle("fd-edge__label--false", branch === "false");
+                }
+
+                if (deleteBtn) {
+                    deleteBtn.setAttribute("transform", `translate(${mx}, ${my})`);
                 }
             }
 
@@ -229,6 +258,7 @@ const FlowDesigner = (function() {
                 "stroke-width": "14",
                 cursor: "pointer",
                 "data-edge-id": edge.id,
+                "pointer-events": "stroke",
             });
 
             group.appendChild(path);
@@ -246,8 +276,41 @@ const FlowDesigner = (function() {
                 group.appendChild(label);
             }
 
+            const deleteBtn = svgEl("g", {
+                class: "fd-edge-delete",
+                "data-edge-delete-id": edge.id,
+                "aria-label": "Remove connection",
+                role: "button",
+                tabindex: "0",
+            });
+            deleteBtn.appendChild(svgEl("circle", { r: "10" }));
+            const deleteIcon = svgEl("text", {
+                "text-anchor": "middle",
+                "dominant-baseline": "central",
+                y: "-0.5",
+                "pointer-events": "none",
+            });
+            deleteIcon.textContent = "×";
+            deleteBtn.appendChild(deleteIcon);
+            deleteBtn.addEventListener("mousedown", e => {
+                e.stopPropagation();
+                e.preventDefault();
+            });
+            deleteBtn.addEventListener("click", e => {
+                e.stopPropagation();
+                e.preventDefault();
+                this.flow._deleteEdgeFromControl(edge.id, e);
+            });
+            deleteBtn.addEventListener("keydown", e => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.stopPropagation();
+                e.preventDefault();
+                this.flow._deleteEdgeFromControl(edge.id, e);
+            });
+            group.appendChild(deleteBtn);
+
             this.svg.insertBefore(group, this.ghostGroup);
-            this.edgeEls.set(edge.id, { group, path, hitPath, label });
+            this.edgeEls.set(edge.id, { group, path, hitPath, label, deleteBtn });
         }
 
         updateGhost(x1, y1, x2, y2, visible) {
@@ -317,9 +380,15 @@ const FlowDesigner = (function() {
                 });
                 h.addEventListener("mouseenter", () => {
                     h.classList.add("fd-handle--hover");
+                    if (h.dataset.handleType === "source") {
+                        this.flow._previewHandle(node.id, h.dataset.handleId, true);
+                    }
                 });
                 h.addEventListener("mouseleave", () => {
                     h.classList.remove("fd-handle--hover");
+                    if (!this.flow._connecting) {
+                        this.flow._previewHandle(node.id, h.dataset.handleId, false);
+                    }
                 });
             });
         }
@@ -343,9 +412,10 @@ const FlowDesigner = (function() {
             data-handle-id="${h.id}"
             data-handle-type="${h.type}"
             data-node-id="${node.id}"
+            data-handle-branch="${escapeHtml(h.branch || h.id || "")}"
             style="top: ${h.position != null ? h.position + "%" : (100 / (list.length + 1)) * (i + 1) + "%"}"
             title="${escapeHtml(h.label || h.id)}">
-            ${h.label ? `<span class="fd-handle__label fd-handle__label--${side}">${escapeHtml(h.label)}</span>` : ""}
+            ${h.type === "source" ? `<span class="fd-handle__plus">+</span>` : ""}
           </div>`,
                     )
                     .join("");
@@ -397,6 +467,10 @@ const FlowDesigner = (function() {
 
             el.classList.toggle("fd-node--selected", isSelected);
             el.classList.toggle("fd-node--dragging", !!node._dragging);
+            el.classList.toggle("fd-node--drop-invalid", this.flow._isNodeDimmedDuringDrag(node.id));
+
+            const nudge = this.flow._nodeInsertionNudge(node.id);
+            el.style.translate = nudge ? `${nudge.x}px ${nudge.y}px` : "";
 
             // Update title if changed
             const titleEl = el.querySelector(".fd-node__title");
@@ -622,14 +696,18 @@ const FlowDesigner = (function() {
                     editable: true,
                     onNodeClick: null,
                     onEdgeClick: null,
+                    onEdgeDelete: null,
                     onConnect: null,
+                    onHandleClick: null,
                     onNodeDragStop: null,
+                    onEdgeDrop: null,
                     onChange: null,
                     onSelectionChange: null,
                     defaultEdgeOptions: {},
                     nodeTypes: {},
                     allowDblClickAdd: true,
                     allowDelete: true,
+                    allowEdgeDelete: true,
                     defaultZoom: 1,
                 },
                 options,
@@ -647,6 +725,7 @@ const FlowDesigner = (function() {
             this._dragging = null; // { nodeIds, startPositions, startMouse }
             this._panning = null; // { startMouse, startViewport }
             this._connecting = null; // { sourceNodeId, handleId, startPos }
+            this._dropPreview = null; // { edgeId, x, y }
             this._selecting = null; // { startX, startY }
             this._spacePanning = false;
 
@@ -693,7 +772,7 @@ const FlowDesigner = (function() {
             // Edge SVG layer (inside viewport)
             this._edgeSvg = svgEl("svg", {
                 class: "fd-edge-layer",
-                style: "position:absolute;overflow:visible;pointer-events:none",
+                style: "position:absolute;overflow:visible;pointer-events:visiblePainted",
                 width: "1",
                 height: "1",
             });
@@ -705,6 +784,13 @@ const FlowDesigner = (function() {
             this._nodeLayer.className = "fd-node-layer";
             this._viewport.appendChild(this._nodeLayer);
             this._nodeRenderer = new NodeRenderer(this._nodeLayer, this);
+
+            this._insertPlaceholder = document.createElement("div");
+            this._insertPlaceholder.className = "fd-insert-placeholder";
+            this._insertPlaceholder.innerHTML =
+                `<span class="fd-insert-placeholder__icon">+</span><span>Drop to insert</span>`;
+            this._insertPlaceholder.style.display = "none";
+            this._viewport.appendChild(this._insertPlaceholder);
 
             // Selection box
             this._selectionBox = document.createElement("div");
@@ -900,6 +986,7 @@ const FlowDesigner = (function() {
                     node._dragging = true;
                 }
 
+                this._updateDropPreview(e.clientX, e.clientY);
                 this._renderAll();
                 return;
             }
@@ -907,6 +994,10 @@ const FlowDesigner = (function() {
             if (this._connecting) {
                 const pos = this._screenToCanvas(e.clientX, e.clientY);
                 const { x1, y1 } = this._connecting;
+                this._connecting.hasMoved = Math.hypot(
+                    e.clientX - this._connecting.startMouse.x,
+                    e.clientY - this._connecting.startMouse.y,
+                ) > CLICK_MOVE_THRESHOLD;
                 this._edgeRenderer.updateGhost(x1, y1, pos.x, pos.y, true);
                 return;
             }
@@ -952,13 +1043,21 @@ const FlowDesigner = (function() {
                     const node = this._getNode(nodeId);
                     if (node) delete node._dragging;
                 }
+                const dropPreview = this._dropPreview;
                 if (!isClick) {
                     this._options.onNodeDragStop && this._options.onNodeDragStop(
                         this._dragging.nodeIds.map(id => this._getNode(id)),
                     );
+                    if (dropPreview) {
+                        const edge = this._getEdge(dropPreview.edgeId);
+                        const nodes = this._dragging.nodeIds.map(id => this._getNode(id)).filter(Boolean);
+                        this._options.onEdgeDrop && this._options.onEdgeDrop({ edge, nodes, position: dropPreview });
+                        emit(this._container, "fd:edgedrop", { edge, nodes, position: dropPreview });
+                    }
                     this._fireChange();
                 }
                 this._dragging = null;
+                this._clearDropPreview();
                 if (isClick) {
                     const node = this._getNode(draggedNodeId);
                     this._options.onNodeClick && this._options.onNodeClick(node, e);
@@ -983,9 +1082,13 @@ const FlowDesigner = (function() {
                         targetNodeId,
                         targetHandleId,
                     );
+                } else if (!this._connecting.hasMoved) {
+                    this._emitHandleClick(this._connecting.sourceNodeId, this._connecting.handleId, e);
                 }
                 this._edgeRenderer.updateGhost(0, 0, 0, 0, false);
                 this._connecting = null;
+                this._previewHandle("", "", false);
+                this._root.classList.remove("fd-root--connecting");
             }
 
             if (this._selecting) {
@@ -1082,6 +1185,7 @@ const FlowDesigner = (function() {
         }
 
         _onEdgeClick(edgeId, e) {
+            if (e.target.closest(".fd-edge-delete")) return;
             if (!e.shiftKey) this._clearSelection();
             this._selectedEdgeIds.add(edgeId);
             const edge = this._getEdge(edgeId);
@@ -1103,7 +1207,27 @@ const FlowDesigner = (function() {
                 handleId,
                 x1: pos.x,
                 y1: pos.y,
+                startMouse: { x: e.clientX, y: e.clientY },
+                hasMoved: false,
             };
+            this._root.classList.add("fd-root--connecting");
+        }
+
+        _deleteEdgeFromControl(edgeId, originalEvent) {
+            if (!this._options.editable || this._options.allowEdgeDelete === false) return;
+            const edge = this._getEdge(edgeId);
+            if (!edge) return;
+
+            if (this._options.onEdgeDelete) {
+                const result = this._options.onEdgeDelete(edge, originalEvent);
+                if (result === false) return;
+            }
+
+            this.edges = this.edges.filter(e => e.id !== edgeId);
+            this._selectedEdgeIds.delete(edgeId);
+            this._fireChange();
+            this._renderAll();
+            emit(this._container, "fd:edgedelete", { edge });
         }
 
         // ── Core helpers ────────────────────────────────────────────────────────
@@ -1120,6 +1244,16 @@ const FlowDesigner = (function() {
             if (this._spacePanning === isPanning) return;
             this._spacePanning = isPanning;
             this._root.classList.toggle("fd-root--space-panning", isPanning);
+        }
+
+        _previewHandle(nodeId, handleId, visible) {
+            if (!visible) {
+                this._edgeRenderer.updateGhost(0, 0, 0, 0, false);
+                return;
+            }
+            const pos = this._nodeRenderer.getHandlePosition(nodeId, handleId, "source");
+            if (!pos) return;
+            this._edgeRenderer.updateGhost(pos.x, pos.y, pos.x + 72, pos.y, true);
         }
 
         _isTextInput(el) {
@@ -1186,6 +1320,88 @@ const FlowDesigner = (function() {
             this._fireChange();
             this._renderAll();
             emit(this._container, "fd:connect", { edge });
+        }
+
+        _emitHandleClick(nodeId, handleId, originalEvent) {
+            const node = this._getNode(nodeId);
+            const detail = { node, nodeId, handleId, originalEvent };
+            this._options.onHandleClick && this._options.onHandleClick(detail);
+            emit(this._container, "fd:handleclick", detail);
+        }
+
+        _updateDropPreview(clientX, clientY) {
+            if (!this._dragging?.hasMoved) return;
+            const pos = this._screenToCanvas(clientX, clientY);
+            const draggedIds = new Set(this._dragging.nodeIds);
+            let best = null;
+
+            for (const edge of this.edges) {
+                if (draggedIds.has(edge.source) || draggedIds.has(edge.target)) {
+                    continue;
+                }
+                const coords = this._getEdgeCoords(edge);
+                if (!coords) continue;
+                const distance = this._distanceToSegment(pos.x, pos.y, coords.x1, coords.y1, coords.x2, coords.y2);
+                if (distance > INSERT_PREVIEW_DISTANCE) {
+                    continue;
+                }
+                if (!best || distance < best.distance) {
+                    best = {
+                        edgeId: edge.id,
+                        x: (coords.x1 + coords.x2) / 2,
+                        y: (coords.y1 + coords.y2) / 2,
+                        distance,
+                    };
+                }
+            }
+
+            this._dropPreview = best;
+            this._root.classList.toggle("fd-root--drop-preview", !!best);
+            this._positionInsertPlaceholder();
+        }
+
+        _clearDropPreview() {
+            this._dropPreview = null;
+            this._root.classList.remove("fd-root--drop-preview");
+            if (this._insertPlaceholder) {
+                this._insertPlaceholder.style.display = "none";
+            }
+        }
+
+        _positionInsertPlaceholder() {
+            if (!this._insertPlaceholder) return;
+            if (!this._dropPreview) {
+                this._insertPlaceholder.style.display = "none";
+                return;
+            }
+            this._insertPlaceholder.style.display = "flex";
+            this._insertPlaceholder.style.transform = `translate(${this._dropPreview.x - 58}px, ${
+                this._dropPreview.y - 20
+            }px)`;
+        }
+
+        _distanceToSegment(px, py, x1, y1, x2, y2) {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            if (!dx && !dy) return Math.hypot(px - x1, py - y1);
+            const t = clamp(((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy), 0, 1);
+            return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+        }
+
+        _nodeInsertionNudge(nodeId) {
+            if (!this._dropPreview) return null;
+            const edge = this._getEdge(this._dropPreview.edgeId);
+            if (!edge) return null;
+            if (edge.source === nodeId) return { x: -12, y: 0 };
+            if (edge.target === nodeId) return { x: 12, y: 0 };
+            return null;
+        }
+
+        _isNodeDimmedDuringDrag(nodeId) {
+            if (!this._dragging?.hasMoved) return false;
+            if (this._dragging.nodeIds.includes(nodeId)) return false;
+            const edge = this._dropPreview ? this._getEdge(this._dropPreview.edgeId) : null;
+            return !(edge && (edge.source === nodeId || edge.target === nodeId));
         }
 
         _getNode(id) {
@@ -1260,6 +1476,7 @@ const FlowDesigner = (function() {
 
             this._nodeRenderer.render(this.nodes, this._selectedNodeIds);
             this._edgeRenderer.render(this.edges, this._selectedEdgeIds);
+            this._positionInsertPlaceholder();
 
             if (this._minimap) {
                 this._minimap.render(this.nodes, this.edges, this.viewport, this._containerSize());
@@ -1640,9 +1857,10 @@ const FlowDesigner = (function() {
       border-radius: 10px;
       box-shadow: var(--fd-shadow);
       min-width: ${NODE_MIN_W}px;
-      transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+      transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s, translate 0.18s ease;
       cursor: grab;
       z-index: 1;
+      will-change: transform, translate;
     }
 
     .fd-node:active { cursor: grabbing; }
@@ -1658,6 +1876,11 @@ const FlowDesigner = (function() {
       box-shadow: 0 16px 48px rgba(0,0,0,0.5);
       z-index: 100;
       cursor: grabbing;
+    }
+
+    .fd-node--drop-invalid {
+      opacity: 0.36;
+      filter: saturate(0.7);
     }
 
     /* Node types */
@@ -1737,6 +1960,9 @@ const FlowDesigner = (function() {
       transform: translateY(-50%);
       transition: background 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
       box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .fd-handle--left {
@@ -1751,8 +1977,8 @@ const FlowDesigner = (function() {
     .fd-handle:hover {
       background: var(--fd-handle-hover);
       border-color: var(--fd-handle-hover);
-      transform: translateY(-50%) scale(1.25);
-      box-shadow: 0 0 0 4px rgba(99,102,241,0.2);
+      transform: translateY(-50%) scale(1.32);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--fd-handle-hover) 22%, transparent), 0 0 18px color-mix(in srgb, var(--fd-handle-hover) 45%, transparent);
     }
 
     .fd-handle--connectable {
@@ -1762,23 +1988,163 @@ const FlowDesigner = (function() {
       box-shadow: 0 0 0 5px rgba(34,211,238,0.2) !important;
     }
 
-    .fd-handle__label {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 10px;
-      color: var(--fd-node-subtext);
-      white-space: nowrap;
+    .fd-handle__plus {
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      opacity: 0;
+      transform: scale(0.55);
+      transition: opacity 0.14s ease, transform 0.14s ease;
       pointer-events: none;
-      font-weight: 500;
     }
 
-    .fd-handle__label--left {
-      left: calc(100% + 7px);
+    .fd-handle--source:hover .fd-handle__plus,
+    .fd-handle--source.fd-handle--hover .fd-handle__plus,
+    .fd-handle--source.fd-handle--connectable .fd-handle__plus {
+      opacity: 1;
+      transform: scale(1);
     }
 
-    .fd-handle__label--right {
-      right: calc(100% + 7px);
+    .fd-handle[data-handle-branch="true"] {
+      border-color: var(--fd-branch-true);
+    }
+
+    .fd-handle[data-handle-branch="false"] {
+      border-color: var(--fd-branch-false);
+    }
+
+    .fd-handle[data-handle-branch="true"]:hover,
+    .fd-handle[data-handle-branch="true"].fd-handle--hover {
+      background: var(--fd-branch-true);
+      border-color: var(--fd-branch-true);
+    }
+
+    .fd-handle[data-handle-branch="false"]:hover,
+    .fd-handle[data-handle-branch="false"].fd-handle--hover {
+      background: var(--fd-branch-false);
+      border-color: var(--fd-branch-false);
+    }
+
+    /* ── Edges ── */
+    .fd-edge path:first-child {
+      transition: stroke 0.14s ease, stroke-width 0.14s ease, opacity 0.14s ease;
+    }
+
+    .fd-edge--branch-true path:first-child,
+    .fd-edge--branch-false path:first-child {
+      stroke-dasharray: 0;
+    }
+
+    .fd-edge--dimmed path:first-child {
+      opacity: 0.22;
+    }
+
+    .fd-edge--insert-target path:first-child {
+      filter: drop-shadow(0 0 6px color-mix(in srgb, var(--fd-insert) 50%, transparent));
+      stroke-dasharray: 8 5;
+      animation: fd-dash 0.7s linear infinite;
+    }
+
+    .fd-edge-delete {
+      opacity: 0;
+      transform-box: fill-box;
+      transform-origin: center;
+      pointer-events: none;
+      cursor: pointer;
+      transition: opacity 0.12s ease, scale 0.12s ease;
+      scale: 0.86;
+    }
+
+    .fd-edge:hover .fd-edge-delete,
+    .fd-edge:focus-within .fd-edge-delete,
+    .fd-edge--selected .fd-edge-delete {
+      opacity: 1;
+      pointer-events: auto;
+      scale: 1;
+    }
+
+    .fd-edge-delete circle {
+      fill: var(--fd-node-bg);
+      stroke: color-mix(in srgb, var(--fd-edge-hover) 72%, transparent);
+      stroke-width: 1.5;
+      filter: drop-shadow(0 6px 12px rgba(0,0,0,0.18));
+    }
+
+    .fd-edge-delete text {
+      fill: var(--fd-edge-hover);
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .fd-edge-delete:hover circle,
+    .fd-edge-delete:focus circle {
+      fill: var(--fd-edge-hover);
+      stroke: var(--fd-edge-hover);
+    }
+
+    .fd-edge-delete:hover text,
+    .fd-edge-delete:focus text {
+      fill: #fff;
+    }
+
+    .fd-edge__label--true,
+    .fd-edge__label--false {
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .fd-edge__label--true { fill: var(--fd-branch-true); }
+    .fd-edge__label--false { fill: var(--fd-branch-false); }
+
+    .fd-ghost-edge path {
+      filter: drop-shadow(0 0 8px color-mix(in srgb, var(--fd-handle-hover) 45%, transparent));
+      animation: fd-dash 0.7s linear infinite;
+    }
+
+    .fd-insert-placeholder {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 116px;
+      height: 40px;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border: 1.5px dashed color-mix(in srgb, var(--fd-insert) 78%, transparent);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--fd-bg) 72%, transparent);
+      color: var(--fd-node-text);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.24), 0 0 0 4px color-mix(in srgb, var(--fd-insert) 10%, transparent);
+      pointer-events: none;
+      z-index: 80;
+      will-change: transform, opacity;
+      animation: fd-placeholder-pulse 1.2s ease-in-out infinite;
+      backdrop-filter: blur(10px);
+    }
+
+    .fd-insert-placeholder__icon {
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--fd-insert);
+      color: #fff;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    @keyframes fd-placeholder-pulse {
+      0%, 100% { opacity: 0.82; box-shadow: 0 10px 30px rgba(0,0,0,0.22), 0 0 0 3px color-mix(in srgb, var(--fd-insert) 8%, transparent); }
+      50% { opacity: 1; box-shadow: 0 10px 30px rgba(0,0,0,0.26), 0 0 0 7px color-mix(in srgb, var(--fd-insert) 14%, transparent); }
+    }
+
+    @keyframes fd-dash {
+      to { stroke-dashoffset: -13; }
     }
 
     /* ── Selection box ── */
