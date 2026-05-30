@@ -276,38 +276,41 @@ const FlowDesigner = (function() {
                 group.appendChild(label);
             }
 
-            const deleteBtn = svgEl("g", {
-                class: "fd-edge-delete",
-                "data-edge-delete-id": edge.id,
-                "aria-label": "Remove connection",
-                role: "button",
-                tabindex: "0",
-            });
-            deleteBtn.appendChild(svgEl("circle", { r: "10" }));
-            const deleteIcon = svgEl("text", {
-                "text-anchor": "middle",
-                "dominant-baseline": "central",
-                y: "-0.5",
-                "pointer-events": "none",
-            });
-            deleteIcon.textContent = "×";
-            deleteBtn.appendChild(deleteIcon);
-            deleteBtn.addEventListener("mousedown", e => {
-                e.stopPropagation();
-                e.preventDefault();
-            });
-            deleteBtn.addEventListener("click", e => {
-                e.stopPropagation();
-                e.preventDefault();
-                this.flow._deleteEdgeFromControl(edge.id, e);
-            });
-            deleteBtn.addEventListener("keydown", e => {
-                if (e.key !== "Enter" && e.key !== " ") return;
-                e.stopPropagation();
-                e.preventDefault();
-                this.flow._deleteEdgeFromControl(edge.id, e);
-            });
-            group.appendChild(deleteBtn);
+            let deleteBtn = null;
+            if (this.flow._options.allowEdgeDelete !== false) {
+                deleteBtn = svgEl("g", {
+                    class: "fd-edge-delete",
+                    "data-edge-delete-id": edge.id,
+                    "aria-label": "Remove connection",
+                    role: "button",
+                    tabindex: "0",
+                });
+                deleteBtn.appendChild(svgEl("circle", { r: "10" }));
+                const deleteIcon = svgEl("text", {
+                    "text-anchor": "middle",
+                    "dominant-baseline": "central",
+                    y: "-0.5",
+                    "pointer-events": "none",
+                });
+                deleteIcon.textContent = "×";
+                deleteBtn.appendChild(deleteIcon);
+                deleteBtn.addEventListener("mousedown", e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                });
+                deleteBtn.addEventListener("click", e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    this.flow._deleteEdgeFromControl(edge.id, e);
+                });
+                deleteBtn.addEventListener("keydown", e => {
+                    if (e.key !== "Enter" && e.key !== " ") return;
+                    e.stopPropagation();
+                    e.preventDefault();
+                    this.flow._deleteEdgeFromControl(edge.id, e);
+                });
+                group.appendChild(deleteBtn);
+            }
 
             this.svg.insertBefore(group, this.ghostGroup);
             this.edgeEls.set(edge.id, { group, path, hitPath, label, deleteBtn });
@@ -721,6 +724,8 @@ const FlowDesigner = (function() {
                     editable: true,
                     onNodeClick: null,
                     onEdgeClick: null,
+                    onNodesDelete: null,
+                    onEdgesDelete: null,
                     onEdgeDelete: null,
                     onConnect: null,
                     onHandleClick: null,
@@ -731,6 +736,7 @@ const FlowDesigner = (function() {
                     onSelectionChange: null,
                     defaultEdgeOptions: {},
                     nodeTypes: {},
+                    isNodeDeletable: null,
                     allowDblClickAdd: true,
                     allowDelete: true,
                     allowEdgeDelete: true,
@@ -1157,7 +1163,9 @@ const FlowDesigner = (function() {
             if ((e.key === "Delete" || e.key === "Backspace") && this._options.editable) {
                 if (this._isTextInput(document.activeElement)) return;
                 if (!this._options.allowDelete) return;
-                this._deleteSelected();
+                if (this._deleteSelected(e)) {
+                    e.preventDefault();
+                }
             }
 
             if (e.key === "a" && (e.ctrlKey || e.metaKey)) {
@@ -1302,11 +1310,38 @@ const FlowDesigner = (function() {
             this._emitSelection();
         }
 
-        _deleteSelected() {
-            for (const id of this._selectedEdgeIds) {
+        _deleteSelected(originalEvent) {
+            const selectedNodes = [...this._selectedNodeIds].map(id => this._getNode(id)).filter(Boolean);
+            const selectedEdges = [...this._selectedEdgeIds].map(id => this._getEdge(id)).filter(Boolean);
+            const deletableNodes = selectedNodes.filter(node =>
+                !this._options.isNodeDeletable || this._options.isNodeDeletable(node) !== false
+            );
+            const deletableEdges = this._options.allowEdgeDelete === false ? [] : selectedEdges;
+            const detail = {
+                nodes: deletableNodes,
+                edges: deletableEdges,
+                nodeIds: deletableNodes.map(node => node.id),
+                edgeIds: deletableEdges.map(edge => edge.id),
+                originalEvent,
+            };
+
+            if (!detail.nodeIds.length && !detail.edgeIds.length) {
+                return false;
+            }
+
+            if (detail.nodeIds.length && this._options.onNodesDelete) {
+                const result = this._options.onNodesDelete(detail);
+                if (result === false) return false;
+            }
+            if (detail.edgeIds.length && this._options.onEdgesDelete) {
+                const result = this._options.onEdgesDelete(detail);
+                if (result === false) return false;
+            }
+
+            for (const id of detail.edgeIds) {
                 this.edges = this.edges.filter(e => e.id !== id);
             }
-            for (const id of this._selectedNodeIds) {
+            for (const id of detail.nodeIds) {
                 // Remove connected edges
                 this.edges = this.edges.filter(e => e.source !== id && e.target !== id);
                 this.nodes = this.nodes.filter(n => n.id !== id);
@@ -1314,6 +1349,8 @@ const FlowDesigner = (function() {
             this._clearSelection();
             this._fireChange();
             this._renderAll();
+            emit(this._container, "fd:selectiondelete", detail);
+            return true;
         }
 
         _createEdge(sourceNodeId, sourceHandleId, targetNodeId, targetHandleId) {

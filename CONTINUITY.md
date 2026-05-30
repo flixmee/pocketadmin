@@ -3,7 +3,7 @@ Goal (incl. success criteria):
 - Redesign the automation workflow builder UI to match the requested 600px three-zone layout.
 - Success: top bar is fixed at 48px and single-line; info panel overlays top-left with collapse behavior; flow canvas fills remaining height with dotted grid, compact controls, bottom-centered horizontal nodes, line endpoints, Tabler outline icons, flat styling, 0.5px borders, CSS variable colors, no gradients, no shadows except subtle panel shadow, sentence case text, and minimum 11px fonts.
 - Latest adjustment: make automation name and tag editable inline in `.automation-workflow-title-row`; remove name/tag controls from the info panel.
-- Latest request: add default ghost output line/+ placeholders for unconnected FlowDesigner source handles.
+- Latest request: when users drag-select nodes in FlowDesigner and press Delete, remove the selected automation nodes.
 
 Constraints/Assumptions:
 
@@ -46,8 +46,12 @@ State:
     - Placeholder line/+ controls now disappear automatically once a real outgoing edge exists for the source handle.
     - Verified `npm run build` from `ui/` after placeholder change; Vite build passed with the known sandbox dprint cache warning.
     - Restored generated `ui/dist/index.html` hash churn after build.
+    - Added FlowDesigner batch delete hooks for selected nodes/edges, including an `isNodeDeletable` guard and hidden edge delete controls when `allowEdgeDelete` is false.
+    - Wired automation visual builder Delete/Backspace handling so drag-selected real step nodes are removed from `props.steps`; trigger and empty placeholder nodes are protected.
+    - Verified `npm run build` from `ui/` after selection delete change; Vite build passed with the known sandbox dprint cache warning.
+    - Restored generated `ui/dist/index.html` hash churn after build.
   - Now:
-    - Ready to report the FlowDesigner placeholder implementation.
+    - Ready to report drag-select Delete behavior.
   - Next:
     - Optional browser smoke test once an automation fixture/page path is available.
 

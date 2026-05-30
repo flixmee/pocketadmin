@@ -157,14 +157,23 @@ export function stepEditor(propsArg = {}) {
     }
 
     function removeStep(stepId) {
-        const nextSteps = removeStepFromList([...(props.steps || [])], stepId);
-        delete data.expandedById[stepId];
-        if (data.selectedStepId === stepId) {
+        removeSteps([stepId]);
+    }
+
+    function removeSteps(stepIds) {
+        const ids = new Set((stepIds || []).filter(Boolean));
+        if (!ids.size) {
+            return false;
+        }
+
+        const nextSteps = removeStepsFromList([...(props.steps || [])], ids);
+        ids.forEach((stepId) => delete data.expandedById[stepId]);
+        if (data.selectedStepId && !findStepById(nextSteps, data.selectedStepId)) {
             data.selectedStepId = firstStepInList(nextSteps)?.__id || "";
-            data.drawerOpen = !!data.selectedStepId;
             closeDrawer();
         }
         setSteps(nextSteps);
+        return true;
     }
 
     function changeStepType(step, nextType) {
@@ -569,6 +578,7 @@ export function stepEditor(propsArg = {}) {
                     getStepLimit: () => data.schemas?.limits?.maxSteps || 100,
                     selectStep,
                     addStep,
+                    removeSteps,
                     setSteps,
                 })
                 : null,
@@ -909,6 +919,16 @@ function renderVisualBuilder(options) {
         }
     }
 
+    function deleteFlowNodes(detail = {}) {
+        const nodeIds = (detail.nodeIds || []).filter((id) => !isAutomationVirtualNodeId(id));
+        if (!nodeIds.length) {
+            return false;
+        }
+
+        nodeIds.forEach((id) => delete positions[id]);
+        return options.removeSteps?.(nodeIds) !== false;
+    }
+
     const actionDrawer = renderFlowActionDrawer(options, addPaletteStep, getTriggerType, local);
 
     return t.div(
@@ -935,7 +955,9 @@ function renderVisualBuilder(options) {
                         snapSize: 20,
                         minimap: false,
                         allowDblClickAdd: false,
-                        allowDelete: false,
+                        allowDelete: true,
+                        allowEdgeDelete: false,
+                        isNodeDeletable: (node) => !isAutomationVirtualNodeId(node?.id),
                         defaultEdgeOptions: {
                             markerEnd: false,
                         },
@@ -960,6 +982,7 @@ function renderVisualBuilder(options) {
                             const context = normalizeFlowAddContext({ nodeId, handleId });
                             options.addStep("condition", context.index, context.path);
                         },
+                        onNodesDelete: deleteFlowNodes,
                         onEdgeDrop: handleFlowEdgeDrop,
                     });
 
@@ -2104,13 +2127,13 @@ function findStepById(steps, stepId) {
     return null;
 }
 
-function removeStepFromList(steps, stepId) {
+function removeStepsFromList(steps, stepIds) {
     return (steps || [])
-        .filter((step) => step.__id !== stepId)
+        .filter((step) => !stepIds.has(step.__id))
         .map((step) => {
             if (step.branches) {
-                step.branches.true = removeStepFromList(step.branches.true || [], stepId);
-                step.branches.false = removeStepFromList(step.branches.false || [], stepId);
+                step.branches.true = removeStepsFromList(step.branches.true || [], stepIds);
+                step.branches.false = removeStepsFromList(step.branches.false || [], stepIds);
             }
             return step;
         });
