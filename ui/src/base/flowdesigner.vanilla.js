@@ -391,6 +391,18 @@ const FlowDesigner = (function() {
                     }
                 });
             });
+
+            el.querySelectorAll(".fd-source-placeholder__button").forEach(btn => {
+                btn.addEventListener("mousedown", e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                });
+                btn.addEventListener("click", e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    this.flow._emitSourcePlaceholderClick(node.id, btn.dataset.handleId, e);
+                });
+            });
         }
 
         _renderNodeHTML(node) {
@@ -407,16 +419,41 @@ const FlowDesigner = (function() {
             const renderHandles = (list, side) =>
                 list
                     .map(
-                        (h, i) => `
+                        (h, i) => {
+                            const top = h.position != null
+                                ? h.position + "%"
+                                : (100 / (list.length + 1)) * (i + 1) + "%";
+                            const hasOutgoingEdge = h.type === "source" && this.flow._hasOutgoingEdge(node.id, h.id);
+                            const sourcePlaceholder = side === "right"
+                                    && h.type === "source"
+                                    && !hasOutgoingEdge
+                                    && h.placeholder !== false
+                                    && this.flow._options.showSourcePlaceholders !== false
+                                ? `
+          <div class="fd-source-placeholder"
+            data-handle-id="${h.id}"
+            data-node-id="${node.id}"
+            style="top: ${top}"
+            aria-hidden="false">
+            <span class="fd-source-placeholder__line"></span>
+            <button type="button"
+              class="fd-source-placeholder__button"
+              data-handle-id="${h.id}"
+              title="Add connected node"
+              aria-label="Add connected node">+</button>
+          </div>`
+                                : "";
+                            return `
           <div class="fd-handle fd-handle--${h.type} fd-handle--${side}"
             data-handle-id="${h.id}"
             data-handle-type="${h.type}"
             data-node-id="${node.id}"
             data-handle-branch="${escapeHtml(h.branch || h.id || "")}"
-            style="top: ${h.position != null ? h.position + "%" : (100 / (list.length + 1)) * (i + 1) + "%"}"
+            style="top: ${top}"
             title="${escapeHtml(h.label || h.id)}">
             ${h.type === "source" ? `<span class="fd-handle__plus">+</span>` : ""}
-          </div>`,
+          </div>${sourcePlaceholder}`;
+                        },
                     )
                     .join("");
 
@@ -632,29 +669,17 @@ const FlowDesigner = (function() {
             this.el = document.createElement("div");
             this.el.className = "fd-controls";
             this.el.innerHTML = `
-        <button class="fd-controls__btn" data-action="zoom-in" title="Zoom In">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
-          </svg>
+        <button class="fd-controls__btn" data-action="zoom-in" title="Zoom in">
+          <i class="ti ti-zoom-in" aria-hidden="true"></i>
         </button>
-        <button class="fd-controls__btn" data-action="zoom-out" title="Zoom Out">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            <line x1="8" y1="11" x2="14" y2="11"/>
-          </svg>
+        <button class="fd-controls__btn" data-action="zoom-out" title="Zoom out">
+          <i class="ti ti-zoom-out" aria-hidden="true"></i>
         </button>
-        <button class="fd-controls__btn" data-action="fit" title="Fit View">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
-            <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
-          </svg>
+        <button class="fd-controls__btn" data-action="fit" title="Fit view">
+          <i class="ti ti-focus-centered" aria-hidden="true"></i>
         </button>
-        <button class="fd-controls__btn" data-action="lock" title="Toggle Lock">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
+        <button class="fd-controls__btn" data-action="lock" title="Toggle lock">
+          <i class="ti ti-lock" aria-hidden="true"></i>
         </button>
       `;
             container.appendChild(this.el);
@@ -699,6 +724,7 @@ const FlowDesigner = (function() {
                     onEdgeDelete: null,
                     onConnect: null,
                     onHandleClick: null,
+                    onSourcePlaceholderClick: null,
                     onNodeDragStop: null,
                     onEdgeDrop: null,
                     onChange: null,
@@ -708,6 +734,7 @@ const FlowDesigner = (function() {
                     allowDblClickAdd: true,
                     allowDelete: true,
                     allowEdgeDelete: true,
+                    showSourcePlaceholders: true,
                     defaultZoom: 1,
                 },
                 options,
@@ -1329,6 +1356,18 @@ const FlowDesigner = (function() {
             emit(this._container, "fd:handleclick", detail);
         }
 
+        _emitSourcePlaceholderClick(nodeId, handleId, originalEvent) {
+            const node = this._getNode(nodeId);
+            const detail = { node, nodeId, handleId, originalEvent };
+            if (this._options.onSourcePlaceholderClick) {
+                const result = this._options.onSourcePlaceholderClick(detail);
+                if (result === false) return;
+            } else {
+                this._options.onHandleClick && this._options.onHandleClick(detail);
+            }
+            emit(this._container, "fd:sourceplaceholderclick", detail);
+        }
+
         _updateDropPreview(clientX, clientY) {
             if (!this._dragging?.hasMoved) return;
             const pos = this._screenToCanvas(clientX, clientY);
@@ -1402,6 +1441,10 @@ const FlowDesigner = (function() {
             if (this._dragging.nodeIds.includes(nodeId)) return false;
             const edge = this._dropPreview ? this._getEdge(this._dropPreview.edgeId) : null;
             return !(edge && (edge.source === nodeId || edge.target === nodeId));
+        }
+
+        _hasOutgoingEdge(nodeId, handleId) {
+            return this.edges.some(edge => edge.source === nodeId && edge.sourceHandle === handleId);
         }
 
         _getNode(id) {
@@ -2024,6 +2067,57 @@ const FlowDesigner = (function() {
     .fd-handle[data-handle-branch="false"].fd-handle--hover {
       background: var(--fd-branch-false);
       border-color: var(--fd-branch-false);
+    }
+
+    .fd-source-placeholder {
+      position: absolute;
+      left: ${HANDLE_RADIUS}px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      transform: translateY(-50%);
+      z-index: 9;
+      pointer-events: none;
+    }
+
+    .fd-source-placeholder__line {
+      display: block;
+      width: 48px;
+      height: 1px;
+      background: var(--fd-edge);
+      opacity: 0.5;
+    }
+
+    .fd-source-placeholder__button {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      margin: 0;
+      padding: 0;
+      border: 1px solid color-mix(in srgb, var(--fd-edge) 70%, transparent);
+      border-radius: 50%;
+      background: var(--fd-node-bg);
+      color: var(--fd-node-subtext);
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.14);
+      cursor: pointer;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1;
+      pointer-events: auto;
+      transition: border-color 0.14s ease, color 0.14s ease, transform 0.14s ease, box-shadow 0.14s ease;
+    }
+
+    .fd-source-placeholder__button:hover,
+    .fd-source-placeholder__button:focus-visible {
+      border-color: var(--fd-handle-hover);
+      color: var(--fd-handle-hover);
+      transform: scale(1.04);
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+      outline: 0;
     }
 
     /* ── Edges ── */

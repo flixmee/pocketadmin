@@ -6,29 +6,29 @@ import { recordStepForm } from "./recordStepForm";
 import { responseStepForm } from "./responseStepForm";
 
 const stepTypeOptions = [
-    { value: "condition", label: "Condition", icon: "ri-git-merge-line", category: "control" },
-    { value: "code", label: "Code", icon: "ri-code-s-slash-line", category: "control" },
-    { value: "http", label: "HTTP request", icon: "ri-global-line", category: "integration" },
-    { value: "mail.send", label: "Send mail", icon: "ri-mail-send-line", category: "communication" },
-    { value: "record.create", label: "Create record", icon: "ri-add-box-line", category: "record" },
-    { value: "record.update", label: "Update record", icon: "ri-edit-2-line", category: "record" },
-    { value: "record.delete", label: "Delete record", icon: "ri-delete-bin-7-line", category: "record" },
+    { value: "condition", label: "Condition", icon: "ti ti-git-merge", category: "control" },
+    { value: "code", label: "Code", icon: "ti ti-code", category: "control" },
+    { value: "http", label: "HTTP request", icon: "ti ti-world", category: "integration" },
+    { value: "mail.send", label: "Send mail", icon: "ti ti-mail", category: "communication" },
+    { value: "record.create", label: "Create record", icon: "ti ti-database-plus", category: "record" },
+    { value: "record.update", label: "Update record", icon: "ti ti-edit", category: "record" },
+    { value: "record.delete", label: "Delete record", icon: "ti ti-trash", category: "record" },
     {
         value: "response",
         label: "Webhook response",
-        icon: "ri-reply-line",
+        icon: "ti ti-arrow-back-up",
         category: "webhook",
         triggerTypes: ["webhook"],
     },
-    { value: "capability", label: "Capability", icon: "ri-puzzle-2-line", category: "capability" },
-    { value: "wait.delay", label: "Wait delay", icon: "ri-timer-line", category: "wait" },
-    { value: "wait.webhook", label: "Wait webhook", icon: "ri-webhook-line", category: "wait" },
-    { value: "wait.event", label: "Wait event", icon: "ri-radar-line", category: "wait" },
-    { value: "wait.approval", label: "Wait approval", icon: "ri-user-follow-line", category: "approval" },
-    { value: "ai.extract", label: "AI extract", icon: "ri-sparkling-2-line", category: "ai" },
-    { value: "ai.classify", label: "AI classify", icon: "ri-sparkling-line", category: "ai" },
-    { value: "ai.generate", label: "AI generate", icon: "ri-magic-line", category: "ai" },
-    { value: "ai.summarize", label: "AI summarize", icon: "ri-file-reduce-line", category: "ai" },
+    { value: "capability", label: "Capability", icon: "ti ti-puzzle", category: "capability" },
+    { value: "wait.delay", label: "Wait delay", icon: "ti ti-clock", category: "wait" },
+    { value: "wait.webhook", label: "Wait webhook", icon: "ti ti-webhook", category: "wait" },
+    { value: "wait.event", label: "Wait event", icon: "ti ti-radar", category: "wait" },
+    { value: "wait.approval", label: "Wait approval", icon: "ti ti-user-check", category: "approval" },
+    { value: "ai.extract", label: "AI extract", icon: "ti ti-sparkles", category: "ai" },
+    { value: "ai.classify", label: "AI classify", icon: "ti ti-sparkles", category: "ai" },
+    { value: "ai.generate", label: "AI generate", icon: "ti ti-wand", category: "ai" },
+    { value: "ai.summarize", label: "AI summarize", icon: "ti ti-file-text", category: "ai" },
 ];
 
 const valueTypeOptions = [
@@ -560,43 +560,13 @@ export function stepEditor(propsArg = {}) {
                 t.div({ className: "content" }, stepsError),
             );
         },
-        t.div(
-            { className: "automation-builder-toolbar" },
-            t.div(
-                { className: "automation-mode-switcher" },
-                t.button(
-                    {
-                        type: "button",
-                        className: () => `automation-mode-btn ${data.mode === "visual" ? "active" : ""}`,
-                        onclick: () => (data.mode = "visual"),
-                    },
-                    t.span({ className: "txt" }, "Visual builder"),
-                ),
-                t.button(
-                    {
-                        type: "button",
-                        className: () => `automation-mode-btn ${data.mode === "structured" ? "active" : ""}`,
-                        onclick: () => (data.mode = "structured"),
-                    },
-                    t.span({ className: "txt" }, "Structured editor"),
-                ),
-            ),
-            t.div(
-                { className: "txt-sm txt-hint" },
-                () => {
-                    const limit = data.schemas?.limits?.maxSteps;
-                    return limit
-                        ? `${(props.steps || []).length}/${limit} steps`
-                        : `${(props.steps || []).length} steps`;
-                },
-            ),
-        ),
         () =>
             data.mode === "visual"
                 ? renderVisualBuilder({
                     getSteps: () => props.steps || [],
                     getSelectedStepId: () => data.selectedStepId,
                     getTriggerType: () => props.triggerType,
+                    getStepLimit: () => data.schemas?.limits?.maxSteps || 100,
                     selectStep,
                     addStep,
                     setSteps,
@@ -716,7 +686,7 @@ function renderStructuredStepList(options) {
                                 className: "label handle sort-handle",
                                 title: "Reorder step",
                             },
-                            t.i({ className: "ri-draggable", ariaHidden: true }),
+                            t.i({ className: "ti ti-grip-vertical", ariaHidden: true }),
                             t.span({ className: "txt" }, () => `Step ${index + 1}`),
                         ),
                         t.span({ className: "txt-bold" }, () => summarizeStep(step)),
@@ -729,7 +699,7 @@ function renderStructuredStepList(options) {
                                 ariaLabel: app.attrs.tooltip("Focus in builder"),
                                 onclick: () => options.selectStep(step.__id),
                             },
-                            t.i({ className: "ri-focus-3-line", ariaHidden: true }),
+                            t.i({ className: "ti ti-focus-centered", ariaHidden: true }),
                         ),
                         t.button(
                             {
@@ -740,7 +710,7 @@ function renderStructuredStepList(options) {
                             },
                             t.i({
                                 className: () =>
-                                    options.isExpanded(step.__id) ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line",
+                                    options.isExpanded(step.__id) ? "ti ti-chevron-up" : "ti ti-chevron-down",
                                 ariaHidden: true,
                             }),
                         ),
@@ -751,7 +721,7 @@ function renderStructuredStepList(options) {
                                 ariaLabel: app.attrs.tooltip("Remove"),
                                 onclick: () => options.removeStep(step.__id),
                             },
-                            t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                            t.i({ className: "ti ti-trash", ariaHidden: true }),
                         ),
                     ),
                     renderStepTypeSelect(step, options),
@@ -788,7 +758,7 @@ function renderStructuredStepList(options) {
                                         className: "btn sm secondary transparent",
                                         onclick: () => options.addStep(option.value),
                                     },
-                                    t.i({ className: "ri-add-line", ariaHidden: true }),
+                                    t.i({ className: "ti ti-plus", ariaHidden: true }),
                                     t.span({ className: "txt" }, option.label),
                                 )
                             ),
@@ -839,7 +809,7 @@ function renderVisualBuilder(options) {
 
         if (shouldFit) {
             clearTimeout(fitTimer);
-            fitTimer = setTimeout(() => flow?.fitView(70), 40);
+            fitTimer = setTimeout(() => fitAutomationFlowView(flow, graph), 40);
         }
     }
 
@@ -963,11 +933,11 @@ function renderVisualBuilder(options) {
                         gridType: "dots",
                         snapToGrid: true,
                         snapSize: 20,
-                        minimap: true,
+                        minimap: false,
                         allowDblClickAdd: false,
                         allowDelete: false,
                         defaultEdgeOptions: {
-                            markerEnd: true,
+                            markerEnd: false,
                         },
                         nodeTypes: {
                             "automation-trigger": renderAutomationFlowNodeContent,
@@ -985,6 +955,10 @@ function renderVisualBuilder(options) {
                         onConnect: connectFlowNodes,
                         onHandleClick: ({ nodeId, handleId }) => {
                             openFlowAddContext({ nodeId, handleId });
+                        },
+                        onSourcePlaceholderClick: ({ nodeId, handleId }) => {
+                            const context = normalizeFlowAddContext({ nodeId, handleId });
+                            options.addStep("condition", context.index, context.path);
                         },
                         onEdgeDrop: handleFlowEdgeDrop,
                     });
@@ -1012,6 +986,10 @@ function renderVisualBuilder(options) {
                     actionDrawer?.remove();
                 },
             },
+            t.div(
+                { className: "automation-flow-step-counter" },
+                () => `${countAutomationSteps(getSteps())}/${options.getStepLimit?.() || 100} steps`,
+            ),
             t.button(
                 {
                     type: "button",
@@ -1021,7 +999,7 @@ function renderVisualBuilder(options) {
                         local.actionsOpen = true;
                     },
                 },
-                t.i({ className: "ri-add-line", ariaHidden: true }),
+                t.i({ className: "ti ti-plus", ariaHidden: true }),
                 t.span({ className: "txt" }, "Add node"),
             ),
         ),
@@ -1032,6 +1010,7 @@ function renderVisualBuilder(options) {
 const automationTriggerNodeId = "__automation_trigger";
 const automationEmptyNodePrefix = "__automation_empty";
 const automationNodeWidth = 260;
+const automationNodeHeight = 104;
 const automationColumnGap = 330;
 const automationBranchGap = 230;
 const automationRootY = 180;
@@ -1074,7 +1053,7 @@ function renderFlowActionDrawer(options, addStep, getTriggerType, local) {
                                 local.addContext = null;
                             },
                         },
-                        t.i({ className: "ri-close-line", ariaHidden: true }),
+                        t.i({ className: "ti ti-x", ariaHidden: true }),
                     ),
                 ),
                 t.div(
@@ -1091,7 +1070,7 @@ function renderFlowActionDrawer(options, addStep, getTriggerType, local) {
                                     },
                                     t.div(
                                         { className: "automation-palette-icon-wrap" },
-                                        t.i({ className: option.icon || "ri-add-line", ariaHidden: true }),
+                                        t.i({ className: option.icon || "ti ti-plus", ariaHidden: true }),
                                     ),
                                     t.div(
                                         { className: "content block txt-left" },
@@ -1129,7 +1108,7 @@ function buildAutomationFlowGraph({ steps, triggerType, selectedStepId, position
             badge: "Start",
             position: positionForNode(automationTriggerNodeId, { x: 0, y: automationRootY }, positions),
             data: {
-                icon: "ri-flashlight-line",
+                icon: "ti ti-bolt",
                 summary: triggerType || "manual",
                 status: "Ready",
             },
@@ -1297,6 +1276,7 @@ function createAutomationFlowEdge(source, sourceHandle, target, targetHandle, la
         sourceHandle,
         target,
         targetHandle,
+        markerEnd: false,
         label: label || (sourceHandle === "true" ? "True" : sourceHandle === "false" ? "False" : ""),
     };
 }
@@ -1340,6 +1320,14 @@ function graphStepSnapshot(steps) {
     }));
 }
 
+function countAutomationSteps(steps) {
+    return (steps || []).reduce(
+        (total, step) =>
+            total + 1 + countAutomationSteps(step?.branches?.true) + countAutomationSteps(step?.branches?.false),
+        0,
+    );
+}
+
 function renderAutomationFlowNodeContent(node) {
     const data = node.data || {};
     const classNames = [
@@ -1353,11 +1341,12 @@ function renderAutomationFlowNodeContent(node) {
     return `
         <div class="${classNames}">
             <div class="automation-flow-node-icon"><i class="${
-        escapeAutomationHtml(data.icon || "ri-node-tree")
+        escapeAutomationHtml(data.icon || "ti ti-route")
     }"></i></div>
             <div class="automation-flow-node-copy">
                 <div class="automation-flow-node-summary">${escapeAutomationHtml(data.summary || "")}</div>
                 <div class="automation-flow-node-status ${data.hasIssues ? "has-issues" : ""}">
+                    <span class="automation-flow-node-status-dot"></span>
                     ${escapeAutomationHtml(data.status || "")}
                 </div>
             </div>
@@ -1370,9 +1359,9 @@ function renderAutomationFlowEmptyNode(node) {
     const branchClass = data.branchKey === "false" ? "false-branch" : "true-branch";
     return `
         <button type="button" class="automation-flow-empty-node ${branchClass}">
-            <span class="automation-flow-empty-plus"><i class="ri-add-line"></i></span>
+            <span class="automation-flow-empty-plus"><i class="ti ti-plus"></i></span>
             <span class="automation-flow-empty-copy">
-                <span class="automation-flow-empty-title">Add Action</span>
+                <span class="automation-flow-empty-title">Add action</span>
                 <span class="automation-flow-empty-meta">${escapeAutomationHtml(data.label || "Branch")}</span>
             </span>
         </button>
@@ -1516,32 +1505,78 @@ function escapeAutomationHtml(value) {
 
 function automationFlowTheme() {
     return {
-        "--fd-bg": "var(--surfaceAlt1Color)",
-        "--fd-grid": "var(--surfaceAlt2Color)",
-        "--fd-grid-dot": "color-mix(in srgb, var(--surfaceAlt3Color) 65%, transparent)",
-        "--fd-node-bg": "var(--surfaceColor)",
-        "--fd-node-border": "color-mix(in srgb, var(--surfaceAlt2Color) 85%, transparent)",
-        "--fd-node-border-selected": "var(--primaryColor)",
-        "--fd-node-header": "var(--surfaceColor)",
-        "--fd-node-text": "var(--txtColor)",
-        "--fd-node-subtext": "var(--surfaceTxtHintColor)",
-        "--fd-handle": "var(--primaryColor)",
-        "--fd-handle-hover": "var(--primaryColor)",
-        "--fd-handle-connected": "var(--successColor)",
-        "--fd-branch-true": "var(--successColor)",
-        "--fd-branch-false": "var(--warningColor)",
-        "--fd-insert": "var(--primaryColor)",
-        "--fd-edge": "color-mix(in srgb, var(--surfaceTxtHintColor) 55%, transparent)",
-        "--fd-edge-selected": "var(--primaryColor)",
-        "--fd-edge-hover": "var(--primaryColor)",
-        "--fd-shadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
-        "--fd-selection-bg": "color-mix(in srgb, var(--primaryColor) 8%, transparent)",
-        "--fd-selection-border": "var(--primaryColor)",
-        "--fd-minimap-bg": "var(--surfaceColor)",
-        "--fd-controls-bg": "var(--surfaceColor)",
-        "--fd-controls-border": "var(--surfaceAlt2Color)",
-        "--fd-controls-text": "var(--txtColor)",
+        "--fd-bg": "var(--color-background-secondary)",
+        "--fd-grid": "var(--color-border-muted)",
+        "--fd-grid-dot": "var(--color-border-muted)",
+        "--fd-node-bg": "var(--color-background-primary)",
+        "--fd-node-border": "var(--color-border-muted)",
+        "--fd-node-border-selected": "var(--color-accent-primary)",
+        "--fd-node-header": "var(--color-background-primary)",
+        "--fd-node-text": "var(--color-text-primary)",
+        "--fd-node-subtext": "var(--color-text-secondary)",
+        "--fd-handle": "var(--color-accent-primary)",
+        "--fd-handle-hover": "var(--color-accent-primary)",
+        "--fd-handle-connected": "var(--color-status-success)",
+        "--fd-branch-true": "var(--color-status-success)",
+        "--fd-branch-false": "var(--color-status-warning)",
+        "--fd-insert": "var(--color-accent-primary)",
+        "--fd-edge": "var(--color-border-strong)",
+        "--fd-edge-selected": "var(--color-accent-primary)",
+        "--fd-edge-hover": "var(--color-accent-primary)",
+        "--fd-shadow": "none",
+        "--fd-selection-bg": "color-mix(in srgb, var(--color-accent-primary) 8%, transparent)",
+        "--fd-selection-border": "var(--color-accent-primary)",
+        "--fd-minimap-bg": "var(--color-background-primary)",
+        "--fd-controls-bg": "var(--color-background-primary)",
+        "--fd-controls-border": "var(--color-border-muted)",
+        "--fd-controls-text": "var(--color-text-primary)",
     };
+}
+
+function fitAutomationFlowView(flow, graph) {
+    if (!flow || !graph?.nodes?.length) {
+        return;
+    }
+
+    const width = flow._container?.clientWidth || 0;
+    const height = flow._container?.clientHeight || 0;
+    if (!width || !height) {
+        flow.fitView?.(70);
+        return;
+    }
+
+    const box = graph.nodes.reduce(
+        (bounds, node) => {
+            const nodeWidth = node.width || automationNodeWidth;
+            const nodeHeight = node.height || automationNodeHeight;
+            bounds.minX = Math.min(bounds.minX, node.position.x);
+            bounds.minY = Math.min(bounds.minY, node.position.y);
+            bounds.maxX = Math.max(bounds.maxX, node.position.x + nodeWidth);
+            bounds.maxY = Math.max(bounds.maxY, node.position.y + nodeHeight);
+            return bounds;
+        },
+        { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+    );
+
+    const horizontalPadding = 72;
+    const topPadding = 76;
+    const bottomPadding = 72;
+    const graphWidth = Math.max(box.maxX - box.minX, automationNodeWidth);
+    const graphHeight = Math.max(box.maxY - box.minY, automationNodeHeight);
+    const scale = Math.max(
+        0.45,
+        Math.min(
+            1,
+            (width - horizontalPadding * 2) / graphWidth,
+            (height - topPadding - bottomPadding) / graphHeight,
+        ),
+    );
+
+    const viewportX = (width - graphWidth * scale) / 2 - box.minX * scale;
+    const availableHeight = height - topPadding - bottomPadding;
+    const viewportY = topPadding + (availableHeight - graphHeight * scale) / 2 - box.minY * scale;
+
+    flow.setViewport({ x: viewportX - 300, y: viewportY, scale });
 }
 
 function renderBuilderConnector(attrs) {
@@ -1560,7 +1595,7 @@ function renderBuilderConnector(attrs) {
                 title: attrs.title,
                 onclick: attrs.onclick,
             },
-            t.i({ className: "ri-add-line", ariaHidden: true }),
+            t.i({ className: "ti ti-plus", ariaHidden: true }),
         ),
         t.span({ className: "automation-builder-connector-line" }),
     );
@@ -1678,7 +1713,7 @@ function renderBranchPaths(options, step, selectedStep, depth) {
                             title: `Add ${label.toLowerCase()} step`,
                             onclick: () => options.addStep("condition", steps.length, path),
                         },
-                        t.i({ className: "ri-add-line", ariaHidden: true }),
+                        t.i({ className: "ti ti-plus", ariaHidden: true }),
                     ),
                 ),
                 renderBuilderConnector({
@@ -1726,14 +1761,14 @@ function renderStepStatusBadge(validation) {
     if (!validation.length) {
         return t.span(
             { className: "automation-valid-badge" },
-            t.i({ className: "ri-check-line", ariaHidden: true }),
+            t.i({ className: "ti ti-check", ariaHidden: true }),
             "Valid",
         );
     }
 
     return t.span(
         { className: "automation-valid-badge has-issues" },
-        t.i({ className: "ri-error-warning-line", ariaHidden: true }),
+        t.i({ className: "ti ti-alert-triangle", ariaHidden: true }),
         `${validation.length} issue(s)`,
     );
 }
@@ -1775,7 +1810,7 @@ function renderActionPalette(options) {
                             },
                             t.div(
                                 { className: "automation-palette-icon-wrap" },
-                                t.i({ className: option.icon || "ri-add-line", ariaHidden: true }),
+                                t.i({ className: option.icon || "ti ti-plus", ariaHidden: true }),
                             ),
                             t.div(
                                 { className: "content block txt-left" },
@@ -1792,7 +1827,7 @@ function renderActionPalette(options) {
 function renderTriggerNode(options) {
     return t.div(
         { className: "automation-builder-node trigger-node" },
-        t.div({ className: "automation-builder-node-icon" }, t.i({ className: "ri-flashlight-line" })),
+        t.div({ className: "automation-builder-node-icon" }, t.i({ className: "ti ti-bolt" })),
         t.div(
             { className: "content block" },
             t.div({ className: "automation-node-title m-b-5" }, "Trigger"),
@@ -2128,7 +2163,7 @@ function renderStepEditModal(step, options) {
                     ariaLabel: app.attrs.tooltip("Close"),
                     onclick: () => app.modals.close(),
                 },
-                t.i({ className: "ri-close-line", ariaHidden: true }),
+                t.i({ className: "ti ti-x", ariaHidden: true }),
             ),
         ),
         t.div(
@@ -2195,7 +2230,7 @@ function renderStepEditModal(step, options) {
                         options.addStep("condition", stepIndex + 1);
                     },
                 },
-                t.i({ className: "ri-link", ariaHidden: true }),
+                t.i({ className: "ti ti-link", ariaHidden: true }),
                 t.span({ className: "txt" }, "Connect next"),
             ),
             t.button(
@@ -2204,7 +2239,7 @@ function renderStepEditModal(step, options) {
                     className: "btn secondary transparent txt-danger",
                     onclick: () => options.removeStep(step.__id),
                 },
-                t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                t.i({ className: "ti ti-trash", ariaHidden: true }),
                 t.span({ className: "txt" }, "Remove"),
             ),
         ),
@@ -2372,7 +2407,7 @@ function renderCapabilityBrowser(options) {
                                         className: "automation-capability-item",
                                         onclick: () => options.addCapabilityStep(capability.key),
                                     },
-                                    t.i({ className: "ri-puzzle-2-line", ariaHidden: true }),
+                                    t.i({ className: "ti ti-puzzle", ariaHidden: true }),
                                     t.div(
                                         { className: "content block txt-left" },
                                         t.div({ className: "txt-bold" }, capability.key),
@@ -2384,7 +2419,7 @@ function renderCapabilityBrowser(options) {
                                                 }`,
                                         ),
                                     ),
-                                    t.i({ className: "ri-add-line m-l-auto", ariaHidden: true }),
+                                    t.i({ className: "ti ti-plus m-l-auto", ariaHidden: true }),
                                 )
                             ),
                         ),
@@ -2436,7 +2471,7 @@ function renderSchemaInspector(step, schemas, options) {
                             className: "btn sm secondary transparent",
                             onclick: () => options.selectStep(step.__id),
                         },
-                        t.i({ className: "ri-edit-2-line", ariaHidden: true }),
+                        t.i({ className: "ti ti-edit", ariaHidden: true }),
                         t.span({ className: "txt" }, "Edit below"),
                     ),
                     t.button(
@@ -2445,7 +2480,7 @@ function renderSchemaInspector(step, schemas, options) {
                             className: "btn sm secondary transparent",
                             onclick: () => options.removeStep(step.__id),
                         },
-                        t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+                        t.i({ className: "ti ti-trash", ariaHidden: true }),
                         t.span({ className: "txt" }, "Remove"),
                     ),
                 ),
@@ -3024,7 +3059,7 @@ function objectRowsEditor(options) {
                     className: "btn sm secondary transparent m-l-auto",
                     onclick: options.add,
                 },
-                t.i({ className: "ri-add-line", ariaHidden: true }),
+                t.i({ className: "ti ti-plus", ariaHidden: true }),
                 t.span({ className: "txt" }, "Add field"),
             ),
         ),
@@ -3050,7 +3085,7 @@ function objectRowsEditor(options) {
                                 className: "btn sm secondary transparent circle automation-config-drag",
                                 ariaLabel: app.attrs.tooltip("Drag to reorder"),
                             },
-                            t.i({ className: "ri-draggable", ariaHidden: true }),
+                            t.i({ className: "ti ti-grip-vertical", ariaHidden: true }),
                         ),
                         t.input({
                             type: "text",
@@ -3084,7 +3119,7 @@ function editableStringList(options) {
                     className: "btn sm secondary transparent m-l-auto",
                     onclick: options.add,
                 },
-                t.i({ className: "ri-add-line", ariaHidden: true }),
+                t.i({ className: "ti ti-plus", ariaHidden: true }),
                 t.span({ className: "txt" }, options.addLabel),
             ),
         ),
@@ -3110,7 +3145,7 @@ function editableStringList(options) {
                                 className: "btn sm secondary transparent circle automation-config-drag",
                                 ariaLabel: app.attrs.tooltip("Drag to reorder"),
                             },
-                            t.i({ className: "ri-draggable", ariaHidden: true }),
+                            t.i({ className: "ti ti-grip-vertical", ariaHidden: true }),
                         ),
                         options.renderValue(row, index),
                         removeRowButton(() => options.remove(index)),
@@ -3133,7 +3168,7 @@ function schemaRowsEditor(step) {
                     className: "btn sm secondary transparent m-l-auto",
                     onclick: () => step.schemaRows.push(createSchemaRow()),
                 },
-                t.i({ className: "ri-add-line", ariaHidden: true }),
+                t.i({ className: "ti ti-plus", ariaHidden: true }),
                 t.span({ className: "txt" }, "Add property"),
             ),
         ),
@@ -3158,7 +3193,7 @@ function schemaRowsEditor(step) {
                                 className: "btn sm secondary transparent circle automation-config-drag",
                                 ariaLabel: app.attrs.tooltip("Drag to reorder"),
                             },
-                            t.i({ className: "ri-draggable", ariaHidden: true }),
+                            t.i({ className: "ti ti-grip-vertical", ariaHidden: true }),
                         ),
                         t.input({
                             type: "text",
@@ -3229,7 +3264,7 @@ function removeRowButton(onclick) {
             ariaLabel: app.attrs.tooltip("Remove"),
             onclick,
         },
-        t.i({ className: "ri-delete-bin-7-line", ariaHidden: true }),
+        t.i({ className: "ti ti-trash", ariaHidden: true }),
     );
 }
 
@@ -3873,7 +3908,7 @@ function stepTypeLabel(type) {
 }
 
 function stepTypeIcon(type) {
-    return stepTypeOptions.find((option) => option.value === type)?.icon || "ri-git-branch-line";
+    return stepTypeOptions.find((option) => option.value === type)?.icon || "ti ti-route";
 }
 
 function filteredCapabilities(capabilities, options) {

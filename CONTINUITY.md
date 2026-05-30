@@ -1,64 +1,66 @@
 Goal (incl. success criteria):
 
-- Fix clicking true/false branch steps in the automation FlowDesigner so they open the edit dialog.
-- Success: branch step clicks resolve nested steps recursively and open the same edit modal as root steps; UI build passes.
+- Redesign the automation workflow builder UI to match the requested 600px three-zone layout.
+- Success: top bar is fixed at 48px and single-line; info panel overlays top-left with collapse behavior; flow canvas fills remaining height with dotted grid, compact controls, bottom-centered horizontal nodes, line endpoints, Tabler outline icons, flat styling, 0.5px borders, CSS variable colors, no gradients, no shadows except subtle panel shadow, sentence case text, and minimum 11px fonts.
+- Latest adjustment: make automation name and tag editable inline in `.automation-workflow-title-row`; remove name/tag controls from the info panel.
+- Latest request: add default ghost output line/+ placeholders for unconnected FlowDesigner source handles.
 
 Constraints/Assumptions:
 
 - Follow `AGENTS.md` and UI guidance.
 - Existing unrelated changes may be present; do not revert them.
 - When updating admin UI, consult `UI_DOCS.md`; do not introduce native HTML `<select>`.
-- Prefer focused changes in existing flow designer / automation UI files.
+- Use existing admin UI architecture and components where practical.
+- Browser smoke verification is UNCONFIRMED unless local tooling makes it available.
 
 Key decisions:
 
-- Current implementation is a custom vanilla FlowDesigner, not React Flow; preserve that architecture and add React Flow-like interaction hooks/states.
-- Keep animation work compositor-friendly: SVG path updates for lines, `translate`/opacity/box-shadow for node/placeholder motion, no layout-driven array/object churn in reactive state.
+- Focus changes in existing automation builder files rather than introducing a new framework or page.
+- Preserve existing FlowDesigner behavior and adapt its surrounding chrome/content styling to the requested layout.
+- Use Tabler outline icon classes (`ti ti-*`) in edited automation builder markup.
 
 State:
   - Done:
-    - Received request and current IDE context for `ui/src/base/flowdesigner.vanilla.js`.
-    - Read `UI_DOCS.md` and inspected FlowDesigner, automation graph builder, and automation CSS.
-    - Added source handle hover previews, animated plus glyphs, branch-aware handle accents, ghost connection glow, and handle-click events.
-    - Added branch-aware edge styling/markers/labels for `true` and `false`.
-    - Added drag-over-edge insertion preview with dashed pulsing placeholder, nearby node nudges, and invalid-node/edge dimming.
-    - Added empty branch `+ Add Action` virtual nodes wired to the existing action drawer.
-    - Wired canvas handle clicks, empty placeholder clicks/connects, and edge-drop insertion into `stepEditor.js`.
-    - Updated automation FlowDesigner theme/CSS toward a darker polished canvas.
-    - Verified `npm run build` from `ui/`; build passed.
-    - Restored generated `ui/dist/index.html` hash churn after build; source-only UI changes remain.
-    - Restored automation flow surface/node/minimap/control colors and shadows to prior admin UI variables.
-    - Kept branch/insertion accent variables for the new UX states using existing `successColor`, `warningColor`, and `primaryColor`.
-    - Verified `npm run build` from `ui/` after color rollback; build passed.
-    - Restored generated `ui/dist/index.html` hash churn after the second build.
-    - Removed `fd-handle__label` markup and CSS from `ui/src/base/flowdesigner.vanilla.js`.
-    - Confirmed no `fd-handle__label` references remain.
-    - Verified `npm run build` from `ui/`; build passed.
+    - Received request and current IDE context (`ui/package.json`, `core/settings_model.go`).
+    - Read prior ledger and replaced it with the new automation workflow builder redesign goal.
+    - Located automation builder code in `ui/src/settings/automations/stepEditor.js` and styles in `ui/src/css/automations.css`.
+    - Reworked the automation upsert page into a 600px workflow shell with a 48px compact top bar, overlay info panel, and canvas zone.
+    - Updated the visual FlowDesigner builder with an in-canvas step counter, no minimap, bottom-aligned graph fitting, circular endpoint connectors, and Tabler-style visible icons.
+    - Added workflow-specific CSS variables and flat UI styling with 0.5px borders, dotted canvas, white nodes, and only the info panel shadow.
+    - Verified `npm run build` from `ui/`; Vite build passed.
+    - Build emitted a sandbox warning because dprint could not write its incremental cache under `~/Library/Caches`, but the command exited successfully.
     - Restored generated `ui/dist/index.html` hash churn after build.
-    - Added hover-only SVG delete affordance to FlowDesigner edges.
-    - Added `allowEdgeDelete`, `onEdgeDelete`, and `fd:edgedelete` support.
-    - Edge delete is independent from node/Delete-key `allowDelete`.
-    - Verified `npm run build` from `ui/`; build passed.
+    - Started Vite dev server at `http://127.0.0.1:5173/` with escalated permission after sandboxed port binding failed.
+    - Moved editable automation name input and tag select into `.automation-workflow-title-row`.
+    - Removed name/tag controls from the info panel.
+    - Verified `npm run build` from `ui/` after inline edit change; Vite build passed.
     - Restored generated `ui/dist/index.html` hash churn after build.
-    - Identified branch step click bug: `openStepEditModal()` only searched root steps by id, so nested true/false branch steps were selected but no modal opened.
-    - Changed `openStepEditModal()` to resolve string ids with recursive `findStepById()`.
-    - Verified `npm run build` from `ui/`; build passed.
+    - Increased `.automation-workflow-builder` height/min-height from 600px to 720px.
+    - Verified `npm run build` from `ui/` after height change; Vite build passed.
+    - Restored generated `ui/dist/index.html` hash churn after build.
+    - Changed `fitAutomationFlowView()` to vertically center the graph in the usable canvas area instead of bottom-aligning it on fit/init.
+    - Verified `npm run build` from `ui/` after centering change; Vite build passed.
+    - Restored generated `ui/dist/index.html` hash churn after build.
+    - Added FlowDesigner source placeholders for unconnected right-side source handles: a light horizontal ghost line and subtle bordered/shadowed plus button.
+    - Wired the source placeholder click event in the automation visual builder to add a default connected `condition` node at the selected handle/path.
+    - Placeholder line/+ controls now disappear automatically once a real outgoing edge exists for the source handle.
+    - Verified `npm run build` from `ui/` after placeholder change; Vite build passed with the known sandbox dprint cache warning.
     - Restored generated `ui/dist/index.html` hash churn after build.
   - Now:
-    - Reporting branch step click fix.
+    - Ready to report the FlowDesigner placeholder implementation.
   - Next:
-    - Manual UI check: click an existing step inside true/false branch and confirm edit modal opens.
+    - Optional browser smoke test once an automation fixture/page path is available.
 
 Open questions (UNCONFIRMED if needed):
 
-- Browser smoke verification is UNCONFIRMED because the Browser plugin's required JavaScript control tool was not exposed in this session.
+- Exact automation id/test fixture for visual browser smoke is UNCONFIRMED.
 
 Working set (files/ids/commands):
 
 - `CONTINUITY.md`
-- `ui/src/base/flowdesigner.vanilla.js`
+- `UI_DOCS.md`
 - `ui/src/settings/automations/stepEditor.js`
-- `ui/src/settings/automations/pageAutomationUpsert.js`
-- `ui/src/settings/automations/automationUpsertModal.js`
-- `ui/package.json`
+- `ui/src/base/flowdesigner.vanilla.js`
+- `ui/src/css/automations.css`
 - Check passed: `npm run build` from `ui/`.
+- Dev server: `http://127.0.0.1:5173/` (session 10443).

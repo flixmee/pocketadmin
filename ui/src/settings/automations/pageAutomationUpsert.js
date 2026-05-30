@@ -30,6 +30,7 @@ export function pageAutomationUpsert(route) {
         isLoading: !isNew,
         isLoadingTags: false,
         isSaving: false,
+        infoPanelCollapsed: false,
         automation: null,
         automationTags: [],
         form: initialForm,
@@ -339,7 +340,7 @@ export function pageAutomationUpsert(route) {
                 t.div({ className: "flex-fill" }),
                 t.a(
                     { href: "#/automations", className: "btn secondary transparent" },
-                    t.i({ className: "ri-arrow-left-line", ariaHidden: true }),
+                    t.i({ className: "ti ti-arrow-left", ariaHidden: true }),
                     t.span({ className: "txt" }, "Back"),
                 ),
             ),
@@ -362,82 +363,10 @@ export function pageAutomationUpsert(route) {
 
     function renderAutomationForm() {
         return [
-            t.div(
-                { className: "flex gap-10 flex-wrap m-b-base align-items-center" },
-                t.div(
-                    { className: "content block" },
-                    t.h3({ className: "m-b-xs automation-page-title" }, () => data.title),
-                    t.div(
-                        { className: "txt-sm txt-hint automation-page-desc" },
-                        "Build, validate, preview, and publish automation workflows from one page.",
-                    ),
-                ),
-                t.div({ className: "m-l-auto" }),
-                t.div(
-                    { className: "flex gap-5 flex-wrap" },
-                    () => {
-                        if (isNew) {
-                            return null;
-                        }
-
-                        return t.button(
-                            {
-                                type: "button",
-                                className: "btn secondary transparent pill",
-                                disabled: () => data.isSaving,
-                                onclick: openDryRunModal,
-                            },
-                            t.i({ className: "ri-play-circle-line", ariaHidden: true }),
-                            t.span({ className: "txt" }, "Dry-run"),
-                        );
-                    },
-                    () => {
-                        if (isNew) {
-                            return null;
-                        }
-
-                        return t.button(
-                            {
-                                type: "button",
-                                className: "btn secondary transparent pill",
-                                disabled: () => data.isSaving,
-                                onclick: exportTemplate,
-                            },
-                            t.i({ className: "ri-file-upload-line", ariaHidden: true }),
-                            t.span({ className: "txt" }, "Export"),
-                        );
-                    },
-                    () => {
-                        if (isNew) {
-                            return null;
-                        }
-
-                        return t.button(
-                            {
-                                type: "button",
-                                className: "btn secondary transparent pill",
-                                disabled: () => data.isSaving,
-                                onclick: openRunsModal,
-                            },
-                            t.i({ className: "ri-history-line", ariaHidden: true }),
-                            t.span({ className: "txt" }, "Recent runs"),
-                        );
-                    },
-                    t.button(
-                        {
-                            type: "submit",
-                            "html-form": formId,
-                            className: () => `btn pill ${data.isSaving ? "loading" : ""}`,
-                            disabled: () => !data.canSave,
-                        },
-                        t.span({ className: "txt" }, () => data.submitLabel),
-                    ),
-                ),
-            ),
             t.form(
                 {
                     id: formId,
-                    className: "automation-upsert-page-form",
+                    className: "automation-upsert-page-form automation-workflow-builder",
                     inert: () => data.isSaving,
                     onsubmit: (e) => {
                         e.preventDefault();
@@ -445,97 +374,108 @@ export function pageAutomationUpsert(route) {
                     },
                 },
                 t.div(
-                    { className: "automation-builder-card automation-config-card m-b-base" },
+                    { className: "automation-workflow-topbar" },
                     t.div(
-                        { className: "grid" },
+                        { className: "automation-workflow-title-row" },
+                        t.input({
+                            id: formId + "_name",
+                            name: "name",
+                            type: "text",
+                            className: "automation-workflow-title-input",
+                            ariaLabel: "Automation name",
+                            required: true,
+                            maxlength: 255,
+                            placeholder: "Untitled automation",
+                            value: () => data.form.name,
+                            oninput: (e) => (data.form.name = e.target.value),
+                        }),
                         t.div(
-                            { className: "col-md-6" },
-                            t.div(
-                                { className: "field" },
-                                t.label({ htmlFor: formId + "_name", className: "automation-field-label" }, "Name"),
-                                t.input({
-                                    id: formId + "_name",
-                                    name: "name",
-                                    type: "text",
-                                    required: true,
-                                    maxlength: 255,
-                                    value: () => data.form.name,
-                                    oninput: (e) => (data.form.name = e.target.value),
-                                }),
-                            ),
-                            () => fieldError(app.store.errors?.name),
-                        ),
-                        t.div(
-                            { className: "col-md-3" },
-                            t.div(
-                                { className: "field" },
-                                t.label({ htmlFor: formId + "_tag", className: "automation-field-label" }, "Tag"),
-                                app.components.select({
-                                    id: formId + "_tag",
-                                    name: "tag",
-                                    value: () => data.form.tag,
-                                    options: () => tagOptions(data.form.tag),
-                                    placeholder: () => data.isLoadingTags ? "Loading tags..." : "Select existing tag",
-                                    searchThreshold: 8,
-                                    disabled: () => data.isLoadingTags || tagOptions(data.form.tag).length === 0,
-                                    onchange: (selected) => {
-                                        const selectedValue = selected?.[0]?.value || "";
-                                        if (selectedValue === customTagOptionValue) {
-                                            openCustomTagDialog();
-                                            return;
-                                        }
+                            { className: "automation-workflow-tag-control" },
+                            t.i({ className: "ti ti-tag", ariaHidden: true }),
+                            app.components.select({
+                                id: formId + "_tag",
+                                name: "tag",
+                                className: "automation-workflow-tag-select",
+                                value: () => data.form.tag,
+                                options: () => tagOptions(data.form.tag),
+                                placeholder: () => data.isLoadingTags ? "Loading tags..." : "No tag",
+                                searchThreshold: 8,
+                                required: true,
+                                disabled: () => data.isLoadingTags || tagOptions(data.form.tag).length === 0,
+                                onchange: (selected) => {
+                                    const selectedValue = selected?.[0]?.value || "";
+                                    if (selectedValue === customTagOptionValue) {
+                                        openCustomTagDialog();
+                                        return;
+                                    }
 
-                                        data.form.tag = selectedValue;
-                                    },
-                                }),
-                            ),
-                            () => fieldError(app.store.errors?.tag),
+                                    data.form.tag = selectedValue;
+                                },
+                            }),
                         ),
-                        t.div(
-                            { className: "col-md-3" },
-                            t.div(
-                                { className: "field m-t-lg" },
-                                t.input({
-                                    id: formId + "_active",
-                                    name: "active",
-                                    type: "checkbox",
-                                    className: "switch",
-                                    checked: () => data.form.active,
-                                    onchange: (e) => (data.form.active = e.target.checked),
-                                }),
-                                t.label(
-                                    { htmlFor: formId + "_active", className: "automation-field-label" },
-                                    t.span({ className: "txt" }, "Active"),
-                                ),
-                            ),
+                        t.button(
+                            {
+                                type: "button",
+                                className: () =>
+                                    `automation-workflow-status-badge ${data.form.active ? "is-active" : ""}`,
+                                onclick: () => (data.form.active = !data.form.active),
+                            },
+                            t.span({ className: "automation-workflow-status-dot" }),
+                            t.span(null, () => data.form.active ? "Active" : "Inactive"),
                         ),
-                        t.div(
-                            { className: "col-md-3" },
-                            t.div(
-                                { className: "field m-t-lg" },
-                                t.input({
-                                    id: formId + "_notifyOnCompletion",
-                                    name: "notifyOnCompletion",
-                                    type: "checkbox",
-                                    className: "switch",
-                                    checked: () => data.form.notifyOnCompletion,
-                                    onchange: (e) => (data.form.notifyOnCompletion = e.target.checked),
-                                }),
-                                t.label(
-                                    {
-                                        htmlFor: formId + "_notifyOnCompletion",
-                                        className: "automation-field-label",
-                                    },
-                                    t.span({ className: "txt" }, "Notify admins"),
-                                ),
-                            ),
-                            t.div(
-                                { className: "field-help automation-field-desc" },
-                                "Create admin notifications when this automation succeeds or fails.",
-                            ),
+                    ),
+                    t.div(
+                        { className: "automation-workflow-actions" },
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn secondary transparent pill",
+                                disabled: () => isNew || data.isSaving,
+                                onclick: openDryRunModal,
+                            },
+                            t.i({ className: "ti ti-player-play", ariaHidden: true }),
+                            t.span({ className: "txt" }, "Dry-run"),
                         ),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn secondary transparent pill",
+                                disabled: () => isNew || data.isSaving,
+                                onclick: exportTemplate,
+                            },
+                            t.i({ className: "ti ti-file-export", ariaHidden: true }),
+                            t.span({ className: "txt" }, "Export"),
+                        ),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn secondary transparent pill",
+                                disabled: () => isNew || data.isSaving,
+                                onclick: openRunsModal,
+                            },
+                            t.i({ className: "ti ti-history", ariaHidden: true }),
+                            t.span({ className: "txt" }, "Recent runs"),
+                        ),
+                        t.button(
+                            {
+                                type: "submit",
+                                className: () => `btn pill ${data.isSaving ? "loading" : ""}`,
+                                disabled: () => !data.canSave,
+                            },
+                            t.i({ className: "ti ti-device-floppy", ariaHidden: true }),
+                            t.span({ className: "txt" }, () => data.submitLabel),
+                        ),
+                    ),
+                ),
+                t.div(
+                    { className: "automation-workflow-canvas-zone" },
+                    t.aside(
+                        {
+                            className: () =>
+                                `automation-workflow-info-panel ${data.infoPanelCollapsed ? "is-collapsed" : ""}`,
+                        },
                         t.div(
-                            { className: "col-md-6" },
+                            { className: "automation-workflow-info-fields" },
                             t.div(
                                 { className: "field" },
                                 t.label(
@@ -549,16 +489,13 @@ export function pageAutomationUpsert(route) {
                                     options: automationTriggerOptions,
                                     onchange: (selected) => setTriggerType(selected?.[0]?.value || "manual"),
                                 }),
+                                () => fieldError(app.store.errors?.triggerType),
                             ),
-                            () => fieldError(app.store.errors?.triggerType),
-                        ),
-                        t.div(
-                            {
-                                className: "col-md-6",
-                                hidden: () => !data.isRecordTrigger && !data.isI18nTrigger,
-                            },
                             t.div(
-                                { className: "field" },
+                                {
+                                    className: "field",
+                                    hidden: () => !data.isRecordTrigger && !data.isI18nTrigger,
+                                },
                                 t.label(
                                     { htmlFor: formId + "_collectionRef", className: "automation-field-label" },
                                     "Target collection",
@@ -573,16 +510,13 @@ export function pageAutomationUpsert(route) {
                                         data.form.collectionRef = selected?.[0]?.value || "";
                                     },
                                 }),
+                                () => fieldError(app.store.errors?.collectionRef),
                             ),
-                            () => fieldError(app.store.errors?.collectionRef),
-                        ),
-                        t.div(
-                            {
-                                className: "col-md-6",
-                                hidden: () => !data.isCronTrigger,
-                            },
                             t.div(
-                                { className: "field" },
+                                {
+                                    className: "field",
+                                    hidden: () => !data.isCronTrigger,
+                                },
                                 t.label(
                                     { htmlFor: formId + "_cronExpr", className: "automation-field-label" },
                                     "Cron expression",
@@ -595,20 +529,13 @@ export function pageAutomationUpsert(route) {
                                     value: () => data.form.cronExpr,
                                     oninput: (e) => (data.form.cronExpr = e.target.value),
                                 }),
+                                () => fieldError(app.store.errors?.cronExpr),
                             ),
                             t.div(
-                                { className: "field-help automation-field-desc" },
-                                "Use standard cron syntax for scheduled automations.",
-                            ),
-                            () => fieldError(app.store.errors?.cronExpr),
-                        ),
-                        t.div(
-                            {
-                                className: "col-lg-12",
-                                hidden: () => !data.isWebhookTrigger,
-                            },
-                            t.div(
-                                { className: "field" },
+                                {
+                                    className: "field",
+                                    hidden: () => !data.isWebhookTrigger,
+                                },
                                 t.label({ className: "automation-field-label" }, "Webhook endpoint"),
                                 () => {
                                     if (!data.automation?.id) {
@@ -619,19 +546,12 @@ export function pageAutomationUpsert(route) {
                                     }
 
                                     return t.div(
-                                        { className: "flex gap-10 flex-wrap p-10" },
+                                        { className: "automation-workflow-webhook-copy" },
                                         t.code(null, webhookURL(data.automation.id)),
                                         app.components.copyButton(() => webhookURL(data.automation.id)),
                                     );
                                 },
                             ),
-                            t.div(
-                                { className: "field-help automation-field-desc" },
-                                "Send a POST request to this endpoint. Templates can read incoming request values.",
-                            ),
-                        ),
-                        t.div(
-                            { className: "col-lg-12" },
                             t.div(
                                 { className: "field" },
                                 t.label({ htmlFor: formId + "_notes", className: "automation-field-label" }, "Notes"),
@@ -643,22 +563,57 @@ export function pageAutomationUpsert(route) {
                                     value: () => data.form.notes,
                                     oninput: (e) => (data.form.notes = e.target.value),
                                 }),
+                                () => fieldError(app.store.errors?.notes),
                             ),
-                            () => fieldError(app.store.errors?.notes),
+                            t.div(
+                                { className: "automation-workflow-toggle-row" },
+                                t.div(
+                                    { className: "automation-workflow-toggle-copy" },
+                                    t.label(
+                                        {
+                                            htmlFor: formId + "_notifyOnCompletion",
+                                            className: "automation-field-label",
+                                        },
+                                        "Notify admins",
+                                    ),
+                                ),
+                                t.input({
+                                    id: formId + "_notifyOnCompletion",
+                                    name: "notifyOnCompletion",
+                                    type: "checkbox",
+                                    className: "switch",
+                                    checked: () => data.form.notifyOnCompletion,
+                                    onchange: (e) => (data.form.notifyOnCompletion = e.target.checked),
+                                }),
+                            ),
+                        ),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "automation-workflow-info-toggle",
+                                ariaLabel: app.attrs.tooltip(() =>
+                                    data.infoPanelCollapsed ? "Expand details" : "Collapse details"
+                                ),
+                                onclick: () => (data.infoPanelCollapsed = !data.infoPanelCollapsed),
+                            },
+                            t.i({
+                                className: () => data.infoPanelCollapsed ? "ti ti-chevron-right" : "ti ti-chevron-left",
+                                ariaHidden: true,
+                            }),
                         ),
                     ),
-                ),
-                t.div(
-                    { className: "automation-builder-workspace" },
-                    stepEditor({
-                        steps: () => data.form.steps,
-                        errors: () => app.store.errors?.steps,
-                        triggerType: () => data.form.triggerType,
-                        triggerCollectionRef: () => data.form.collectionRef,
-                        onchange: (steps) => {
-                            data.form.steps = steps;
-                        },
-                    }),
+                    t.div(
+                        { className: "automation-builder-workspace automation-workflow-flowspace" },
+                        stepEditor({
+                            steps: () => data.form.steps,
+                            errors: () => app.store.errors?.steps,
+                            triggerType: () => data.form.triggerType,
+                            triggerCollectionRef: () => data.form.collectionRef,
+                            onchange: (steps) => {
+                                data.form.steps = steps;
+                            },
+                        }),
+                    ),
                 ),
             ),
         ];
