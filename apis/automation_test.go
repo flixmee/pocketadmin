@@ -927,15 +927,27 @@ func TestAutomationApprovalDecision(t *testing.T) {
 				createApprovalFixture(t, app)
 			},
 			ExpectedStatus: 204,
-			ExpectedEvents: map[string]int{
-				"OnRecordValidate":           4,
-				"OnRecordUpdate":             4,
-				"OnRecordUpdateExecute":      4,
-				"OnRecordAfterUpdateSuccess": 4,
-				"OnModelValidate":            4,
-				"OnModelUpdate":              4,
-				"OnModelUpdateExecute":       4,
-				"OnModelAfterUpdateSuccess":  4,
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				approval, err := app.FindApprovalById("approvalapi0001")
+				if err != nil {
+					t.Fatalf("Expected resolved approval, got error: %v", err)
+				}
+				if approval.Status() != core.ApprovalStatusRejected || approval.Comment() != "No" {
+					t.Fatalf("Expected rejected approval with comment, got status=%q comment=%q", approval.Status(), approval.Comment())
+				}
+
+				for i := 0; i < 20; i++ {
+					run, err := app.FindAutomationRunById("runapproval0001")
+					if err != nil {
+						t.Fatalf("Expected automation run, got error: %v", err)
+					}
+					if run.Status() == core.AutomationRunStatusFailed {
+						return
+					}
+					time.Sleep(25 * time.Millisecond)
+				}
+
+				t.Fatal("Expected approval workflow continuation to fail the run in the background")
 			},
 		},
 	}
