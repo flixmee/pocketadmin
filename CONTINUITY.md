@@ -1,34 +1,36 @@
 Goal (incl. success criteria):
 
-- Fix Monaco editor snippets for send mail, render template, and fetch single record.
-- Success: snippets insert literal dollar-prefixed APIs such as `$template`, `$app`, and `${__hooks}` while preserving intended snippet placeholders.
+- Add a "URL" tab to the media upload dialog.
+- Success: users can paste image URLs separated by line breaks, queue them, and upload them into the existing `_medias` file upload flow.
 
 Constraints/Assumptions:
 
 - Follow `AGENTS.md` and UI guidance.
 - Existing unrelated changes may be present; do not revert them.
 - When updating admin UI, consult `UI_DOCS.md`; do not introduce native HTML `<select>`.
-- Keep the change focused in `ui/src/base/monacoEditor.js`.
+- URL uploads will use browser `fetch`; remote hosts must allow browser CORS access.
+- Keep media upload callbacks/events and parent folder handling consistent with file uploads.
 
 Key decisions:
 
-- Extend the existing Monaco completion provider with snippet support instead of adding another provider.
-- Offer snippets only for JavaScript/TypeScript-like Monaco models.
+- Extend `ui/src/media/mediaUploadModal.js` so URL entries use the same queue and submit path as local files.
+- Add lightweight CSS in `ui/src/css/media.css` for the upload tabs and URL textarea.
 
 State:
   - Done:
-    - Read `CONTINUITY.md`, `UI_DOCS.md`, `ui/src/base/monacoEditor.js`, and related autocomplete call sites.
-    - Confirmed `monacoEditor` already owns Monaco completion registration.
-    - Added built-in JavaScript/TypeScript Monaco snippets for send mail, render template, and fetch single record.
-    - Preserved existing custom autocomplete items and merged snippets into the same provider.
-    - Ran `npx dprint fmt src/base/monacoEditor.js` from `ui/`; passed.
+    - Read `CONTINUITY.md` and `UI_DOCS.md`.
+    - Located the upload dialog in `ui/src/media/mediaUploadModal.js`.
+    - Reviewed existing media upload styles in `ui/src/css/media.css` and shared tabs styling.
+    - Added Files/URL tabs to the upload modal.
+    - Added newline-separated URL parsing and queueing.
+    - Added browser fetch-to-File resolution for URL queue items before the existing `_medias` upload request.
+    - Added image type checks, MIME/name inference, per-item fetch errors, and abort handling for URL fetches.
+    - Updated upload queue labels and footer button state so pasted URLs can be uploaded directly.
+    - Added URL tab/textarea styling in `ui/src/css/media.css`.
+    - Ran `npx dprint fmt src/media/mediaUploadModal.js src/css/media.css` from `ui/`; passed.
     - Ran `npm run build` from `ui/`; passed with Vite's existing large chunk warning.
     - Reverted generated `ui/dist/index.html` asset hash churn from the verification build.
-    - User reported literal dollar-prefixed APIs are not displayed when snippets are inserted.
-    - Escaped literal dollar signs in snippet insert text for `$app`, `$template`, and `${__hooks}`.
-    - Ran `npx dprint fmt src/base/monacoEditor.js` from `ui/`; passed.
-    - Ran `npm run build` from `ui/`; passed with Vite's existing large chunk warning.
-    - Reverted generated `ui/dist/index.html` asset hash churn from the verification build.
+    - Browser plugin smoke check was attempted but blocked because the required Node REPL JavaScript execution tool was unavailable.
   - Now:
     - Ready to report implementation and verification.
   - Next:
@@ -41,7 +43,8 @@ Open questions (UNCONFIRMED if needed):
 Working set (files/ids/commands):
 
 - `CONTINUITY.md`
-- `ui/src/base/monacoEditor.js`
-- `ui/package.json`
-- `npx dprint fmt src/base/monacoEditor.js`
+- `ui/src/media/mediaUploadModal.js`
+- `ui/src/css/media.css`
+- `UI_DOCS.md`
+- `npx dprint fmt src/media/mediaUploadModal.js src/css/media.css`
 - `npm run build`
