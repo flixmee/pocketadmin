@@ -1,52 +1,47 @@
 Goal (incl. success criteria):
 
-- Change admin request approval so the admin does not wait for related automation completion.
-- Success: approving a request returns promptly, automation work continues in the background, errors are surfaced/logged appropriately without blocking the approval response, and existing tests/builds pass or failures are reported.
+- Fix Monaco editor snippets for send mail, render template, and fetch single record.
+- Success: snippets insert literal dollar-prefixed APIs such as `$template`, `$app`, and `${__hooks}` while preserving intended snippet placeholders.
 
 Constraints/Assumptions:
 
 - Follow `AGENTS.md` and UI guidance.
 - Existing unrelated changes may be present; do not revert them.
 - When updating admin UI, consult `UI_DOCS.md`; do not introduce native HTML `<select>`.
-- Use existing admin UI architecture and components where practical.
-- Browser smoke verification is UNCONFIRMED unless local tooling makes it available.
+- Keep the change focused in `ui/src/base/monacoEditor.js`.
 
 Key decisions:
 
-- Trace existing approval and automation execution paths before editing.
-- Keep the existing core `ResolveAutomationApproval` method synchronous for current callers/tests.
-- Split approval handling into decision persistence and workflow continuation so the API can dispatch continuation in the background.
+- Extend the existing Monaco completion provider with snippet support instead of adding another provider.
+- Offer snippets only for JavaScript/TypeScript-like Monaco models.
 
 State:
   - Done:
-    - Received request to make admin approval continue immediately while automation runs in the background.
-    - Read and reset stale ledger context for the current request.
-    - Found admin approval endpoint: `POST /api/automations/approvals/{id}/decision` in `apis/automation.go`.
-    - Found synchronous core path: `BaseApp.ResolveAutomationApproval` in `core/automation_workflow_runtime.go`.
-    - Added `ResolveAutomationApprovalDecision` to record approval status/comment and notification updates without continuing the workflow.
-    - Added `ContinueAutomationApproval` to resume/fail the workflow for an already resolved approval.
-    - Updated the API endpoint to record the decision synchronously and call `ContinueAutomationApproval` via `routine.FireAndForget`, logging continuation errors.
-    - Ran `gofmt` on edited Go files.
-    - Updated `TestAutomationApprovalDecision` to assert synchronous decision persistence and eventual background run continuation instead of synchronous workflow hook counts.
-    - Focused checks passed: `go test ./apis -run 'TestAutomationApprovalDecision' -count=1`.
-    - Focused checks passed: `go test ./core -run 'TestAutomationWaitApprovalDecision|TestAutomationWaitApprovalRejectedBranch|TestAutomationBeforeRecordUpdateAfterWaitApprovalCanCustomizeRecord|TestAutomationWaitApprovalNotifications' -count=1`.
-    - Broad check `go test ./...` was attempted; it failed in unrelated OTP/auth and automation delay scheduler cleanup panics (`close of closed channel`, nil DB after cleanup), not in the approval-focused tests.
-    - Removed generated untracked test artifact `core/pb_base_app_test_data_dir/`.
+    - Read `CONTINUITY.md`, `UI_DOCS.md`, `ui/src/base/monacoEditor.js`, and related autocomplete call sites.
+    - Confirmed `monacoEditor` already owns Monaco completion registration.
+    - Added built-in JavaScript/TypeScript Monaco snippets for send mail, render template, and fetch single record.
+    - Preserved existing custom autocomplete items and merged snippets into the same provider.
+    - Ran `npx dprint fmt src/base/monacoEditor.js` from `ui/`; passed.
+    - Ran `npm run build` from `ui/`; passed with Vite's existing large chunk warning.
+    - Reverted generated `ui/dist/index.html` asset hash churn from the verification build.
+    - User reported literal dollar-prefixed APIs are not displayed when snippets are inserted.
+    - Escaped literal dollar signs in snippet insert text for `$app`, `$template`, and `${__hooks}`.
+    - Ran `npx dprint fmt src/base/monacoEditor.js` from `ui/`; passed.
+    - Ran `npm run build` from `ui/`; passed with Vite's existing large chunk warning.
+    - Reverted generated `ui/dist/index.html` asset hash churn from the verification build.
   - Now:
     - Ready to report implementation and verification.
   - Next:
-    - Optional follow-up: investigate existing `go test ./...` cleanup races separately.
+    - None.
 
 Open questions (UNCONFIRMED if needed):
 
-- Existing broad-suite cleanup panics are outside this change and remain unresolved.
+- None.
 
 Working set (files/ids/commands):
 
 - `CONTINUITY.md`
-- `apis/automation.go`
-- `apis/automation_test.go`
-- `core/automation_workflow_runtime.go`
-- `core/app.go`
-- Focused tests passed as listed above.
-- Broad `go test ./...` failed due unrelated cleanup panics.
+- `ui/src/base/monacoEditor.js`
+- `ui/package.json`
+- `npx dprint fmt src/base/monacoEditor.js`
+- `npm run build`

@@ -355,12 +355,13 @@ function clampColor(value) {
 }
 
 function registerAutocomplete(monaco, model, props) {
-    if (!props.autocomplete) {
+    const snippetItems = getMonacoSnippetItems(monaco, model.getLanguageId());
+    if (!props.autocomplete && !snippetItems.length) {
         return null;
     }
 
     return monaco.languages.registerCompletionItemProvider(model.getLanguageId(), {
-        triggerCharacters: [".", "_"],
+        triggerCharacters: [".", "_", "$"],
         provideCompletionItems: (completionModel, position) => {
             if (completionModel !== model) {
                 return { suggestions: [] };
@@ -368,28 +369,96 @@ function registerAutocomplete(monaco, model, props) {
 
             const word = completionModel.getWordUntilPosition(position);
             const query = word?.word || "";
-            const items = typeof props.autocomplete == "function"
+            const autocompleteItems = typeof props.autocomplete == "function"
                 ? props.autocomplete(query) || []
                 : filterAutocompleteItems(props.autocomplete, query);
+            const range = {
+                startLineNumber: position.lineNumber,
+                endLineNumber: position.lineNumber,
+                startColumn: word.startColumn,
+                endColumn: word.endColumn,
+            };
 
             return {
-                suggestions: items.map((item) => {
+                suggestions: autocompleteItems.map((item) => {
                     const value = item.value || item;
                     return {
                         label: item.label || value,
                         kind: monaco.languages.CompletionItemKind.Variable,
                         insertText: value,
-                        range: {
-                            startLineNumber: position.lineNumber,
-                            endLineNumber: position.lineNumber,
-                            startColumn: word.startColumn,
-                            endColumn: word.endColumn,
-                        },
+                        range: range,
                     };
-                }),
+                }).concat(snippetItems.map((item) => ({
+                    ...item,
+                    range: range,
+                }))),
             };
         },
     });
+}
+
+function getMonacoSnippetItems(monaco, language) {
+    switch (language) {
+        case "javascript":
+        case "typescript":
+            return [
+                {
+                    label: "send mail",
+                    detail: "Send an email message",
+                    filterText: "send mail mailer email",
+                    kind: monaco.languages.CompletionItemKind.Snippet,
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    insertText: [
+                        "const message = new MailerMessage({",
+                        "    from: {",
+                        "        address: e.app.settings().meta.senderAddress,",
+                        "        name:    e.app.settings().meta.senderName,",
+                        "    },",
+                        "    to:      [{address: e.record.email()}],",
+                        "    subject: \"${1:YOUR_SUBJECT...}\",",
+                        "    html:    \"${2:YOUR_HTML_BODY...}\",",
+                        "    // bcc, cc and custom headers are also supported...",
+                        "})",
+                        "",
+                        "\\$app.newMailClient().send(message)",
+                    ].join("\n"),
+                    sortText: "0_send_mail",
+                },
+                {
+                    label: "render template",
+                    detail: "Render HTML from template files",
+                    filterText: "render template html",
+                    kind: monaco.languages.CompletionItemKind.Snippet,
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    insertText: [
+                        "const html = \\$template.loadFiles(",
+                        "    `\\${__hooks}/views/layout.html`,",
+                        "    `\\${__hooks}/views/hello.html`,",
+                        ").render({",
+                        "    \"name\": ${1:name},",
+                        "})",
+                    ].join("\n"),
+                    sortText: "0_render_template",
+                },
+                {
+                    label: "fetch single",
+                    detail: "Fetch one record by filter",
+                    filterText: "fetch single record findFirstRecordByFilter",
+                    kind: monaco.languages.CompletionItemKind.Snippet,
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    insertText: [
+                        "let record = \\$app.findFirstRecordByFilter(",
+                        "    \"${1:articles}\",",
+                        "    \"status = 'public' && category = {:category}\",",
+                        "    { \"category\": \"${2:news}\" },",
+                        ")",
+                    ].join("\n"),
+                    sortText: "0_fetch_single",
+                },
+            ];
+        default:
+            return [];
+    }
 }
 
 function filterAutocompleteItems(items, query) {
