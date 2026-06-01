@@ -1,36 +1,34 @@
 Goal (incl. success criteria):
 
-- Add a "URL" tab to the media upload dialog.
-- Success: users can paste image URLs separated by line breaks, queue them, and upload them into the existing `_medias` file upload flow.
+- Update `ui/src/base/flowdesigner.vanilla.js` viewport navigation.
+- Success: desktop Space+drag and middle-button drag pan naturally; wheel zoom stays zoom; trackpad two-finger scroll pans; touch uses 1 finger for interaction, 2-finger drag for pan, pinch for zoom; inertia works without leaks.
 
 Constraints/Assumptions:
 
 - Follow `AGENTS.md` and UI guidance.
 - Existing unrelated changes may be present; do not revert them.
-- When updating admin UI, consult `UI_DOCS.md`; do not introduce native HTML `<select>`.
-- URL uploads will use browser `fetch`; remote hosts must allow browser CORS access.
-- Keep media upload callbacks/events and parent folder handling consistent with file uploads.
+- When updating admin UI, consult `UI_DOCS.md`.
+- Keep changes focused to `flowdesigner.vanilla.js` unless verification reveals another required file.
+- Prefer Pointer Events API for viewport gestures and precise `preventDefault()`.
 
 Key decisions:
 
-- Extend `ui/src/media/mediaUploadModal.js` so URL entries use the same queue and submit path as local files.
-- Add lightweight CSS in `ui/src/css/media.css` for the upload tabs and URL textarea.
+- Implement a dedicated `PanController` class in `ui/src/base/flowdesigner.vanilla.js`.
+- Preserve existing FlowDesigner API and route node/edge/selection behaviors through pointer-driven handlers.
 
 State:
   - Done:
-    - Read `CONTINUITY.md` and `UI_DOCS.md`.
-    - Located the upload dialog in `ui/src/media/mediaUploadModal.js`.
-    - Reviewed existing media upload styles in `ui/src/css/media.css` and shared tabs styling.
-    - Added Files/URL tabs to the upload modal.
-    - Added newline-separated URL parsing and queueing.
-    - Added browser fetch-to-File resolution for URL queue items before the existing `_medias` upload request.
-    - Added image type checks, MIME/name inference, per-item fetch errors, and abort handling for URL fetches.
-    - Updated upload queue labels and footer button state so pasted URLs can be uploaded directly.
-    - Added URL tab/textarea styling in `ui/src/css/media.css`.
-    - Ran `npx dprint fmt src/media/mediaUploadModal.js src/css/media.css` from `ui/`; passed.
-    - Ran `npm run build` from `ui/`; passed with Vite's existing large chunk warning.
+    - Read `CONTINUITY.md`.
+    - Read relevant `UI_DOCS.md` conventions.
+    - Began inspecting existing flow designer pan/zoom/event code.
+    - Added a `PanController` in `ui/src/base/flowdesigner.vanilla.js`.
+    - Switched viewport navigation from mouse-only root/window events to pointer events.
+    - Added Space+drag, middle-button drag, trackpad pan heuristic, two-touch pan, pinch zoom separation, pointer capture, and inertia.
+    - Updated inline FlowDesigner CSS with `touch-action: none` and active pan cursor state.
+    - Ran `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npx dprint fmt src/base/flowdesigner.vanilla.js`; passed.
+    - Ran `node --check src/base/flowdesigner.vanilla.js`; passed.
+    - Ran `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npm run build`; passed with Vite's existing large chunk warning.
     - Reverted generated `ui/dist/index.html` asset hash churn from the verification build.
-    - Browser plugin smoke check was attempted but blocked because the required Node REPL JavaScript execution tool was unavailable.
   - Now:
     - Ready to report implementation and verification.
   - Next:
@@ -43,8 +41,8 @@ Open questions (UNCONFIRMED if needed):
 Working set (files/ids/commands):
 
 - `CONTINUITY.md`
-- `ui/src/media/mediaUploadModal.js`
-- `ui/src/css/media.css`
 - `UI_DOCS.md`
-- `npx dprint fmt src/media/mediaUploadModal.js src/css/media.css`
-- `npm run build`
+- `ui/src/base/flowdesigner.vanilla.js`
+- `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npx dprint fmt src/base/flowdesigner.vanilla.js`
+- `node --check src/base/flowdesigner.vanilla.js`
+- `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npm run build`
