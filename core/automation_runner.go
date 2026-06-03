@@ -23,6 +23,7 @@ type automationTriggerPayload struct {
 	DedupeKey      string         `json:"dedupeKey,omitempty"`
 	Request        map[string]any `json:"request,omitempty"`
 	I18n           map[string]any `json:"i18n,omitempty"`
+	Telegram       map[string]any `json:"telegram,omitempty"`
 	Record         map[string]any `json:"record,omitempty"`
 	RecordOriginal map[string]any `json:"recordOriginal,omitempty"`
 	triggerRecord  *Record        `json:"-"`
@@ -744,6 +745,12 @@ func automationRunDedupeKey(payload automationTriggerPayload) string {
 	}
 	if value := toString(payload.Request["dedupeKey"]); strings.TrimSpace(value) != "" {
 		return strings.TrimSpace(value)
+	}
+	if value := toString(payload.Telegram["dedupeKey"]); strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	if value := toString(payload.Telegram["updateId"]); strings.TrimSpace(value) != "" {
+		return payload.TriggerType + ":" + strings.TrimSpace(value)
 	}
 	if body, ok := payload.Request["body"].(map[string]any); ok {
 		if value := toString(body["dedupeKey"]); strings.TrimSpace(value) != "" {

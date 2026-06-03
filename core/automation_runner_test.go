@@ -1643,6 +1643,205 @@ func TestAutomationMailStepSendsMessageWithRecordAttachments(t *testing.T) {
 	}
 }
 
+func TestAutomationTelegramStepSendsMessage(t *testing.T) {
+	t.Parallel()
+
+	requests := make(chan map[string]string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path != "/bottoken_123/sendMessage" {
+			t.Errorf("Expected Telegram sendMessage path, got %q", req.URL.Path)
+			http.Error(w, "unexpected path", http.StatusNotFound)
+			return
+		}
+		if req.Method != http.MethodPost {
+			t.Errorf("Expected POST request, got %q", req.Method)
+			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := req.ParseForm(); err != nil {
+			t.Errorf("Failed to parse Telegram form: %v", err)
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+
+		requests <- map[string]string{
+			"chat_id":                  req.Form.Get("chat_id"),
+			"text":                     req.Form.Get("text"),
+			"parse_mode":               req.Form.Get("parse_mode"),
+			"disable_web_page_preview": req.Form.Get("disable_web_page_preview"),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":42}}`))
+	}))
+	defer server.Close()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	app.Settings().Credentials.Telegram.Enabled = true
+	app.Settings().Credentials.Telegram.BaseURL = server.URL
+	app.Settings().Credentials.Telegram.AccessToken = "token_123"
+
+	collection, err := app.FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerRecordCreate)
+	automation.SetCollectionRef(collection.Id)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{
+			"type":"telegram.send",
+			"chatId":"chat_{{record.text}}",
+			"text":"Record {{record.id}} created",
+			"parseMode":"Markdown",
+			"disableWebPagePreview":true
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("text", "phase_telegram")
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+
+	select {
+	case form := <-requests:
+		if form["chat_id"] != "chat_phase_telegram" {
+			t.Fatalf("Expected rendered chat_id, got %q", form["chat_id"])
+		}
+		if form["text"] != "Record "+record.Id+" created" {
+			t.Fatalf("Expected rendered text, got %q", form["text"])
+		}
+		if form["parse_mode"] != "Markdown" {
+			t.Fatalf("Expected parse mode, got %q", form["parse_mode"])
+		}
+		if form["disable_web_page_preview"] != "true" {
+			t.Fatalf("Expected disabled preview flag, got %q", form["disable_web_page_preview"])
+		}
+	default:
+		t.Fatal("Expected Telegram API request")
+	}
+
+	results := decodeStepResults(t, runs[0])
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 step result, got %d", len(results))
+	}
+	output, _ := results[0]["output"].(map[string]any)
+	if output["sent"] != true {
+		t.Fatalf("Expected sent output, got %#v", output)
+	}
+	if output["messageId"] != float64(42) {
+		t.Fatalf("Expected message id output, got %#v", output["messageId"])
+	}
+}
+
+func TestAutomationTelegramMessageTriggerQueuesRuns(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	gotURL := ""
+	gotBody := ""
+	httpCalls := 0
+	app.Store().Set(core.StoreKeyAutomationHTTPDoer, automationHTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+		httpCalls++
+		gotURL = req.URL.String()
+
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		gotBody = string(body)
+
+		return &http.Response{
+			StatusCode: http.StatusNoContent,
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header:     make(http.Header),
+		}, nil
+	}))
+
+	automation := core.NewAutomation(app)
+	populateValidAutomation(automation)
+	automation.SetActive(true)
+	automation.SetTriggerType(core.AutomationTriggerTelegramMessage)
+	automation.SetSteps(mustParseJSONRaw(t, `[
+		{"type":"condition","path":"telegram.text","op":"eq","value":"/start"},
+		{
+			"type":"http",
+			"method":"POST",
+			"url":"https://example.com/telegram/{{telegram.chat.id}}",
+			"body":{"text":"{{telegram.text}}","from":"{{telegram.from.username}}","messageId":"{{telegram.message.message_id}}"}
+		}
+	]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatal(err)
+	}
+
+	queued, err := app.QueueAutomationTelegramMessage(map[string]any{
+		"update_id": 901,
+		"message": map[string]any{
+			"message_id": 11,
+			"text":       "/start",
+			"chat": map[string]any{
+				"id":       12345,
+				"username": "test_chat",
+			},
+			"from": map[string]any{
+				"id":       54321,
+				"username": "sender",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Expected Telegram message trigger to queue, got %v", err)
+	}
+	if queued != 1 {
+		t.Fatalf("Expected 1 queued automation, got %d", queued)
+	}
+
+	runs := waitForCompletedAutomationRuns(t, app, automation, 1)
+	if runs[0].Status() != core.AutomationRunStatusSuccess {
+		t.Fatalf("Expected successful run, got %q: %s", runs[0].Status(), runs[0].Error())
+	}
+	if httpCalls != 1 {
+		t.Fatalf("Expected 1 HTTP call, got %d", httpCalls)
+	}
+	if gotURL != "https://example.com/telegram/12345" {
+		t.Fatalf("Expected rendered Telegram chat URL, got %q", gotURL)
+	}
+	if !strings.Contains(gotBody, `"text":"/start"`) || !strings.Contains(gotBody, `"from":"sender"`) || !strings.Contains(gotBody, `"messageId":11`) {
+		t.Fatalf("Expected rendered Telegram body, got %q", gotBody)
+	}
+
+	input := decodeAutomationRunInput(t, runs[0])
+	telegram, ok := input["telegram"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected Telegram payload in run input, got %#v", input["telegram"])
+	}
+	if telegram["updateId"] != "901" {
+		t.Fatalf("Expected update id in run input, got %#v", telegram["updateId"])
+	}
+	if telegram["text"] != "/start" {
+		t.Fatalf("Expected text in run input, got %#v", telegram["text"])
+	}
+}
+
 func TestAutomationBeforeRecordCreateCodeStepCanCustomizeRecord(t *testing.T) {
 	t.Parallel()
 

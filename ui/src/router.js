@@ -6,6 +6,7 @@ import { pageApplicationSettings } from "@/settings/application/pageApplicationS
 import { pageAutomationsSettings } from "@/settings/automations/pageAutomationsSettings";
 import { pageAutomationUpsert } from "@/settings/automations/pageAutomationUpsert";
 import { pageBackupsSettings } from "@/settings/backups/pageBackupsSettings";
+import { pageCredentialsSettings } from "@/settings/credentials/pageCredentialsSettings";
 import { pageCronsSettings } from "@/settings/crons/pageCronsSettings";
 import { pageLocalesSettings } from "@/settings/locales/pageLocalesSettings";
 import { pageMailSettings } from "@/settings/mail/pageMailSettings";
@@ -174,6 +175,7 @@ app.routes.superuserOnly("#/automations/new", pageAutomationUpsert);
 app.routes.superuserOnly("#/automations/{id}", pageAutomationUpsert);
 app.routes.superuserOnly("#/settings", pageApplicationSettings);
 app.routes.superuserOnly("#/settings/mail", pageMailSettings);
+app.routes.superuserOnly("#/settings/credentials", pageCredentialsSettings);
 app.routes.superuserOnly("#/settings/storage", pageStorageSettings);
 app.routes.superuserOnly("#/settings/backups", pageBackupsSettings);
 app.routes.superuserOnly("#/settings/crons", pageCronsSettings);

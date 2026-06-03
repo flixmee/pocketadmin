@@ -4,12 +4,14 @@ import { httpStepForm } from "./httpStepForm";
 import { mailStepForm } from "./mailStepForm";
 import { recordStepForm } from "./recordStepForm";
 import { responseStepForm } from "./responseStepForm";
+import { telegramStepForm } from "./telegramStepForm";
 
 const stepTypeOptions = [
     { value: "condition", label: "Condition", icon: "ti ti-git-merge", category: "control" },
     { value: "code", label: "Code", icon: "ti ti-code", category: "control" },
     { value: "http", label: "HTTP request", icon: "ti ti-world", category: "integration" },
     { value: "mail.send", label: "Send mail", icon: "ti ti-mail", category: "communication" },
+    { value: "telegram.send", label: "Send Telegram", icon: "ti ti-brand-telegram", category: "communication" },
     { value: "record.create", label: "Create record", icon: "ti ti-database-plus", category: "record" },
     { value: "record.update", label: "Update record", icon: "ti ti-edit", category: "record" },
     { value: "record.delete", label: "Delete record", icon: "ti ti-trash", category: "record" },
@@ -623,6 +625,13 @@ function renderStepForm(step, error, context = {}) {
             return httpStepForm({ step, error, ...context });
         case "mail.send":
             return mailStepForm({
+                step,
+                error,
+                triggerType: () => context.triggerType,
+                triggerCollectionRef: () => context.triggerCollectionRef,
+            });
+        case "telegram.send":
+            return telegramStepForm({
                 step,
                 error,
                 triggerType: () => context.triggerType,
@@ -2585,6 +2594,14 @@ function createEditorStep(type, rawStep = {}) {
                 html: toString(rawStep.html),
                 attachments: normalizeStringArray(rawStep.attachments),
             };
+        case "telegram.send":
+            return {
+                ...base,
+                chatId: toString(rawStep.chatId),
+                text: toString(rawStep.text),
+                parseMode: toString(rawStep.parseMode),
+                disableWebPagePreview: !!rawStep.disableWebPagePreview,
+            };
         case "record.create":
             return {
                 ...base,
@@ -2719,6 +2736,8 @@ function buildStepPayload(step, index) {
             return buildHTTPPayload(step, index);
         case "mail.send":
             return buildMailPayload(step, index);
+        case "telegram.send":
+            return buildTelegramPayload(step, index);
         case "record.create":
             return buildRecordCreatePayload(step, index);
         case "record.update":
@@ -3591,6 +3610,35 @@ function buildMailPayload(step, index) {
     return payload;
 }
 
+function buildTelegramPayload(step, index) {
+    const chatId = step.chatId.trim();
+    if (!chatId) {
+        throw new Error(`Step ${index + 1}: Telegram chat ID is required.`);
+    }
+
+    const text = step.text.trim();
+    if (!text) {
+        throw new Error(`Step ${index + 1}: Telegram message is required.`);
+    }
+
+    const payload = {
+        type: "telegram.send",
+        chatId,
+        text,
+    };
+
+    const parseMode = step.parseMode.trim();
+    if (parseMode) {
+        payload.parseMode = parseMode;
+    }
+
+    if (step.disableWebPagePreview) {
+        payload.disableWebPagePreview = true;
+    }
+
+    return payload;
+}
+
 function buildRecordUpdatePayload(step, index) {
     const payload = buildRecordCreatePayload({
         ...step,
@@ -3686,6 +3734,8 @@ function summarizeStep(step) {
             return `${(step.method || "GET").toUpperCase()} ${step.url || "HTTP request"}`;
         case "mail.send":
             return `Send mail to ${firstStringListValue(step.toText) || "recipient"}`;
+        case "telegram.send":
+            return `Send Telegram to ${step.chatId || "chat"}`;
         case "record.create":
             return `Create record in ${step.collection || "collection"}`;
         case "record.update":
@@ -3751,6 +3801,14 @@ function clientValidateStep(step) {
             }
             if (!step.text?.trim() && !step.html?.trim()) {
                 messages.push("Mail text or HTML body is required.");
+            }
+            break;
+        case "telegram.send":
+            if (!step.chatId?.trim()) {
+                messages.push("Telegram chat ID is required.");
+            }
+            if (!step.text?.trim()) {
+                messages.push("Telegram message is required.");
             }
             break;
         case "record.create":

@@ -33,6 +33,7 @@ var automationAllowedFields = []string{
 // bindAutomationApi registers the automation api endpoints.
 func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
 	rg.POST("/automation-webhooks/{id}", automationWebhook).Bind(SkipSuccessActivityLog())
+	rg.POST("/automation-telegram/{token}", automationTelegramWebhook).Bind(SkipSuccessActivityLog())
 	rg.POST("/automation-resume/{token}", automationResumeByToken).Bind(SkipSuccessActivityLog())
 
 	subGroup := rg.Group("/automations").Bind(RequireSuperuserAuth())
@@ -456,6 +457,36 @@ func automationWebhook(e *core.RequestEvent) error {
 	}
 
 	return automationWebhookResponse(e, response)
+}
+
+func automationTelegramWebhook(e *core.RequestEvent) error {
+	credentials := e.App.Settings().Credentials.Telegram
+	if !credentials.Enabled || strings.TrimSpace(credentials.AccessToken) == "" {
+		return e.NotFoundError("Missing or invalid Telegram webhook.", nil)
+	}
+	if e.Request.PathValue("token") != credentials.AccessToken {
+		return e.NotFoundError("Missing or invalid Telegram webhook.", nil)
+	}
+
+	body, err := automationWebhookBody(e)
+	if err != nil {
+		return e.BadRequestError("Failed to load Telegram update.", err)
+	}
+
+	update, ok := body.(map[string]any)
+	if !ok || len(update) == 0 {
+		return e.BadRequestError("Failed to load Telegram update.", errors.New("expected JSON object"))
+	}
+
+	if _, err := e.App.QueueAutomationTelegramMessage(update); err != nil {
+		e.App.Logger().Warn(
+			"Failed to queue Telegram message automation runs",
+			"error", err,
+		)
+		return e.BadRequestError("Failed to queue Telegram message automations.", err)
+	}
+
+	return e.NoContent(http.StatusNoContent)
 }
 
 func automationWebhookResponse(e *core.RequestEvent, response *core.AutomationWebhookResponse) error {

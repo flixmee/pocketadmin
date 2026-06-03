@@ -37,6 +37,7 @@ func AutomationSchemas() AutomationSchemaCatalog {
 			AutomationTriggerRecordDelete:       recordTriggerSchema(AutomationTriggerRecordDelete, "Record deleted"),
 			AutomationTriggerScheduleCron:       simpleTriggerSchema(AutomationTriggerScheduleCron, "Schedule"),
 			AutomationTriggerWebhook:            webhookTriggerSchema(),
+			AutomationTriggerTelegramMessage:    telegramMessageTriggerSchema(),
 			AutomationTriggerManual:             simpleTriggerSchema(AutomationTriggerManual, "Manual"),
 			AutomationTriggerI18nMissing:        i18nTriggerSchema(AutomationTriggerI18nMissing, "Translation missing"),
 			AutomationTriggerI18nPublished:      i18nTriggerSchema(AutomationTriggerI18nPublished, "Locale published"),
@@ -48,6 +49,7 @@ func AutomationSchemas() AutomationSchemaCatalog {
 			AutomationStepCode:         codeStepSchema(),
 			AutomationStepHTTP:         httpStepSchema(),
 			AutomationStepMailSend:     mailStepSchema(),
+			AutomationStepTelegramSend: telegramStepSchema(),
 			AutomationStepRecordCreate: recordWriteStepSchema(AutomationStepRecordCreate, "Create record"),
 			AutomationStepRecordUpdate: recordWriteStepSchema(AutomationStepRecordUpdate, "Update record"),
 			AutomationStepRecordDelete: recordDeleteStepSchema(),
@@ -229,6 +231,26 @@ func webhookTriggerSchema() AutomationSchema {
 	return schema
 }
 
+func telegramMessageTriggerSchema() AutomationSchema {
+	schema := simpleTriggerSchema(AutomationTriggerTelegramMessage, "Telegram message")
+	schema.OutputSchema = objectSchema(map[string]any{
+		"trigger": objectSchema(map[string]any{
+			"type":     stringSchema(),
+			"telegram": objectSchema(nil),
+		}),
+		"telegram": objectSchema(map[string]any{
+			"updateId":    stringSchema(),
+			"messageType": stringSchema(),
+			"text":        stringSchema(),
+			"update":      objectSchema(nil),
+			"message":     objectSchema(nil),
+			"chat":        objectSchema(nil),
+			"from":        objectSchema(nil),
+		}),
+	})
+	return schema
+}
+
 func i18nTriggerSchema(key string, label string) AutomationSchema {
 	schema := simpleTriggerSchema(key, label)
 	schema.OutputSchema = objectSchema(map[string]any{
@@ -346,6 +368,26 @@ func mailStepSchema() AutomationSchema {
 		}),
 		OutputSchema: objectSchema(map[string]any{
 			"sent": boolSchema(),
+		}),
+	}
+}
+
+func telegramStepSchema() AutomationSchema {
+	return AutomationSchema{
+		Key:      AutomationStepTelegramSend,
+		Label:    "Send Telegram message",
+		Category: "communication",
+		InputSchema: objectSchema(map[string]any{
+			"type":                  constStringSchema(AutomationStepTelegramSend),
+			"chatId":                stringSchema(),
+			"text":                  stringSchema(),
+			"parseMode":             stringSchema(),
+			"disableWebPagePreview": boolSchema(),
+		}),
+		OutputSchema: objectSchema(map[string]any{
+			"sent":      boolSchema(),
+			"chatId":    stringSchema(),
+			"messageId": numberSchema(),
 		}),
 	}
 }

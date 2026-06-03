@@ -16,6 +16,8 @@ func bindSettingsApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
 	subGroup.PATCH("", settingsSet)
 	subGroup.POST("/test/s3", settingsTestS3)
 	subGroup.POST("/test/email", settingsTestEmail)
+	subGroup.POST("/test/telegram", settingsTestTelegram)
+	subGroup.POST("/test/google-sheets", settingsTestGoogleSheets)
 	subGroup.POST("/ai/models", settingsListAIModels)
 
 	// @todo move to collections

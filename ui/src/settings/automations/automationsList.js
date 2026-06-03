@@ -3,6 +3,7 @@ import { openAutomationRunsModal } from "./automationRunsList";
 const triggerLabels = {
     "manual": "Manual",
     "webhook": "Webhook",
+    "telegram.message": "On Telegram message",
     "schedule.cron": "Scheduled cron",
     "record.beforeCreate": "Before record create",
     "record.beforeUpdate": "Before record update",
@@ -606,6 +607,10 @@ function describeAutomationScope(automation) {
 
     if (automation.triggerType === "webhook") {
         return automation.id ? `POST /api/automation-webhooks/${automation.id}` : "Missing webhook endpoint";
+    }
+
+    if (automation.triggerType === "telegram.message") {
+        return "POST /api/automation-telegram/<access-token>";
     }
 
     if (

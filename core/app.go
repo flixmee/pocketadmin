@@ -592,6 +592,9 @@ type App interface {
 	// RunAutomationWebhook runs the specified active webhook automation.
 	RunAutomationWebhook(automationID string, request *AutomationWebhookRequest) (*AutomationWebhookResponse, error)
 
+	// QueueAutomationTelegramMessage queues active Telegram message automations for the specified update.
+	QueueAutomationTelegramMessage(update map[string]any) (int, error)
+
 	// RunAutomationDryRun previews the specified automation without side effects.
 	RunAutomationDryRun(automationID string, input map[string]any) (*AutomationDryRunResult, error)
 

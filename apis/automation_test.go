@@ -98,6 +98,7 @@ func TestAutomationSchemas(t *testing.T) {
 			ExpectedContent: []string{
 				`"triggers":{`,
 				`"record.create"`,
+				`"telegram.message"`,
 				`"i18n.translation_missing"`,
 				`"steps":{`,
 				`"http"`,
@@ -665,6 +666,102 @@ func TestAutomationWebhook(t *testing.T) {
 	}
 }
 
+func TestAutomationTelegramWebhook(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "telegram credentials disabled",
+			Method:          http.MethodPost,
+			URL:             "/api/automation-telegram/token_123",
+			Body:            strings.NewReader(`{"update_id":901,"message":{"text":"/start"}}`),
+			ExpectedStatus:  404,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "invalid token",
+			Method: http.MethodPost,
+			URL:    "/api/automation-telegram/wrong_token",
+			Body:   strings.NewReader(`{"update_id":901,"message":{"text":"/start"}}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				app.Settings().Credentials.Telegram.Enabled = true
+				app.Settings().Credentials.Telegram.AccessToken = "token_123"
+			},
+			ExpectedStatus:  404,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "invalid Telegram json",
+			Method: http.MethodPost,
+			URL:    "/api/automation-telegram/token_123",
+			Body:   strings.NewReader(`{"update_id":`),
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				app.Settings().Credentials.Telegram.Enabled = true
+				app.Settings().Credentials.Telegram.AccessToken = "token_123"
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"message":"Failed to load Telegram update."`,
+			},
+		},
+		{
+			Name:   "valid Telegram message update",
+			Method: http.MethodPost,
+			URL:    "/api/automation-telegram/token_123",
+			Body: strings.NewReader(`{
+				"update_id":901,
+				"message":{
+					"message_id":11,
+					"text":"/start",
+					"chat":{"id":12345,"username":"test_chat"},
+					"from":{"id":54321,"username":"sender"}
+				}
+			}`),
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Delay: 100 * time.Millisecond,
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				app.Settings().Credentials.Telegram.Enabled = true
+				app.Settings().Credentials.Telegram.AccessToken = "token_123"
+				createTelegramAutomationFixture(t, app, "autoapi00000056", "API Telegram automation")
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				automationRecord, err := app.FindRecordById(core.CollectionNameAutomations, "autoapi00000056")
+				if err != nil {
+					t.Fatalf("Expected Telegram automation to exist: %v", err)
+				}
+
+				automation := &core.Automation{}
+				automation.SetProxyRecord(automationRecord)
+
+				runs := waitForAutomationRunsAPI(t, app, automation, 1)
+				run := runs[0]
+				if run.TriggerType() != core.AutomationTriggerTelegramMessage {
+					t.Fatalf("Expected Telegram trigger type %q, got %q", core.AutomationTriggerTelegramMessage, run.TriggerType())
+				}
+
+				input := decodeAutomationRunInputAPI(t, run)
+				telegram, ok := input["telegram"].(map[string]any)
+				if !ok {
+					t.Fatalf("Expected Telegram payload in automation run input, got %#v", input["telegram"])
+				}
+				if telegram["updateId"] != "901" || telegram["text"] != "/start" {
+					t.Fatalf("Expected normalized Telegram update payload, got %#v", telegram)
+				}
+			},
+			ExpectedStatus: 204,
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
 func TestAutomationRunsList(t *testing.T) {
 	t.Parallel()
 
@@ -983,6 +1080,20 @@ func createWebhookAutomationFixture(t testing.TB, app *tests.TestApp, id string,
 
 	if err := app.Save(automation); err != nil {
 		t.Fatalf("Failed to create webhook automation fixture: %v", err)
+	}
+
+	return automation
+}
+
+func createTelegramAutomationFixture(t testing.TB, app *tests.TestApp, id string, name string) *core.Automation {
+	t.Helper()
+
+	automation := createAutomationFixture(t, app, id, name)
+	automation.SetTriggerType(core.AutomationTriggerTelegramMessage)
+	automation.SetSteps(mustAutomationJSONRaw(t, `[{"type":"condition","path":"telegram.text","op":"eq","value":"/start"}]`))
+
+	if err := app.Save(automation); err != nil {
+		t.Fatalf("Failed to create Telegram automation fixture: %v", err)
 	}
 
 	return automation

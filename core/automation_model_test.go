@@ -783,11 +783,17 @@ func TestAutomationSchemas(t *testing.T) {
 	if _, ok := catalog.Triggers[core.AutomationTriggerI18nMissing]; !ok {
 		t.Fatalf("Expected %q trigger schema", core.AutomationTriggerI18nMissing)
 	}
+	if _, ok := catalog.Triggers[core.AutomationTriggerTelegramMessage]; !ok {
+		t.Fatalf("Expected %q trigger schema", core.AutomationTriggerTelegramMessage)
+	}
 	if _, ok := catalog.Steps[core.AutomationStepHTTP]; !ok {
 		t.Fatalf("Expected %q step schema", core.AutomationStepHTTP)
 	}
 	if _, ok := catalog.Steps[core.AutomationStepMailSend]; !ok {
 		t.Fatalf("Expected %q step schema", core.AutomationStepMailSend)
+	}
+	if _, ok := catalog.Steps[core.AutomationStepTelegramSend]; !ok {
+		t.Fatalf("Expected %q step schema", core.AutomationStepTelegramSend)
 	}
 	if _, ok := catalog.Steps[core.AutomationStepCapability]; !ok {
 		t.Fatalf("Expected %q step schema", core.AutomationStepCapability)

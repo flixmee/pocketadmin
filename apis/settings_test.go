@@ -102,7 +102,11 @@ func TestSettingsSet(t *testing.T) {
 		"smtp":{"password": "new_smtp_password"},
 		"s3":{"secret": "new_s3_secret"},
 		"backups":{"s3":{"secret":"new_backups_s3_secret"}},
-		"ai":{"enabled":true,"provider":"openai","apiKey":"new_ai_api_key","model":"test-model"}
+		"ai":{"enabled":true,"provider":"openai","apiKey":"new_ai_api_key","model":"test-model"},
+		"credentials":{
+			"telegram":{"enabled":true,"baseURL":"https://api.telegram.org","accessToken":"new_telegram_access_token"},
+			"googleSheets":{"enabled":true,"oauthRedirectURL":"https://example.com/oauth2/callback","clientID":"google_client_id","clientSecret":"new_google_client_secret"}
+		}
 	}`
 
 	scenarios := []tests.ApiScenario{
@@ -144,6 +148,7 @@ func TestSettingsSet(t *testing.T) {
 				`"backups":{`,
 				`"batch":{`,
 				`"ai":{`,
+				`"credentials":{`,
 			},
 			ExpectedEvents: map[string]int{
 				"*":                         0,
@@ -196,6 +201,14 @@ func TestSettingsSet(t *testing.T) {
 					"s3.secret":         {settings.S3.Secret, "new_s3_secret"},
 					"backups.s3.secret": {settings.Backups.S3.Secret, "new_backups_s3_secret"},
 					"ai.apiKey":         {settings.AI.APIKey, "new_ai_api_key"},
+					"credentials.telegram.accessToken": {
+						settings.Credentials.Telegram.AccessToken,
+						"new_telegram_access_token",
+					},
+					"credentials.googleSheets.clientSecret": {
+						settings.Credentials.GoogleSheets.ClientSecret,
+						"new_google_client_secret",
+					},
 				}
 
 				for name, secret := range secrets {
@@ -213,12 +226,15 @@ func TestSettingsSet(t *testing.T) {
 				`"backups":{`,
 				`"batch":{`,
 				`"ai":{`,
+				`"credentials":{`,
 				`"appName":"update_test"`,
 			},
 			NotExpectedContent: []string{
 				"secret",
 				"password",
 				"apiKey",
+				"accessToken",
+				"clientSecret",
 			},
 			ExpectedEvents: map[string]int{
 				"*":                         0,
@@ -384,6 +400,65 @@ func TestSettingsTestS3(t *testing.T) {
 			ExpectedStatus: 400,
 			ExpectedContent: []string{
 				`"data":{}`,
+			},
+			ExpectedEvents: map[string]int{"*": 0},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
+func TestSettingsTestCredentials(t *testing.T) {
+	t.Parallel()
+
+	superuserToken := "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY"
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "telegram unauthorized",
+			Method:          http.MethodPost,
+			URL:             "/api/settings/test/telegram",
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "telegram invalid empty body",
+			Method: http.MethodPost,
+			URL:    "/api/settings/test/telegram",
+			Headers: map[string]string{
+				"Authorization": superuserToken,
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{`,
+				`"accessToken":{`,
+			},
+			ExpectedEvents: map[string]int{"*": 0},
+		},
+		{
+			Name:            "google sheets unauthorized",
+			Method:          http.MethodPost,
+			URL:             "/api/settings/test/google-sheets",
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "google sheets invalid empty body",
+			Method: http.MethodPost,
+			URL:    "/api/settings/test/google-sheets",
+			Headers: map[string]string{
+				"Authorization": superuserToken,
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{`,
+				`"oauthRedirectURL":{`,
+				`"clientID":{`,
+				`"clientSecret":{`,
 			},
 			ExpectedEvents: map[string]int{"*": 0},
 		},

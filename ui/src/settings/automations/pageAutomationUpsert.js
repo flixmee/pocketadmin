@@ -5,6 +5,7 @@ import { buildAutomationStepsPayload, normalizeAutomationEditorSteps, stepEditor
 const automationTriggerOptions = [
     { value: "manual", label: "Manual" },
     { value: "webhook", label: "Webhook" },
+    { value: "telegram.message", label: "On Telegram message" },
     { value: "schedule.cron", label: "Scheduled cron" },
     { value: "record.beforeCreate", label: "Before record create" },
     { value: "record.beforeUpdate", label: "Before record update" },
@@ -55,6 +56,9 @@ export function pageAutomationUpsert(route) {
         },
         get isWebhookTrigger() {
             return data.form.triggerType === "webhook";
+        },
+        get isTelegramTrigger() {
+            return data.form.triggerType === "telegram.message";
         },
         get canSave() {
             return !data.isSaving && !!data.form.name.trim() && data.form.steps.length > 0 && data.hasChanges;
@@ -553,6 +557,18 @@ export function pageAutomationUpsert(route) {
                                 },
                             ),
                             t.div(
+                                {
+                                    className: "field",
+                                    hidden: () => !data.isTelegramTrigger,
+                                },
+                                t.label({ className: "automation-field-label" }, "Telegram webhook endpoint"),
+                                t.div(
+                                    { className: "automation-workflow-webhook-copy" },
+                                    t.code(null, telegramWebhookURL()),
+                                    app.components.copyButton(() => telegramWebhookURL()),
+                                ),
+                            ),
+                            t.div(
                                 { className: "field" },
                                 t.label({ htmlFor: formId + "_notes", className: "automation-field-label" }, "Notes"),
                                 t.textarea({
@@ -667,6 +683,10 @@ function buildAutomationPayload(form) {
 
 function webhookURL(automationId) {
     return `${app.utils.getApiExampleURL()}/api/automation-webhooks/${automationId}`;
+}
+
+function telegramWebhookURL() {
+    return `${app.utils.getApiExampleURL()}/api/automation-telegram/<access-token>`;
 }
 
 function isRecordAutomationTrigger(triggerType) {

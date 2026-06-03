@@ -27,6 +27,7 @@ var (
 		AutomationTriggerRecordDelete,
 		AutomationTriggerScheduleCron,
 		AutomationTriggerWebhook,
+		AutomationTriggerTelegramMessage,
 		AutomationTriggerManual,
 		AutomationTriggerI18nMissing,
 		AutomationTriggerI18nPublished,
@@ -38,6 +39,7 @@ var (
 		AutomationStepCode,
 		AutomationStepHTTP,
 		AutomationStepMailSend,
+		AutomationStepTelegramSend,
 		AutomationStepRecordCreate,
 		AutomationStepRecordUpdate,
 		AutomationStepRecordDelete,
@@ -460,6 +462,8 @@ func validateAutomationStepDefinition(app App, automationRecord *Record, step ma
 		return validateAutomationHTTPStep(step)
 	case AutomationStepMailSend:
 		return validateAutomationMailStep(app, automationRecord, step)
+	case AutomationStepTelegramSend:
+		return validateAutomationTelegramStep(step)
 	case AutomationStepRecordCreate:
 		return validateAutomationRecordCreateStep(step)
 	case AutomationStepRecordUpdate:
@@ -481,6 +485,18 @@ func validateAutomationStepDefinition(app App, automationRecord *Record, step ma
 	default:
 		return nil
 	}
+}
+
+func validateAutomationTelegramStep(step map[string]any) error {
+	if strings.TrimSpace(toString(step["chatId"])) == "" {
+		return validation.NewError("validation_invalid_automation_telegram", "Telegram step requires a chat ID.")
+	}
+
+	if strings.TrimSpace(toString(step["text"])) == "" {
+		return validation.NewError("validation_invalid_automation_telegram", "Telegram step requires a message.")
+	}
+
+	return nil
 }
 
 func validateAutomationCodeStep(step map[string]any) error {

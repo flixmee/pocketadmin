@@ -98,6 +98,11 @@ window.app.store = store({
                 label: "Mail settings",
             },
             {
+                href: "#/settings/credentials",
+                icon: "ri-key-2-line",
+                label: "Credentials",
+            },
+            {
                 href: "#/settings/storage",
                 icon: "ri-archive-drawer-line",
                 label: "Files storage",

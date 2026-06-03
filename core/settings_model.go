@@ -132,6 +132,7 @@ type settings struct {
 	TrustedProxy TrustedProxyConfig `form:"trustedProxy" json:"trustedProxy"`
 	Batch        BatchConfig        `form:"batch" json:"batch"`
 	AI           AIConfig           `form:"ai" json:"ai"`
+	Credentials  CredentialsConfig  `form:"credentials" json:"credentials"`
 	Logs         LogsConfig         `form:"logs" json:"logs"`
 }
 
@@ -178,6 +179,11 @@ func newDefaultSettings() *Settings {
 			AI: AIConfig{
 				Provider: AIProviderOpenAI,
 				BaseURL:  AIProviderOpenAIBaseURL,
+			},
+			Credentials: CredentialsConfig{
+				Telegram: TelegramCredentialsConfig{
+					BaseURL: "https://api.telegram.org",
+				},
 			},
 			RateLimits: RateLimitsConfig{
 				Enabled: false, // @todo once tested enough enable by default for new installations
@@ -303,6 +309,7 @@ func (s *Settings) PostValidate(ctx context.Context, app App) error {
 		validation.Field(&s.Backups),
 		validation.Field(&s.Batch),
 		validation.Field(&s.AI),
+		validation.Field(&s.Credentials),
 		validation.Field(&s.RateLimits),
 		validation.Field(&s.TrustedProxy),
 	)
@@ -352,6 +359,8 @@ func (s *Settings) MarshalJSON() ([]byte, error) {
 		&copy.S3.Secret,
 		&copy.Backups.S3.Secret,
 		&copy.AI.APIKey,
+		&copy.Credentials.Telegram.AccessToken,
+		&copy.Credentials.GoogleSheets.ClientSecret,
 	}
 
 	// mask all sensitive fields
@@ -526,6 +535,51 @@ func (c AIConfig) Validate() error {
 			validation.When(c.Enabled && c.Provider == AIProviderCustom, validation.Required),
 			is.URL,
 		),
+	)
+}
+
+// -------------------------------------------------------------------
+
+type CredentialsConfig struct {
+	Telegram     TelegramCredentialsConfig     `form:"telegram" json:"telegram"`
+	GoogleSheets GoogleSheetsCredentialsConfig `form:"googleSheets" json:"googleSheets"`
+}
+
+// Validate makes CredentialsConfig validatable by implementing [validation.Validatable] interface.
+func (c CredentialsConfig) Validate() error {
+	return validation.ValidateStruct(&c,
+		validation.Field(&c.Telegram),
+		validation.Field(&c.GoogleSheets),
+	)
+}
+
+type TelegramCredentialsConfig struct {
+	Enabled     bool   `form:"enabled" json:"enabled"`
+	BaseURL     string `form:"baseURL" json:"baseURL"`
+	AccessToken string `form:"accessToken" json:"accessToken,omitempty"`
+}
+
+// Validate makes TelegramCredentialsConfig validatable by implementing [validation.Validatable] interface.
+func (c TelegramCredentialsConfig) Validate() error {
+	return validation.ValidateStruct(&c,
+		validation.Field(&c.BaseURL, validation.When(c.Enabled, validation.Required), is.URL),
+		validation.Field(&c.AccessToken, validation.When(c.Enabled, validation.Required)),
+	)
+}
+
+type GoogleSheetsCredentialsConfig struct {
+	Enabled          bool   `form:"enabled" json:"enabled"`
+	OAuthRedirectURL string `form:"oauthRedirectURL" json:"oauthRedirectURL"`
+	ClientID         string `form:"clientID" json:"clientID"`
+	ClientSecret     string `form:"clientSecret" json:"clientSecret,omitempty"`
+}
+
+// Validate makes GoogleSheetsCredentialsConfig validatable by implementing [validation.Validatable] interface.
+func (c GoogleSheetsCredentialsConfig) Validate() error {
+	return validation.ValidateStruct(&c,
+		validation.Field(&c.OAuthRedirectURL, validation.When(c.Enabled, validation.Required), is.URL),
+		validation.Field(&c.ClientID, validation.When(c.Enabled, validation.Required)),
+		validation.Field(&c.ClientSecret, validation.When(c.Enabled, validation.Required)),
 	)
 }
 

@@ -64,6 +64,13 @@ func TestSettings_DBExport(t *testing.T) {
 			settings.AI.APIKey = "ai_api_key"
 			settings.AI.Model = "test-model"
 			settings.AI.BaseURL = "https://example.com/v1"
+			settings.Credentials.Telegram.Enabled = true
+			settings.Credentials.Telegram.BaseURL = "https://api.telegram.org"
+			settings.Credentials.Telegram.AccessToken = "telegram_access_token"
+			settings.Credentials.GoogleSheets.Enabled = true
+			settings.Credentials.GoogleSheets.OAuthRedirectURL = "https://example.com/oauth2/callback"
+			settings.Credentials.GoogleSheets.ClientID = "google_client_id"
+			settings.Credentials.GoogleSheets.ClientSecret = "google_client_secret"
 			settings.RateLimits.Enabled = true
 			settings.TrustedProxy.UseLeftmostIP = true
 
@@ -89,7 +96,7 @@ func TestSettings_DBExport(t *testing.T) {
 				valueStr = string(export["value"].([]byte))
 			}
 
-			expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"smtp_host","username":"smtp_username","password":"","authMethod":"","tls":false,"localName":""},"backups":{"cron":"* * * * *","cronMaxKeep":0,"s3":{"enabled":true,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"s3_endpoint","accessKey":"","secret":"s3_secret","forcePathStyle":false},"meta":{"accentColor":"","appName":"test_app_name","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":true},"trustedProxy":{"headers":[],"useLeftmostIP":true},"batch":{"enabled":false,"maxRequests":0,"timeout":15,"maxBodySize":0},"ai":{"enabled":true,"provider":"custom","apiKey":"ai_api_key","model":"test-model","baseURL":"https://example.com/v1"},"logs":{"maxDays":123,"minLevel":0,"logIP":false,"logAuthId":false}}`
+			expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"smtp_host","username":"smtp_username","password":"","authMethod":"","tls":false,"localName":""},"backups":{"cron":"* * * * *","cronMaxKeep":0,"s3":{"enabled":true,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"s3_endpoint","accessKey":"","secret":"s3_secret","forcePathStyle":false},"meta":{"accentColor":"","appName":"test_app_name","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":true},"trustedProxy":{"headers":[],"useLeftmostIP":true},"batch":{"enabled":false,"maxRequests":0,"timeout":15,"maxBodySize":0},"ai":{"enabled":true,"provider":"custom","apiKey":"ai_api_key","model":"test-model","baseURL":"https://example.com/v1"},"credentials":{"telegram":{"enabled":true,"baseURL":"https://api.telegram.org","accessToken":"telegram_access_token"},"googleSheets":{"enabled":true,"oauthRedirectURL":"https://example.com/oauth2/callback","clientID":"google_client_id","clientSecret":"google_client_secret"}},"logs":{"maxDays":123,"minLevel":0,"logIP":false,"logAuthId":false}}`
 			if valueStr != expected {
 				t.Fatalf("Expected exported settings\n%s\ngot\n%s", expected, valueStr)
 			}
@@ -179,6 +186,8 @@ func TestSettingsMarshalJSON(t *testing.T) {
 	settings.S3.Secret = testSecret
 	settings.Backups.S3.Secret = testSecret
 	settings.AI.APIKey = testSecret
+	settings.Credentials.Telegram.AccessToken = testSecret
+	settings.Credentials.GoogleSheets.ClientSecret = testSecret
 
 	raw, err := json.Marshal(settings)
 	if err != nil {
@@ -186,7 +195,7 @@ func TestSettingsMarshalJSON(t *testing.T) {
 	}
 	rawStr := string(raw)
 
-	expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"","username":"abc","authMethod":"","tls":false,"localName":""},"backups":{"cron":"","cronMaxKeep":0,"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false},"meta":{"accentColor":"","appName":"test123","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":false},"trustedProxy":{"headers":[],"useLeftmostIP":false},"batch":{"enabled":false,"maxRequests":0,"timeout":0,"maxBodySize":0},"ai":{"enabled":false,"provider":"","model":"","baseURL":""},"logs":{"maxDays":0,"minLevel":0,"logIP":false,"logAuthId":false}}`
+	expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"","username":"abc","authMethod":"","tls":false,"localName":""},"backups":{"cron":"","cronMaxKeep":0,"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false},"meta":{"accentColor":"","appName":"test123","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":false},"trustedProxy":{"headers":[],"useLeftmostIP":false},"batch":{"enabled":false,"maxRequests":0,"timeout":0,"maxBodySize":0},"ai":{"enabled":false,"provider":"","model":"","baseURL":""},"credentials":{"telegram":{"enabled":false,"baseURL":""},"googleSheets":{"enabled":false,"oauthRedirectURL":"","clientID":""}},"logs":{"maxDays":0,"minLevel":0,"logIP":false,"logAuthId":false}}`
 
 	if rawStr != expected {
 		t.Fatalf("Expected\n%v\ngot\n%v", expected, rawStr)
@@ -217,6 +226,10 @@ func TestSettingsValidate(t *testing.T) {
 	s.AI.Enabled = true
 	s.AI.Provider = "invalid"
 	s.AI.BaseURL = "invalid"
+	s.Credentials.Telegram.Enabled = true
+	s.Credentials.GoogleSheets.Enabled = true
+	s.Credentials.Telegram.BaseURL = "invalid"
+	s.Credentials.GoogleSheets.OAuthRedirectURL = "invalid"
 	s.RateLimits.Enabled = true
 	s.RateLimits.Rules = nil
 
@@ -235,6 +248,7 @@ func TestSettingsValidate(t *testing.T) {
 		`"backups":{`,
 		`"batch":{`,
 		`"ai":{`,
+		`"credentials":{`,
 		`"rateLimits":{`,
 	}
 
