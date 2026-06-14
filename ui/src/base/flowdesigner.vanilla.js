@@ -276,41 +276,38 @@ const FlowDesigner = (function() {
                 group.appendChild(label);
             }
 
-            let deleteBtn = null;
-            if (this.flow._options.allowEdgeDelete !== false) {
-                deleteBtn = svgEl("g", {
-                    class: "fd-edge-delete",
-                    "data-edge-delete-id": edge.id,
-                    "aria-label": "Remove connection",
-                    role: "button",
-                    tabindex: "0",
-                });
-                deleteBtn.appendChild(svgEl("circle", { r: "10" }));
-                const deleteIcon = svgEl("text", {
-                    "text-anchor": "middle",
-                    "dominant-baseline": "central",
-                    y: "-0.5",
-                    "pointer-events": "none",
-                });
-                deleteIcon.textContent = "×";
-                deleteBtn.appendChild(deleteIcon);
-                deleteBtn.addEventListener("mousedown", e => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                });
-                deleteBtn.addEventListener("click", e => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    this.flow._deleteEdgeFromControl(edge.id, e);
-                });
-                deleteBtn.addEventListener("keydown", e => {
-                    if (e.key !== "Enter" && e.key !== " ") return;
-                    e.stopPropagation();
-                    e.preventDefault();
-                    this.flow._deleteEdgeFromControl(edge.id, e);
-                });
-                group.appendChild(deleteBtn);
-            }
+            const deleteBtn = svgEl("g", {
+                class: "fd-edge-delete",
+                "data-edge-delete-id": edge.id,
+                "aria-label": "Remove connection",
+                role: "button",
+                tabindex: "0",
+            });
+            deleteBtn.appendChild(svgEl("circle", { r: "10" }));
+            const deleteIcon = svgEl("text", {
+                "text-anchor": "middle",
+                "dominant-baseline": "central",
+                y: "-0.5",
+                "pointer-events": "none",
+            });
+            deleteIcon.textContent = "×";
+            deleteBtn.appendChild(deleteIcon);
+            deleteBtn.addEventListener("pointerdown", e => {
+                e.stopPropagation();
+                e.preventDefault();
+            });
+            deleteBtn.addEventListener("click", e => {
+                e.stopPropagation();
+                e.preventDefault();
+                this.flow._deleteEdgeFromControl(edge.id, e);
+            });
+            deleteBtn.addEventListener("keydown", e => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.stopPropagation();
+                e.preventDefault();
+                this.flow._deleteEdgeFromControl(edge.id, e);
+            });
+            group.appendChild(deleteBtn);
 
             this.svg.insertBefore(group, this.ghostGroup);
             this.edgeEls.set(edge.id, { group, path, hitPath, label, deleteBtn });
@@ -372,14 +369,14 @@ const FlowDesigner = (function() {
 
         _bindNodeHandleEvents(el, node) {
             el.querySelectorAll(".fd-handle").forEach(h => {
-                h.addEventListener("mousedown", e => {
+                h.addEventListener("pointerdown", e => {
                     e.stopPropagation();
                     if (this.flow._spacePanning && e.button === 0) {
                         e.preventDefault();
-                        this.flow._startPanning(e);
+                        this.flow._panController?.startPointerPan(e, "space");
                         return;
                     }
-                    this.flow._onHandleMouseDown(e, node.id, h.dataset.handleId, h.dataset.handleType);
+                    this.flow._onHandlePointerDown(e, node.id, h.dataset.handleId, h.dataset.handleType);
                 });
                 h.addEventListener("mouseenter", () => {
                     h.classList.add("fd-handle--hover");
@@ -396,7 +393,7 @@ const FlowDesigner = (function() {
             });
 
             el.querySelectorAll(".fd-source-placeholder__button").forEach(btn => {
-                btn.addEventListener("mousedown", e => {
+                btn.addEventListener("pointerdown", e => {
                     e.stopPropagation();
                     e.preventDefault();
                 });
@@ -704,6 +701,320 @@ const FlowDesigner = (function() {
         }
     }
 
+    // ─── PanController ───────────────────────────────────────────────────────
+
+    class PanController {
+        constructor(flow, root) {
+            this.flow = flow;
+            this.root = root;
+            this.pointers = new Map();
+            this.mode = null;
+            this.pointerId = null;
+            this.lastPoint = null;
+            this.lastMidpoint = null;
+            this.lastDistance = 0;
+            this.velocity = { x: 0, y: 0 };
+            this.lastMoveAt = 0;
+            this.inertiaFrame = 0;
+            this.suppressUntilEmpty = false;
+        }
+
+        onPointerDown(e) {
+            if (e.target.closest(".fd-controls") || e.target.closest(".fd-minimap")) {
+                return false;
+            }
+
+            this.cancelInertia();
+            this._rememberPointer(e);
+            this._capture(e.pointerId);
+
+            if (this.pointers.size === 2 && this._hasTouchPointer()) {
+                e.preventDefault();
+                this.flow._cancelActiveInteraction();
+                this._startTwoPointerGesture();
+                return true;
+            }
+
+            if (e.pointerType === "mouse" && (e.button === 1 || (e.button === 0 && this.flow._spacePanning))) {
+                e.preventDefault();
+                this.startPointerPan(e, e.button === 1 ? "middle" : "space");
+                return true;
+            }
+
+            return false;
+        }
+
+        onPointerMove(e) {
+            if (this.pointers.has(e.pointerId)) {
+                this._rememberPointer(e);
+            }
+
+            if (this.mode === "pan" && e.pointerId === this.pointerId) {
+                e.preventDefault();
+                this._panFromPoint({ x: e.clientX, y: e.clientY }, e.timeStamp || performance.now());
+                return true;
+            }
+
+            if ((this.mode === "twofinger-pan" || this.mode === "pinch") && this.pointers.size >= 2) {
+                e.preventDefault();
+                this._moveTwoPointerGesture(e.timeStamp || performance.now());
+                return true;
+            }
+
+            return this.suppressUntilEmpty;
+        }
+
+        onPointerUp(e) {
+            const wasActivePointer = this.mode === "pan" && e.pointerId === this.pointerId;
+            const wasGesture = this.mode === "twofinger-pan" || this.mode === "pinch";
+
+            this.pointers.delete(e.pointerId);
+            this._release(e.pointerId);
+
+            if (wasActivePointer) {
+                e.preventDefault();
+                this._finishPan(true);
+                return true;
+            }
+
+            if (wasGesture && this.pointers.size < 2) {
+                e.preventDefault();
+                const shouldGlide = this.mode === "twofinger-pan";
+                this._finishPan(shouldGlide);
+                this.suppressUntilEmpty = this.pointers.size > 0;
+                return true;
+            }
+
+            if (this.pointers.size === 0) {
+                this.suppressUntilEmpty = false;
+            }
+
+            return this.suppressUntilEmpty;
+        }
+
+        onPointerCancel(e) {
+            this.pointers.delete(e.pointerId);
+            this._release(e.pointerId);
+            if (this.pointers.size === 0 || e.pointerId === this.pointerId) {
+                this._finishPan(false);
+                this.suppressUntilEmpty = false;
+            }
+            return true;
+        }
+
+        onWheel(e) {
+            if (this.flow._locked) {
+                return;
+            }
+
+            e.preventDefault();
+            this.cancelInertia();
+
+            if (!e.ctrlKey && !e.metaKey && this._isTrackpadWheel(e)) {
+                this.flow._panBy(-e.deltaX, -e.deltaY);
+                return;
+            }
+
+            const delta = e.ctrlKey || e.metaKey ? -e.deltaY * ZOOM_SPEED * 1.8 : -e.deltaY * ZOOM_SPEED;
+            this.flow._zoomAt(e.clientX, e.clientY, Math.max(0.01, 1 + delta));
+        }
+
+        startPointerPan(e, reason = "drag") {
+            this.cancelInertia();
+            this._rememberPointer(e);
+            this._capture(e.pointerId);
+            this.mode = "pan";
+            this.pointerId = e.pointerId;
+            this.lastPoint = { x: e.clientX, y: e.clientY };
+            this.velocity = { x: 0, y: 0 };
+            this.lastMoveAt = e.timeStamp || performance.now();
+            this.suppressUntilEmpty = false;
+            this.root.classList.add("fd-root--panning");
+            this.root.dataset.panReason = reason;
+        }
+
+        capturePointer(e) {
+            this.cancelInertia();
+            this._rememberPointer(e);
+            this._capture(e.pointerId);
+        }
+
+        stopSpacePan() {
+            if (this.mode === "pan" && this.root.dataset.panReason === "space") {
+                this._finishPan(false);
+                this.suppressUntilEmpty = this.pointers.size > 0;
+            }
+        }
+
+        cancelInertia() {
+            if (this.inertiaFrame) {
+                cancelAnimationFrame(this.inertiaFrame);
+                this.inertiaFrame = 0;
+            }
+        }
+
+        destroy() {
+            this.cancelInertia();
+            for (const pointerId of this.pointers.keys()) {
+                this._release(pointerId);
+            }
+            this.pointers.clear();
+            this._finishPan(false);
+        }
+
+        _rememberPointer(e) {
+            this.pointers.set(e.pointerId, {
+                id: e.pointerId,
+                pointerType: e.pointerType,
+                x: e.clientX,
+                y: e.clientY,
+            });
+        }
+
+        _capture(pointerId) {
+            if (!this.root.setPointerCapture) return;
+            try {
+                this.root.setPointerCapture(pointerId);
+            } catch (_) {
+                // Pointer capture can fail if the pointer ended between events.
+            }
+        }
+
+        _release(pointerId) {
+            if (!this.root.releasePointerCapture) return;
+            try {
+                if (this.root.hasPointerCapture?.(pointerId)) {
+                    this.root.releasePointerCapture(pointerId);
+                }
+            } catch (_) {
+                // Nothing to release.
+            }
+        }
+
+        _hasTouchPointer() {
+            for (const pointer of this.pointers.values()) {
+                if (pointer.pointerType === "touch" || pointer.pointerType === "pen") {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        _startTwoPointerGesture() {
+            const geometry = this._twoPointerGeometry();
+            if (!geometry) return;
+
+            this.mode = "twofinger-pan";
+            this.pointerId = null;
+            this.lastMidpoint = geometry.midpoint;
+            this.lastDistance = geometry.distance;
+            this.velocity = { x: 0, y: 0 };
+            this.lastMoveAt = performance.now();
+            this.suppressUntilEmpty = false;
+            this.root.classList.add("fd-root--panning");
+            this.root.dataset.panReason = "touch";
+        }
+
+        _moveTwoPointerGesture(now) {
+            const geometry = this._twoPointerGeometry();
+            if (!geometry) return;
+
+            const distanceDelta = geometry.distance - this.lastDistance;
+            const isPinching = Math.abs(distanceDelta) > 4 || this.mode === "pinch";
+
+            if (isPinching) {
+                this.mode = "pinch";
+                const factor = geometry.distance / (this.lastDistance || geometry.distance || 1);
+                this.flow._zoomAt(geometry.midpoint.x, geometry.midpoint.y, factor);
+                this.velocity = { x: 0, y: 0 };
+            } else {
+                const dx = geometry.midpoint.x - this.lastMidpoint.x;
+                const dy = geometry.midpoint.y - this.lastMidpoint.y;
+                this.flow._panBy(dx, dy);
+                this._recordVelocity(dx, dy, now);
+            }
+
+            this.lastMidpoint = geometry.midpoint;
+            this.lastDistance = geometry.distance;
+        }
+
+        _twoPointerGeometry() {
+            const points = [...this.pointers.values()].slice(0, 2);
+            if (points.length < 2) return null;
+
+            const [a, b] = points;
+            return {
+                midpoint: {
+                    x: (a.x + b.x) / 2,
+                    y: (a.y + b.y) / 2,
+                },
+                distance: Math.hypot(a.x - b.x, a.y - b.y),
+            };
+        }
+
+        _panFromPoint(point, now) {
+            const dx = point.x - this.lastPoint.x;
+            const dy = point.y - this.lastPoint.y;
+            this.flow._panBy(dx, dy);
+            this._recordVelocity(dx, dy, now);
+            this.lastPoint = point;
+        }
+
+        _recordVelocity(dx, dy, now) {
+            const elapsed = Math.max(8, now - this.lastMoveAt);
+            const frameScale = 16.67 / elapsed;
+            this.velocity.x = dx * frameScale;
+            this.velocity.y = dy * frameScale;
+            this.lastMoveAt = now;
+        }
+
+        _finishPan(withInertia) {
+            const velocity = { ...this.velocity };
+            this.mode = null;
+            this.pointerId = null;
+            this.lastPoint = null;
+            this.lastMidpoint = null;
+            this.lastDistance = 0;
+            this.velocity = { x: 0, y: 0 };
+            this.root.classList.remove("fd-root--panning");
+            delete this.root.dataset.panReason;
+
+            if (withInertia && Math.hypot(velocity.x, velocity.y) > 0.35) {
+                this._startInertia(velocity);
+            }
+        }
+
+        _startInertia(velocity) {
+            const step = () => {
+                velocity.x *= 0.92;
+                velocity.y *= 0.92;
+
+                if (Math.hypot(velocity.x, velocity.y) < 0.12) {
+                    this.inertiaFrame = 0;
+                    return;
+                }
+
+                this.flow._panBy(velocity.x, velocity.y);
+                this.inertiaFrame = requestAnimationFrame(step);
+            };
+
+            this.cancelInertia();
+            this.inertiaFrame = requestAnimationFrame(step);
+        }
+
+        _isTrackpadWheel(e) {
+            const pixelMode = e.deltaMode === 0;
+            if (!pixelMode) return false;
+
+            const absX = Math.abs(e.deltaX);
+            const absY = Math.abs(e.deltaY);
+            if (absX > 0) return true;
+            if (absY === 0) return false;
+            if (absY < 80) return true;
+            return absY % 1 !== 0;
+        }
+    }
+
     // ─── FlowDesigner ─────────────────────────────────────────────────────────
 
     class FlowDesigner {
@@ -756,7 +1067,6 @@ const FlowDesigner = (function() {
 
             // Interaction state
             this._dragging = null; // { nodeIds, startPositions, startMouse }
-            this._panning = null; // { startMouse, startViewport }
             this._connecting = null; // { sourceNodeId, handleId, startPos }
             this._dropPreview = null; // { edgeId, x, y }
             this._selecting = null; // { startX, startY }
@@ -865,11 +1175,14 @@ const FlowDesigner = (function() {
 
         _bindEvents() {
             const root = this._root;
+            this._panController = new PanController(this, root);
             this._boundEvents = {
-                wheel: e => this._onWheel(e),
-                mousedown: e => this._onMouseDown(e),
-                mousemove: e => this._onMouseMove(e),
-                mouseup: e => this._onMouseUp(e),
+                wheel: e => this._panController.onWheel(e),
+                pointerdown: e => this._onPointerDown(e),
+                pointermove: e => this._onPointerMove(e),
+                pointerup: e => this._onPointerUp(e),
+                pointercancel: e => this._onPointerCancel(e),
+                lostpointercapture: e => this._onPointerCancel(e),
                 dblclick: e => this._onDblClick(e),
                 keydown: e => this._onKeyDown(e),
                 keyup: e => this._onKeyUp(e),
@@ -889,17 +1202,19 @@ const FlowDesigner = (function() {
             // Wheel zoom
             root.addEventListener("wheel", this._boundEvents.wheel, { passive: false });
 
-            // Mouse events
-            root.addEventListener("mousedown", this._boundEvents.mousedown);
-            window.addEventListener("mousemove", this._boundEvents.mousemove);
-            window.addEventListener("mouseup", this._boundEvents.mouseup);
+            // Pointer gestures
+            root.addEventListener("pointerdown", this._boundEvents.pointerdown);
+            root.addEventListener("pointermove", this._boundEvents.pointermove);
+            root.addEventListener("pointerup", this._boundEvents.pointerup);
+            root.addEventListener("pointercancel", this._boundEvents.pointercancel);
+            root.addEventListener("lostpointercapture", this._boundEvents.lostpointercapture);
 
             // Double-click to add node
             root.addEventListener("dblclick", this._boundEvents.dblclick);
 
             // Keyboard
-            document.addEventListener("keydown", this._boundEvents.keydown);
-            document.addEventListener("keyup", this._boundEvents.keyup);
+            window.addEventListener("keydown", this._boundEvents.keydown);
+            window.addEventListener("keyup", this._boundEvents.keyup);
 
             // Context menu
             root.addEventListener("contextmenu", this._boundEvents.contextmenu);
@@ -911,33 +1226,14 @@ const FlowDesigner = (function() {
 
         // ── Events ──────────────────────────────────────────────────────────────
 
-        _onWheel(e) {
-            e.preventDefault();
-            if (this._locked) return;
-
-            const rect = this._root.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-
-            const delta = -e.deltaY * ZOOM_SPEED;
-            const newScale = clamp(this.viewport.scale * (1 + delta), ZOOM_MIN, ZOOM_MAX);
-            const factor = newScale / this.viewport.scale;
-
-            this.viewport.x = mouseX - factor * (mouseX - this.viewport.x);
-            this.viewport.y = mouseY - factor * (mouseY - this.viewport.y);
-            this.viewport.scale = newScale;
-
-            this._applyViewport();
-            this._updateBackground();
-            this._renderAll();
-        }
-
-        _onMouseDown(e) {
-            if (e.button !== 0 && e.button !== 1) return;
+        _onPointerDown(e) {
+            if (e.target.closest(".fd-controls") || e.target.closest(".fd-minimap")) return;
+            if (this._panController.onPointerDown(e)) return;
+            if (e.button !== 0) return;
 
             if (this._spacePanning && e.button === 0) {
                 e.preventDefault();
-                this._startPanning(e);
+                this._panController.startPointerPan(e, "space");
                 return;
             }
 
@@ -949,7 +1245,7 @@ const FlowDesigner = (function() {
 
             if (nodeEl) {
                 const nodeId = nodeEl.dataset.nodeId;
-                this._onNodeMouseDown(e, nodeId);
+                this._onNodePointerDown(e, nodeId);
                 return;
             }
 
@@ -960,15 +1256,15 @@ const FlowDesigner = (function() {
             }
 
             // Pan or selection
-            if (e.button === 1 || e.altKey || e.button === 0) {
-                if (e.button === 1 || e.altKey) {
-                    this._startPanning(e);
+            if (e.altKey || e.button === 0) {
+                if (e.altKey) {
+                    this._panController.startPointerPan(e, "alt");
                 } else {
                     // Start selection box
                     if (!this._locked) {
                         this._startSelecting(e);
                     } else {
-                        this._startPanning(e);
+                        this._panController.startPointerPan(e, "locked");
                     }
                     // Deselect
                     if (!e.shiftKey) this._clearSelection();
@@ -976,17 +1272,8 @@ const FlowDesigner = (function() {
             }
         }
 
-        _onMouseMove(e) {
-            if (this._panning) {
-                const dx = e.clientX - this._panning.startMouse.x;
-                const dy = e.clientY - this._panning.startMouse.y;
-                this.viewport.x = this._panning.startViewport.x + dx;
-                this.viewport.y = this._panning.startViewport.y + dy;
-                this._applyViewport();
-                this._updateBackground();
-                this._renderAll();
-                return;
-            }
+        _onPointerMove(e) {
+            if (this._panController.onPointerMove(e)) return;
 
             if (this._dragging) {
                 const movedDistance = Math.hypot(
@@ -1067,7 +1354,9 @@ const FlowDesigner = (function() {
             }
         }
 
-        _onMouseUp(e) {
+        _onPointerUp(e) {
+            if (this._panController.onPointerUp(e)) return;
+
             if (this._dragging) {
                 const draggedNodeId = this._dragging.clickedNodeId;
                 const isClick = !this._dragging.hasMoved;
@@ -1099,11 +1388,6 @@ const FlowDesigner = (function() {
                 this._renderAll();
             }
 
-            if (this._panning) {
-                this._panning = null;
-                this._root.style.cursor = "";
-            }
-
             if (this._connecting) {
                 const targetHandle = e.target.closest(".fd-handle[data-handle-type=\"target\"]");
                 if (targetHandle) {
@@ -1131,6 +1415,11 @@ const FlowDesigner = (function() {
             }
         }
 
+        _onPointerCancel(e) {
+            this._panController.onPointerCancel(e);
+            this._cancelActiveInteraction();
+        }
+
         _onDblClick(e) {
             if (!this._options.editable) return;
             const nodeEl = e.target.closest(".fd-node");
@@ -1152,13 +1441,16 @@ const FlowDesigner = (function() {
         }
 
         _onKeyDown(e) {
-            if (!this._root.contains(document.activeElement) && document.activeElement !== document.body) return;
+            const target = e.target || document.activeElement;
 
-            if ((e.key === " " || e.code === "Space") && !this._isTextInput(document.activeElement)) {
+            if ((e.key === " " || e.code === "Space") && !e.repeat) {
+                if (this._isTextInput(target) || this._isTextInput(document.activeElement)) return;
                 e.preventDefault();
                 this._setSpacePanning(true);
                 return;
             }
+
+            if (!this._root.contains(document.activeElement) && document.activeElement !== document.body) return;
 
             if ((e.key === "Delete" || e.key === "Backspace") && this._options.editable) {
                 if (this._isTextInput(document.activeElement)) return;
@@ -1185,7 +1477,7 @@ const FlowDesigner = (function() {
             }
         }
 
-        _onNodeMouseDown(e, nodeId) {
+        _onNodePointerDown(e, nodeId) {
             if (this._locked) return;
             e.stopPropagation();
 
@@ -1229,10 +1521,11 @@ const FlowDesigner = (function() {
             this._renderAll();
         }
 
-        _onHandleMouseDown(e, nodeId, handleId, handleType) {
+        _onHandlePointerDown(e, nodeId, handleId, handleType) {
             if (!this._options.editable || handleType !== "source") return;
             e.stopPropagation();
             e.preventDefault();
+            this._panController.capturePointer(e);
 
             const pos = this._nodeRenderer.getHandlePosition(nodeId, handleId, "source");
             if (!pos) return;
@@ -1267,18 +1560,43 @@ const FlowDesigner = (function() {
 
         // ── Core helpers ────────────────────────────────────────────────────────
 
-        _startPanning(e) {
-            this._panning = {
-                startMouse: { x: e.clientX, y: e.clientY },
-                startViewport: { ...this.viewport },
-            };
-            this._root.style.cursor = "grabbing";
-        }
-
         _setSpacePanning(isPanning) {
             if (this._spacePanning === isPanning) return;
             this._spacePanning = isPanning;
             this._root.classList.toggle("fd-root--space-panning", isPanning);
+            if (!isPanning) {
+                this._panController?.stopSpacePan();
+            }
+        }
+
+        _cancelActiveInteraction() {
+            let needsRender = false;
+
+            if (this._dragging) {
+                for (const nodeId of this._dragging.nodeIds) {
+                    const node = this._getNode(nodeId);
+                    if (node) delete node._dragging;
+                }
+                this._dragging = null;
+                this._clearDropPreview();
+                needsRender = true;
+            }
+
+            if (this._connecting) {
+                this._edgeRenderer.updateGhost(0, 0, 0, 0, false);
+                this._connecting = null;
+                this._previewHandle("", "", false);
+                this._root.classList.remove("fd-root--connecting");
+                needsRender = true;
+            }
+
+            if (this._selecting) {
+                this._selecting = null;
+                this._selectionBox.style.display = "none";
+                needsRender = true;
+            }
+
+            if (needsRender) this._renderAll();
         }
 
         _previewHandle(nodeId, handleId, visible) {
@@ -1530,9 +1848,35 @@ const FlowDesigner = (function() {
             return { w: this._root.clientWidth, h: this._root.clientHeight };
         }
 
+        _panBy(dx, dy) {
+            this.viewport.x += dx;
+            this.viewport.y += dy;
+            this._applyViewport();
+            this._updateBackground();
+            this._renderAll();
+        }
+
+        _zoomAt(clientX, clientY, factor) {
+            if (!Number.isFinite(factor) || factor <= 0) return;
+
+            const rect = this._root.getBoundingClientRect();
+            const anchorX = clientX - rect.left;
+            const anchorY = clientY - rect.top;
+            const newScale = clamp(this.viewport.scale * factor, ZOOM_MIN, ZOOM_MAX);
+            const appliedFactor = newScale / this.viewport.scale;
+
+            this.viewport.x = anchorX - appliedFactor * (anchorX - this.viewport.x);
+            this.viewport.y = anchorY - appliedFactor * (anchorY - this.viewport.y);
+            this.viewport.scale = newScale;
+
+            this._applyViewport();
+            this._updateBackground();
+            this._renderAll();
+        }
+
         _applyViewport() {
             this._viewport.style.transform =
-                `translate(${this.viewport.x}px, ${this.viewport.y}px) scale(${this.viewport.scale})`;
+                `matrix(${this.viewport.scale}, 0, 0, ${this.viewport.scale}, ${this.viewport.x}, ${this.viewport.y})`;
         }
 
         _updateBackground() {
@@ -1870,17 +2214,21 @@ const FlowDesigner = (function() {
         destroy() {
             if (this._boundEvents) {
                 this._root.removeEventListener("wheel", this._boundEvents.wheel);
-                this._root.removeEventListener("mousedown", this._boundEvents.mousedown);
-                window.removeEventListener("mousemove", this._boundEvents.mousemove);
-                window.removeEventListener("mouseup", this._boundEvents.mouseup);
+                this._root.removeEventListener("pointerdown", this._boundEvents.pointerdown);
+                this._root.removeEventListener("pointermove", this._boundEvents.pointermove);
+                this._root.removeEventListener("pointerup", this._boundEvents.pointerup);
+                this._root.removeEventListener("pointercancel", this._boundEvents.pointercancel);
+                this._root.removeEventListener("lostpointercapture", this._boundEvents.lostpointercapture);
                 this._root.removeEventListener("dblclick", this._boundEvents.dblclick);
-                document.removeEventListener("keydown", this._boundEvents.keydown);
-                document.removeEventListener("keyup", this._boundEvents.keyup);
+                window.removeEventListener("keydown", this._boundEvents.keydown);
+                window.removeEventListener("keyup", this._boundEvents.keyup);
                 this._root.removeEventListener("contextmenu", this._boundEvents.contextmenu);
                 this._root.removeEventListener("mouseover", this._boundEvents.mouseover);
                 this._root.removeEventListener("mouseout", this._boundEvents.mouseout);
                 this._boundEvents = null;
             }
+            this._panController?.destroy();
+            this._panController = null;
             this._root.remove();
         }
     }
@@ -1906,12 +2254,19 @@ const FlowDesigner = (function() {
       inset: 0;
       overflow: hidden;
       cursor: default;
+      touch-action: none;
     }
 
     .fd-root--space-panning,
     .fd-root--space-panning .fd-node,
     .fd-root--space-panning .fd-handle {
       cursor: grab !important;
+    }
+
+    .fd-root--panning,
+    .fd-root--panning .fd-node,
+    .fd-root--panning .fd-handle {
+      cursor: grabbing !important;
     }
 
     .fd-viewport {

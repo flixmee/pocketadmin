@@ -648,6 +648,11 @@
   width: 620px;
   .modal-header { border-bottom: 1px solid var(--surfaceAlt2Color); }
 
+  .media-upload-tabs {
+    padding: 0 var(--spacing);
+    border-bottom-width: 1px;
+  }
+
   .modal-content.media-upload-content {
     display: grid; gap: 22px; padding-top: 22px; padding-bottom: 28px;
   }
@@ -678,6 +683,19 @@
 
   .media-upload-dropzone-title { font-size: 15px; line-height: 1.4; font-weight: 600; }
   .media-upload-dropzone-copy { color: var(--surfaceTxtHintColor); font-size: 13px; line-height: 1.5; }
+
+  .media-upload-url-panel {
+    display: grid; gap: 12px;
+
+    textarea {
+      min-height: 164px;
+      resize: vertical;
+    }
+
+    .btn {
+      justify-self: start;
+    }
+  }
 
   .media-upload-queue { display: grid; gap: 12px; }
   .media-upload-queue-title {
