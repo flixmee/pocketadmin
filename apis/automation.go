@@ -170,9 +170,22 @@ func automationApprovalDecision(e *core.RequestEvent) error {
 		return e.BadRequestError("Failed to load approval decision.", err)
 	}
 
-	if err := e.App.ResolveAutomationApproval(e.Request.PathValue("id"), body); err != nil {
+	approval, err := e.App.ResolveAutomationApprovalDecision(e.Request.PathValue("id"), body)
+	if err != nil {
 		return e.BadRequestError("Failed to resolve approval.", err)
 	}
+
+	app := e.App
+	approvalID := approval.Id
+	routine.FireAndForget(func() {
+		if err := app.ContinueAutomationApproval(approvalID, body.Input); err != nil {
+			app.Logger().Warn(
+				"Failed to continue automation approval workflow",
+				"approvalId", approvalID,
+				"error", err,
+			)
+		}
+	})
 
 	return execAfterSuccessTx(true, e.App, func() error {
 		return e.NoContent(http.StatusNoContent)

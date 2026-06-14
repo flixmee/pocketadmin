@@ -179,12 +179,22 @@ func (app *BaseApp) resumeAutomationWorkflowStateWithOptions(state *WorkflowStat
 
 // ResolveAutomationApproval records an approval decision and resumes or fails the workflow.
 func (app *BaseApp) ResolveAutomationApproval(approvalID string, decision AutomationApprovalDecision) error {
-	approval, err := app.FindApprovalById(approvalID)
+	approval, err := app.ResolveAutomationApprovalDecision(approvalID, decision)
 	if err != nil {
 		return err
 	}
+
+	return app.continueAutomationApprovalWorkflow(approval, decision.Input)
+}
+
+// ResolveAutomationApprovalDecision records an approval decision without continuing the workflow.
+func (app *BaseApp) ResolveAutomationApprovalDecision(approvalID string, decision AutomationApprovalDecision) (*Approval, error) {
+	approval, err := app.FindApprovalById(approvalID)
+	if err != nil {
+		return nil, err
+	}
 	if approval.Status() != ApprovalStatusPending {
-		return errors.New("approval has already been resolved")
+		return nil, errors.New("approval has already been resolved")
 	}
 
 	normalized := strings.ToLower(strings.TrimSpace(decision.Decision))
@@ -194,7 +204,7 @@ func (app *BaseApp) ResolveAutomationApproval(approvalID string, decision Automa
 	case ApprovalStatusRejected, "reject":
 		normalized = ApprovalStatusRejected
 	default:
-		return errors.New("approval decision must be approved or rejected")
+		return nil, errors.New("approval decision must be approved or rejected")
 	}
 
 	approval.SetStatus(normalized)
@@ -202,25 +212,42 @@ func (app *BaseApp) ResolveAutomationApproval(approvalID string, decision Automa
 	approval.SetComment(decision.Comment)
 	approval.SetResolved(types.NowDateTime())
 	if err := app.Save(approval); err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := app.ResolveApprovalNotifications(approval.Id, normalized); err != nil {
-		return err
+		return nil, err
 	}
 
-	if normalized == ApprovalStatusApproved {
-		return app.resumeAutomationApprovalWorkflow(approval, decision.Input, "true")
-	}
+	return approval, nil
+}
 
-	hasFalseBranch, err := app.approvalWorkflowHasBranch(approval, "false")
+// ContinueAutomationApproval continues the workflow for an already resolved approval.
+func (app *BaseApp) ContinueAutomationApproval(approvalID string, input map[string]any) error {
+	approval, err := app.FindApprovalById(approvalID)
 	if err != nil {
 		return err
 	}
-	if hasFalseBranch {
-		return app.resumeAutomationApprovalWorkflow(approval, decision.Input, "false")
-	}
 
-	return app.rejectAutomationApprovalWorkflow(approval)
+	return app.continueAutomationApprovalWorkflow(approval, input)
+}
+
+func (app *BaseApp) continueAutomationApprovalWorkflow(approval *Approval, input map[string]any) error {
+	switch approval.Status() {
+	case ApprovalStatusApproved:
+		return app.resumeAutomationApprovalWorkflow(approval, input, "true")
+	case ApprovalStatusRejected:
+		hasFalseBranch, err := app.approvalWorkflowHasBranch(approval, "false")
+		if err != nil {
+			return err
+		}
+		if hasFalseBranch {
+			return app.resumeAutomationApprovalWorkflow(approval, input, "false")
+		}
+
+		return app.rejectAutomationApprovalWorkflow(approval)
+	default:
+		return fmt.Errorf("approval %q is not resolved", approval.Id)
+	}
 }
 
 func (app *BaseApp) resumeAutomationApprovalWorkflow(approval *Approval, input map[string]any, branchKey string) error {

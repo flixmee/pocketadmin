@@ -604,6 +604,12 @@ type App interface {
 	// ResolveAutomationApproval records an approval decision and resumes or fails the workflow.
 	ResolveAutomationApproval(approvalID string, decision AutomationApprovalDecision) error
 
+	// ResolveAutomationApprovalDecision records an approval decision without continuing the workflow.
+	ResolveAutomationApprovalDecision(approvalID string, decision AutomationApprovalDecision) (*Approval, error)
+
+	// ContinueAutomationApproval continues the workflow for an already resolved approval.
+	ContinueAutomationApproval(approvalID string, input map[string]any) error
+
 	// ResumeExpiredAutomationWorkflowStates resumes delay waits whose expiration has passed.
 	ResumeExpiredAutomationWorkflowStates() error
 
