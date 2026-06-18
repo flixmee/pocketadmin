@@ -23,6 +23,18 @@ type settingsTelegramTestRequest struct {
 	AccessToken *string `form:"accessToken" json:"accessToken"`
 }
 
+type settingsTelegramRegisterWebhookRequest struct {
+	WebhookURL string `form:"webhookURL" json:"webhookURL"`
+}
+
+type telegramWebhookRegistrationResult struct {
+	OK          bool   `json:"ok"`
+	Description string `json:"description,omitempty"`
+	Result      any    `json:"result,omitempty"`
+	StatusCode  int    `json:"statusCode"`
+	WebhookURL  string `json:"webhookURL"`
+}
+
 type settingsGoogleSheetsTestRequest struct {
 	OAuthRedirectURL string  `form:"oauthRedirectURL" json:"oauthRedirectURL"`
 	ClientID         string  `form:"clientID" json:"clientID"`
@@ -45,6 +57,29 @@ func settingsTestTelegram(e *core.RequestEvent) error {
 	}
 
 	return e.NoContent(http.StatusNoContent)
+}
+
+func settingsRegisterTelegramWebhook(e *core.RequestEvent) error {
+	form := new(settingsTelegramRegisterWebhookRequest)
+	if err := e.BindBody(form); err != nil {
+		return e.BadRequestError("An error occurred while loading the submitted data.", err)
+	}
+
+	result, err := registerTelegramWebhook(
+		e.Request.Context(),
+		http.DefaultClient,
+		e.App.Settings().Credentials.Telegram,
+		form.WebhookURL,
+	)
+	if err != nil {
+		if fErr, ok := err.(validation.Errors); ok {
+			return e.BadRequestError("Failed to register Telegram webhook.", fErr)
+		}
+
+		return e.BadRequestError("Failed to register Telegram webhook. Raw error: \n"+err.Error(), nil)
+	}
+
+	return e.JSON(http.StatusOK, result)
 }
 
 func settingsTestGoogleSheets(e *core.RequestEvent) error {
@@ -124,6 +159,64 @@ func testTelegramCredentials(
 
 	endpoint := strings.TrimRight(config.BaseURL, "/") + "/bot" + url.PathEscape(config.AccessToken) + "/getMe"
 	return sendTelegramTestRequest(ctx, &clientWithTimeout, endpoint)
+}
+
+func registerTelegramWebhook(
+	ctx context.Context,
+	client *http.Client,
+	config core.TelegramCredentialsConfig,
+	webhookBaseURL string,
+) (*telegramWebhookRegistrationResult, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if config.BaseURL == "" {
+		config.BaseURL = telegramAPIBaseURL
+	}
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
+	webhookBaseURL = strings.TrimRight(strings.TrimSpace(webhookBaseURL), "/")
+	parsed, err := url.ParseRequestURI(webhookBaseURL)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return nil, validation.Errors{
+			"webhookURL": validation.NewError("validation_invalid_url", "Invalid Telegram webhook URL."),
+		}
+	}
+
+	clientWithTimeout := *client
+	if clientWithTimeout.Timeout == 0 {
+		clientWithTimeout.Timeout = 15 * time.Second
+	}
+
+	webhookURL := webhookBaseURL + "/" + url.PathEscape(config.AccessToken)
+	endpoint := strings.TrimRight(config.BaseURL, "/") + "/bot" + url.PathEscape(config.AccessToken) + "/setWebhook"
+	body := url.Values{}
+	body.Set("url", webhookURL)
+	body.Set("allowed_updates", `["message","edited_message","channel_post","edited_channel_post"]`)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(body.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	res, err := clientWithTimeout.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	result := &telegramWebhookRegistrationResult{
+		StatusCode: res.StatusCode,
+		WebhookURL: webhookBaseURL + "/<access-token>",
+	}
+	if err := json.NewDecoder(res.Body).Decode(result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func sendTelegramTestRequest(

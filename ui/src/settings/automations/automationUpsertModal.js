@@ -1,6 +1,7 @@
 import { openAutomationDryRunModal } from "./automationDryRunModal";
 import { openAutomationRunsModal } from "./automationRunsList";
 import { buildAutomationStepsPayload, normalizeAutomationEditorSteps, stepEditor } from "./stepEditor";
+import { telegramWebhookRegistration } from "./telegramWebhookRegistration";
 
 const automationTriggerOptions = [
     { value: "manual", label: "Manual" },
@@ -351,11 +352,7 @@ function automationUpsertModal(automation, settings) {
                     t.div(
                         { className: "field" },
                         t.label(null, "Telegram webhook endpoint"),
-                        t.div(
-                            { className: "flex gap-10 flex-wrap p-10" },
-                            t.code(null, telegramWebhookURL()),
-                            app.components.copyButton(() => telegramWebhookURL()),
-                        ),
+                        telegramWebhookRegistration(),
                     ),
                 ),
                 t.div(
@@ -520,10 +517,6 @@ function buildAutomationPayload(form) {
 
 function webhookURL(automationId) {
     return `${app.utils.getApiExampleURL()}/api/automation-webhooks/${automationId}`;
-}
-
-function telegramWebhookURL() {
-    return `${app.utils.getApiExampleURL()}/api/automation-telegram/<access-token>`;
 }
 
 function isRecordAutomationTrigger(triggerType) {

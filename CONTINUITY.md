@@ -21,6 +21,7 @@ Key decisions:
 - Add dedicated test endpoints that accept unsaved credential payloads and return no content on successful verification.
 - Add a Telegram automation step using configured Telegram credentials.
 - Add a Telegram-message automation trigger using configured Telegram credentials.
+- Add a user-facing action to register the Telegram webhook and display Telegram API results.
 
 State:
   - Done:
@@ -90,10 +91,23 @@ State:
     - Ran `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npm run build`; passed with existing Vite large chunk warning.
     - Reverted generated `ui/dist/index.html` asset hash churn from the verification build.
     - Ran `git diff --check`; passed.
+    - Received follow-up request to add a button that registers the Telegram webhook and shows the response.
+    - Added authenticated `POST /api/settings/telegram/register-webhook`.
+    - Webhook registration uses saved Telegram credentials, calls Telegram `setWebhook`, limits updates to message-like events, and returns `ok`, `description`, `result`, status code, and a redacted webhook URL.
+    - Added shared `telegramWebhookRegistration` UI component to both automation editor surfaces.
+    - Added "Register webhook" button with loading state, success/rejection toast, and inline JSON response display.
+    - Added helper and authenticated API tests for Telegram webhook registration.
+    - Ran `gofmt` on touched settings API/test files; passed.
+    - Ran `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npx dprint fmt src/settings/automations/telegramWebhookRegistration.js src/settings/automations/pageAutomationUpsert.js src/settings/automations/automationUpsertModal.js`; passed.
+    - Ran `node --check` for the registration component and both automation editor modules; passed.
+    - Ran `go test ./apis -run 'TestRegisterTelegramWebhook|TestSettingsRegisterTelegramWebhook|TestSettingsTestCredentials|TestAutomationTelegramWebhook'`; passed.
+    - Ran `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npm run build`; passed with existing Vite large chunk warning.
+    - Reverted generated `ui/dist/index.html` asset hash churn from the verification build.
+    - Ran `git diff --check`; passed.
   - Now:
-    - Telegram message trigger implementation and focused verification are complete.
+    - Telegram webhook registration button/result display implementation and focused verification are complete.
   - Next:
-    - Await user review or next requested automation/credential step.
+    - Await user review or next requested Telegram automation enhancement.
 
 Open questions (UNCONFIRMED if needed):
 
@@ -130,9 +144,11 @@ Working set (files/ids/commands):
 - `ui/src/settings/automations/automationsList.js`
 - `ui/src/settings/automations/automationRunsList.js`
 - `ui/src/settings/automations/automationRunPreviewModal.js`
+- `ui/src/settings/automations/telegramWebhookRegistration.js`
 - `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npx dprint fmt src/settings/credentials/pageCredentialsSettings.js src/store.js src/router.js`
 - `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npx dprint fmt src/settings/automations/stepEditor.js src/settings/automations/telegramStepForm.js`
 - `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npx dprint fmt src/base/automationInput.js src/settings/automations/pageAutomationUpsert.js src/settings/automations/automationUpsertModal.js src/settings/automations/automationsList.js src/settings/automations/automationRunsList.js src/settings/automations/automationRunPreviewModal.js`
+- `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npx dprint fmt src/settings/automations/telegramWebhookRegistration.js src/settings/automations/pageAutomationUpsert.js src/settings/automations/automationUpsertModal.js`
 - `node --check src/settings/credentials/pageCredentialsSettings.js`
 - `node --check src/settings/automations/stepEditor.js`
 - `node --check src/settings/automations/telegramStepForm.js`
@@ -142,5 +158,6 @@ Working set (files/ids/commands):
 - `go test ./core -run 'TestAutomationTelegramStepSendsMessage|TestAutomationSchemas|TestAutomationValidate'`
 - `go test ./core -run 'TestAutomationTelegramMessageTriggerQueuesRuns|TestAutomationTelegramStepSendsMessage|TestAutomationSchemas|TestAutomationValidate'`
 - `go test ./apis -run 'TestAutomationTelegramWebhook|TestAutomationSchemas'`
+- `go test ./apis -run 'TestRegisterTelegramWebhook|TestSettingsRegisterTelegramWebhook|TestSettingsTestCredentials|TestAutomationTelegramWebhook'`
 - `go test ./...`
 - `git diff --check`

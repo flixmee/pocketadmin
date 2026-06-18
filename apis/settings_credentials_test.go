@@ -39,6 +39,54 @@ func TestTestTelegramCredentials(t *testing.T) {
 	}
 }
 
+func TestRegisterTelegramWebhook(t *testing.T) {
+	t.Parallel()
+
+	var gotWebhookURL string
+	var gotAllowedUpdates string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/setWebhook") {
+			t.Fatalf("Unexpected Telegram webhook request: %s %s", r.Method, r.URL.String())
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+
+		gotWebhookURL = r.Form.Get("url")
+		gotAllowedUpdates = r.Form.Get("allowed_updates")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"result":true,"description":"Webhook was set"}`))
+	}))
+	defer server.Close()
+
+	result, err := registerTelegramWebhook(
+		context.Background(),
+		server.Client(),
+		core.TelegramCredentialsConfig{
+			Enabled:     true,
+			BaseURL:     server.URL,
+			AccessToken: "123:abc",
+		},
+		"https://example.com/api/automation-telegram",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotWebhookURL != "https://example.com/api/automation-telegram/123:abc" {
+		t.Fatalf("Expected full Telegram webhook URL, got %q", gotWebhookURL)
+	}
+	if gotAllowedUpdates != `["message","edited_message","channel_post","edited_channel_post"]` {
+		t.Fatalf("Unexpected allowed_updates %q", gotAllowedUpdates)
+	}
+	if !result.OK || result.Result != true || result.Description != "Webhook was set" {
+		t.Fatalf("Unexpected Telegram registration result: %#v", result)
+	}
+	if result.WebhookURL != "https://example.com/api/automation-telegram/<access-token>" {
+		t.Fatalf("Expected redacted webhook URL, got %q", result.WebhookURL)
+	}
+}
+
 func TestTestGoogleSheetsCredentials(t *testing.T) {
 	t.Parallel()
 

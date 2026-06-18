@@ -469,6 +469,60 @@ func TestSettingsTestCredentials(t *testing.T) {
 	}
 }
 
+func TestSettingsRegisterTelegramWebhook(t *testing.T) {
+	t.Parallel()
+
+	superuserToken := "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/setWebhook") {
+			t.Fatalf("Unexpected Telegram webhook request: %s %s", r.Method, r.URL.String())
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"result":true,"description":"Webhook was set"}`))
+	}))
+	defer server.Close()
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "unauthorized",
+			Method:          http.MethodPost,
+			URL:             "/api/settings/telegram/register-webhook",
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "authorized",
+			Method: http.MethodPost,
+			URL:    "/api/settings/telegram/register-webhook",
+			Body:   strings.NewReader(`{"webhookURL":"https://example.com/api/automation-telegram"}`),
+			Headers: map[string]string{
+				"Authorization": superuserToken,
+				"Content-Type":  "application/json",
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				app.Settings().Credentials.Telegram.Enabled = true
+				app.Settings().Credentials.Telegram.BaseURL = server.URL
+				app.Settings().Credentials.Telegram.AccessToken = "123:abc"
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"ok":true`,
+				`"description":"Webhook was set"`,
+				`"result":true`,
+				`"statusCode":200`,
+				`"webhookURL":"https://example.com/api/automation-telegram/\u003caccess-token\u003e"`,
+			},
+			ExpectedEvents: map[string]int{"*": 0},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
 func TestSettingsTestEmail(t *testing.T) {
 	t.Parallel()
 
