@@ -73,6 +73,10 @@ func createAutomationsCollection(txApp core.App) error {
 		Name:   "cronExpr",
 		System: true,
 	})
+	col.Fields.Add(&core.TextField{
+		Name:   "webhookMethod",
+		System: true,
+	})
 	col.Fields.Add(&core.JSONField{
 		Name:     "steps",
 		System:   true,

@@ -605,7 +605,8 @@ function describeAutomationScope(automation) {
     }
 
     if (automation.triggerType === "webhook") {
-        return automation.id ? `POST /api/automation-webhooks/${automation.id}` : "Missing webhook endpoint";
+        const method = String(automation.webhookMethod || "POST").trim().toUpperCase() || "POST";
+        return automation.id ? `${method} /api/automation-webhooks/${automation.id}` : "Missing webhook endpoint";
     }
 
     if (

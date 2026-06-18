@@ -248,6 +248,17 @@ func validateAutomationRecord(app App, record *Record) error {
 		}
 	}
 
+	webhookMethod := NormalizeAutomationWebhookMethod(record.GetString("webhookMethod"))
+	if triggerType == AutomationTriggerWebhook {
+		if err := validation.Validate(webhookMethod, validation.Required, validation.By(validateAutomationWebhookMethod)); err != nil {
+			return validation.Errors{"webhookMethod": err}
+		}
+	} else if strings.TrimSpace(record.GetString("webhookMethod")) != "" {
+		if err := validation.By(validateAutomationWebhookMethod).Validate(webhookMethod); err != nil {
+			return validation.Errors{"webhookMethod": err}
+		}
+	}
+
 	cronExpr := strings.TrimSpace(record.GetString("cronExpr"))
 	if triggerType == AutomationTriggerScheduleCron {
 		if err := validation.Required.Validate(cronExpr); err != nil {
@@ -267,6 +278,15 @@ func validateAutomationRecord(app App, record *Record) error {
 	}
 
 	return nil
+}
+
+func validateAutomationWebhookMethod(value any) error {
+	method := NormalizeAutomationWebhookMethod(toString(value))
+	if IsAutomationWebhookMethod(method) {
+		return nil
+	}
+
+	return validation.NewError("validation_invalid_webhook_method", "Unsupported webhook HTTP method.")
 }
 
 func validateAutomationRunRecord(app App, record *Record) error {

@@ -375,6 +375,9 @@ func (app *BaseApp) RunAutomationWebhook(automationID string, request *Automatio
 	if automation == nil || automation.TriggerType() != AutomationTriggerWebhook {
 		return nil, fmt.Errorf("missing active webhook automation %q", automationID)
 	}
+	if !automationWebhookMethodMatches(automation, request) {
+		return nil, fmt.Errorf("webhook automation %q expects %s requests", automationID, automation.WebhookMethod())
+	}
 
 	payload := automationTriggerPayload{
 		TriggerType: AutomationTriggerWebhook,
@@ -901,6 +904,17 @@ func automationWebhookRequestData(request *AutomationWebhookRequest) map[string]
 	}
 
 	return data
+}
+
+func automationWebhookMethodMatches(automation *Automation, request *AutomationWebhookRequest) bool {
+	if automation == nil {
+		return false
+	}
+	if request == nil {
+		return automation.WebhookMethod() == AutomationWebhookMethodDefault
+	}
+
+	return automation.WebhookMethod() == NormalizeAutomationWebhookMethod(request.Method)
 }
 
 func stringMapToAnyMap(values map[string]string) map[string]any {

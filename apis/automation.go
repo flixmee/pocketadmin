@@ -26,13 +26,14 @@ var automationAllowedFields = []string{
 	"triggerType",
 	"collectionRef",
 	"cronExpr",
+	"webhookMethod",
 	"steps",
 	"notes",
 }
 
 // bindAutomationApi registers the automation api endpoints.
 func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
-	rg.POST("/automation-webhooks/{id}", automationWebhook).Bind(SkipSuccessActivityLog())
+	bindAutomationWebhookRoutes(rg)
 	rg.POST("/automation-resume/{token}", automationResumeByToken).Bind(SkipSuccessActivityLog())
 
 	subGroup := rg.Group("/automations").Bind(RequireSuperuserAuth())
@@ -57,6 +58,14 @@ func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 	subGroup.POST("/{id}/runs/{runId}/rerun", automationRunRerun)
 	subGroup.GET("/{id}/runs", automationRunsList)
 	subGroup.DELETE("/{id}/runs", automationRunsClear)
+}
+
+func bindAutomationWebhookRoutes(rg *router.RouterGroup[*core.RequestEvent]) {
+	rg.GET("/automation-webhooks/{id}", automationWebhook).Bind(SkipSuccessActivityLog())
+	rg.POST("/automation-webhooks/{id}", automationWebhook).Bind(SkipSuccessActivityLog())
+	rg.PUT("/automation-webhooks/{id}", automationWebhook).Bind(SkipSuccessActivityLog())
+	rg.PATCH("/automation-webhooks/{id}", automationWebhook).Bind(SkipSuccessActivityLog())
+	rg.DELETE("/automation-webhooks/{id}", automationWebhook).Bind(SkipSuccessActivityLog())
 }
 
 func automationPublish(e *core.RequestEvent) error {
@@ -438,6 +447,10 @@ func automationWebhook(e *core.RequestEvent) error {
 	automation, err := findAutomationForAPI(e.App, e.Request.PathValue("id"))
 	if err != nil || automation == nil || !automation.Active() || automation.TriggerType() != core.AutomationTriggerWebhook {
 		return e.NotFoundError("Missing or invalid automation webhook.", err)
+	}
+	if automation.WebhookMethod() != core.NormalizeAutomationWebhookMethod(e.Request.Method) {
+		e.Response.Header().Set("Allow", automation.WebhookMethod())
+		return router.NewApiError(http.StatusMethodNotAllowed, "Webhook automation does not allow this HTTP method.", nil)
 	}
 
 	request, err := automationWebhookRequest(e)

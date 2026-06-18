@@ -17,6 +17,14 @@ const automationTriggerOptions = [
     { value: "i18n.ai_translation_finished", label: "AI translation finished" },
 ];
 
+const automationWebhookMethodOptions = [
+    { value: "GET", label: "GET" },
+    { value: "POST", label: "POST" },
+    { value: "PUT", label: "PUT" },
+    { value: "PATCH", label: "PATCH" },
+    { value: "DELETE", label: "DELETE" },
+];
+
 const customTagOptionValue = "__pocketadmin_custom_tag__";
 
 export function pageAutomationUpsert(route) {
@@ -234,6 +242,9 @@ export function pageAutomationUpsert(route) {
         }
         if (triggerType !== "schedule.cron") {
             data.form.cronExpr = "";
+        }
+        if (triggerType === "webhook" && !data.form.webhookMethod) {
+            data.form.webhookMethod = "POST";
         }
     }
 
@@ -536,6 +547,27 @@ export function pageAutomationUpsert(route) {
                                     className: "field",
                                     hidden: () => !data.isWebhookTrigger,
                                 },
+                                t.label(
+                                    { htmlFor: formId + "_webhookMethod", className: "automation-field-label" },
+                                    "HTTP method",
+                                ),
+                                app.components.select({
+                                    id: formId + "_webhookMethod",
+                                    name: "webhookMethod",
+                                    value: () => data.form.webhookMethod,
+                                    options: automationWebhookMethodOptions,
+                                    required: true,
+                                    onchange: (selected) => {
+                                        data.form.webhookMethod = selected?.[0]?.value || "POST";
+                                    },
+                                }),
+                                () => fieldError(app.store.errors?.webhookMethod),
+                            ),
+                            t.div(
+                                {
+                                    className: "field",
+                                    hidden: () => !data.isWebhookTrigger,
+                                },
                                 t.label({ className: "automation-field-label" }, "Webhook endpoint"),
                                 () => {
                                     if (!data.automation?.id) {
@@ -547,6 +579,7 @@ export function pageAutomationUpsert(route) {
 
                                     return t.div(
                                         { className: "automation-workflow-webhook-copy" },
+                                        t.span({ className: "label method" }, () => data.form.webhookMethod || "POST"),
                                         t.code(null, webhookURL(data.automation.id)),
                                         app.components.copyButton(() => webhookURL(data.automation.id)),
                                     );
@@ -629,6 +662,7 @@ function normalizeAutomationForm(automation = null) {
         triggerType: automation?.triggerType || "manual",
         collectionRef: automation?.collectionRef || "",
         cronExpr: automation?.cronExpr || "",
+        webhookMethod: normalizeWebhookMethod(automation?.webhookMethod),
         notes: automation?.notes || "",
         steps: normalizeAutomationEditorSteps(automation?.steps),
     };
@@ -660,9 +694,15 @@ function buildAutomationPayload(form) {
             ? (form.collectionRef || "")
             : "",
         cronExpr: form.triggerType === "schedule.cron" ? form.cronExpr.trim() : "",
+        webhookMethod: form.triggerType === "webhook" ? normalizeWebhookMethod(form.webhookMethod) : "",
         notes: form.notes.trim(),
         steps: buildAutomationStepsPayload(form.steps),
     };
+}
+
+function normalizeWebhookMethod(method) {
+    const value = String(method || "").trim().toUpperCase();
+    return automationWebhookMethodOptions.some((option) => option.value === value) ? value : "POST";
 }
 
 function webhookURL(automationId) {

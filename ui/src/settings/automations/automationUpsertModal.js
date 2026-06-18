@@ -17,6 +17,14 @@ const automationTriggerOptions = [
     { value: "i18n.ai_translation_finished", label: "AI translation finished" },
 ];
 
+const automationWebhookMethodOptions = [
+    { value: "GET", label: "GET" },
+    { value: "POST", label: "POST" },
+    { value: "PUT", label: "PUT" },
+    { value: "PATCH", label: "PATCH" },
+    { value: "DELETE", label: "DELETE" },
+];
+
 export function openAutomationUpsertModal(automation = null, settings = {
     onsave: null,
 }) {
@@ -92,6 +100,9 @@ function automationUpsertModal(automation, settings) {
         }
         if (triggerType !== "schedule.cron") {
             data.form.cronExpr = "";
+        }
+        if (triggerType === "webhook" && !data.form.webhookMethod) {
+            data.form.webhookMethod = "POST";
         }
     }
 
@@ -310,6 +321,21 @@ function automationUpsertModal(automation, settings) {
                     },
                     t.div(
                         { className: "field" },
+                        t.label({ htmlFor: formId + "_webhookMethod" }, "HTTP method"),
+                        app.components.select({
+                            id: formId + "_webhookMethod",
+                            name: "webhookMethod",
+                            value: () => data.form.webhookMethod,
+                            options: automationWebhookMethodOptions,
+                            required: true,
+                            onchange: (selected) => {
+                                data.form.webhookMethod = selected?.[0]?.value || "POST";
+                            },
+                        }),
+                    ),
+                    () => fieldError(app.store.errors?.webhookMethod),
+                    t.div(
+                        { className: "field" },
                         t.label(null, "Webhook endpoint"),
                         () => {
                             if (!automation?.id) {
@@ -321,6 +347,7 @@ function automationUpsertModal(automation, settings) {
 
                             return t.div(
                                 { className: "flex gap-10 flex-wrap p-10" },
+                                t.span({ className: "label method" }, () => data.form.webhookMethod || "POST"),
                                 t.code(null, webhookURL(automation.id)),
                                 app.components.copyButton(() => webhookURL(automation.id)),
                             );
@@ -328,7 +355,7 @@ function automationUpsertModal(automation, settings) {
                     ),
                     t.div(
                         { className: "field-help" },
-                        "Send a POST request to this endpoint. Templates can read incoming values from ",
+                        "Send a request with the selected method to this endpoint. Templates can read incoming values from ",
                         t.code(null, "{{request.method}}"),
                         ", ",
                         t.code(null, "{{request.headers.*}}"),
@@ -471,6 +498,7 @@ function normalizeAutomationForm(automation = null) {
         triggerType: automation?.triggerType || "manual",
         collectionRef: automation?.collectionRef || "",
         cronExpr: automation?.cronExpr || "",
+        webhookMethod: normalizeWebhookMethod(automation?.webhookMethod),
         notes: automation?.notes || "",
         steps: normalizeAutomationEditorSteps(automation?.steps),
     };
@@ -494,9 +522,15 @@ function buildAutomationPayload(form) {
             ? (form.collectionRef || "")
             : "",
         cronExpr: form.triggerType === "schedule.cron" ? form.cronExpr.trim() : "",
+        webhookMethod: form.triggerType === "webhook" ? normalizeWebhookMethod(form.webhookMethod) : "",
         notes: form.notes.trim(),
         steps: buildAutomationStepsPayload(form.steps),
     };
+}
+
+function normalizeWebhookMethod(method) {
+    const value = String(method || "").trim().toUpperCase();
+    return automationWebhookMethodOptions.some((option) => option.value === value) ? value : "POST";
 }
 
 function webhookURL(automationId) {

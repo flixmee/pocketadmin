@@ -571,6 +571,63 @@ func TestAutomationWebhook(t *testing.T) {
 			},
 		},
 		{
+			Name:   "webhook method mismatch",
+			Method: http.MethodGet,
+			URL:    "/api/automation-webhooks/autoapi00000056",
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				createWebhookAutomationFixture(t, app, "autoapi00000056", "API webhook method mismatch automation")
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				if allow := res.Header.Get("Allow"); allow != http.MethodPost {
+					t.Fatalf("Expected Allow header %q, got %q", http.MethodPost, allow)
+				}
+			},
+			ExpectedStatus: 405,
+			ExpectedContent: []string{
+				`"message":"Webhook automation does not allow this HTTP method."`,
+			},
+		},
+		{
+			Name:   "valid get webhook automation",
+			Method: http.MethodGet,
+			URL:    "/api/automation-webhooks/autoapi00000057?tenant=acme",
+			Headers: map[string]string{
+				"X-Automation-Event": "invoice.paid",
+			},
+			Delay: 100 * time.Millisecond,
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				e.Router.GET("/{path...}", func(re *core.RequestEvent) error {
+					return re.NoContent(http.StatusNotFound)
+				})
+
+				automation := createWebhookAutomationFixture(t, app, "autoapi00000057", "API GET webhook automation")
+				automation.SetWebhookMethod(http.MethodGet)
+				if err := app.Save(automation); err != nil {
+					t.Fatalf("Failed to update webhook automation fixture: %v", err)
+				}
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				automationRecord, err := app.FindRecordById(core.CollectionNameAutomations, "autoapi00000057")
+				if err != nil {
+					t.Fatalf("Expected webhook automation to exist: %v", err)
+				}
+
+				automation := &core.Automation{}
+				automation.SetProxyRecord(automationRecord)
+
+				runs := waitForAutomationRunsAPI(t, app, automation, 1)
+				input := decodeAutomationRunInputAPI(t, runs[0])
+				request, ok := input["request"].(map[string]any)
+				if !ok {
+					t.Fatalf("Expected request payload in automation run input, got %#v", input["request"])
+				}
+				if request["method"] != http.MethodGet {
+					t.Fatalf("Expected request method %q, got %#v", http.MethodGet, request["method"])
+				}
+			},
+			ExpectedStatus: 204,
+		},
+		{
 			Name:   "valid webhook automation",
 			Method: http.MethodPost,
 			URL:    "/api/automation-webhooks/autoapi00000052?tenant=acme",

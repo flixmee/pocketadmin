@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"errors"
+	"net/http"
+	"strings"
 
 	"github.com/pocketbase/pocketbase/tools/types"
 )
@@ -23,6 +25,8 @@ const (
 	AutomationTriggerI18nUpdated        = "i18n.translation_updated"
 	AutomationTriggerI18nAIFinished     = "i18n.ai_translation_finished"
 
+	AutomationWebhookMethodDefault = http.MethodPost
+
 	AutomationStepCondition    = "condition"
 	AutomationStepCode         = "code"
 	AutomationStepHTTP         = "http"
@@ -41,6 +45,14 @@ const (
 	AutomationStepAIGenerate   = "ai.generate"
 	AutomationStepAISummarize  = "ai.summarize"
 )
+
+var automationWebhookMethods = []string{
+	http.MethodGet,
+	http.MethodPost,
+	http.MethodPut,
+	http.MethodPatch,
+	http.MethodDelete,
+}
 
 var (
 	_ Model        = (*Automation)(nil)
@@ -139,6 +151,16 @@ func (m *Automation) SetTriggerType(triggerType string) {
 	m.Set("triggerType", triggerType)
 }
 
+// WebhookMethod returns the configured webhook HTTP method.
+func (m *Automation) WebhookMethod() string {
+	return NormalizeAutomationWebhookMethod(m.GetString("webhookMethod"))
+}
+
+// SetWebhookMethod updates the webhook HTTP method.
+func (m *Automation) SetWebhookMethod(method string) {
+	m.Set("webhookMethod", NormalizeAutomationWebhookMethod(method))
+}
+
 // CollectionRef returns the trigger collection reference.
 func (m *Automation) CollectionRef() string {
 	return m.GetString("collectionRef")
@@ -198,4 +220,26 @@ func (m *Automation) Created() types.DateTime {
 // Updated returns the "updated" record field value.
 func (m *Automation) Updated() types.DateTime {
 	return m.GetDateTime("updated")
+}
+
+// NormalizeAutomationWebhookMethod returns the normalized webhook HTTP method.
+func NormalizeAutomationWebhookMethod(method string) string {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	if method == "" {
+		return AutomationWebhookMethodDefault
+	}
+
+	return method
+}
+
+// IsAutomationWebhookMethod reports whether method is a supported webhook HTTP method.
+func IsAutomationWebhookMethod(method string) bool {
+	method = NormalizeAutomationWebhookMethod(method)
+	for _, allowed := range automationWebhookMethods {
+		if method == allowed {
+			return true
+		}
+	}
+
+	return false
 }

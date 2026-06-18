@@ -861,6 +861,12 @@ func TestAutomationWebhookRunExposesRequestTemplateData(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := app.RunAutomationWebhook(automation.Id, &core.AutomationWebhookRequest{
+		Method: http.MethodGet,
+	}); err == nil || !strings.Contains(err.Error(), "expects POST requests") {
+		t.Fatalf("Expected webhook method mismatch error, got %v", err)
+	}
+
 	_, err := app.RunAutomationWebhook(automation.Id, &core.AutomationWebhookRequest{
 		Method:   http.MethodPost,
 		Path:     "/api/automation-webhooks/" + automation.Id,

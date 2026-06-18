@@ -20,6 +20,7 @@ type automationVersionSnapshot struct {
 	TriggerType   string        `json:"triggerType"`
 	CollectionRef string        `json:"collectionRef,omitempty"`
 	CronExpr      string        `json:"cronExpr,omitempty"`
+	WebhookMethod string        `json:"webhookMethod,omitempty"`
 	Steps         types.JSONRaw `json:"steps"`
 	Notes         string        `json:"notes,omitempty"`
 }
@@ -85,9 +86,18 @@ func automationSnapshotRaw(automation *Automation) (types.JSONRaw, error) {
 		TriggerType:   automation.TriggerType(),
 		CollectionRef: automation.CollectionRef(),
 		CronExpr:      automation.CronExpr(),
+		WebhookMethod: automationWebhookMethodForExport(automation),
 		Steps:         automation.Steps(),
 		Notes:         automation.Notes(),
 	})
+}
+
+func automationWebhookMethodForExport(automation *Automation) string {
+	if automation == nil || automation.TriggerType() != AutomationTriggerWebhook {
+		return ""
+	}
+
+	return automation.WebhookMethod()
 }
 
 func applyAutomationVersionSnapshot(automation *Automation, raw types.JSONRaw) (*Automation, error) {
@@ -111,6 +121,9 @@ func applyAutomationVersionSnapshot(automation *Automation, raw types.JSONRaw) (
 	}
 	clone.SetCollectionRef(snapshot.CollectionRef)
 	clone.SetCronExpr(snapshot.CronExpr)
+	if clone.TriggerType() == AutomationTriggerWebhook || snapshot.WebhookMethod != "" {
+		clone.SetWebhookMethod(snapshot.WebhookMethod)
+	}
 	if strings.TrimSpace(snapshot.Steps.String()) != "" {
 		clone.SetSteps(snapshot.Steps)
 	}

@@ -33,6 +33,7 @@ func TestAutomationCollectionsExist(t *testing.T) {
 				"triggerType",
 				"collectionRef",
 				"cronExpr",
+				"webhookMethod",
 				"steps",
 				"notes",
 				"lastRunAt",
@@ -420,6 +421,7 @@ func TestAutomationFields(t *testing.T) {
 	automation.SetTriggerType(core.AutomationTriggerRecordCreate)
 	automation.SetCollectionRef("users")
 	automation.SetCronExpr("0 * * * *")
+	automation.SetWebhookMethod("patch")
 	automation.SetSteps(steps)
 	automation.SetNotes("notes")
 	automation.SetRaw("lastRunAt", now)
@@ -447,6 +449,9 @@ func TestAutomationFields(t *testing.T) {
 	}
 	if automation.CronExpr() != "0 * * * *" {
 		t.Fatalf("Expected cronExpr to roundtrip, got %q", automation.CronExpr())
+	}
+	if automation.WebhookMethod() != "PATCH" {
+		t.Fatalf("Expected webhookMethod to roundtrip, got %q", automation.WebhookMethod())
 	}
 	if automation.Steps().String() != steps.String() {
 		t.Fatalf("Expected steps to roundtrip, got %s", automation.Steps())
@@ -586,6 +591,14 @@ func TestAutomationValidation(t *testing.T) {
 				a.SetCronExpr("not a cron")
 			},
 			expectedField: "cronExpr",
+		},
+		{
+			name: "webhook trigger invalid method",
+			mutate: func(a *core.Automation) {
+				a.SetTriggerType(core.AutomationTriggerWebhook)
+				a.Set("webhookMethod", "CONNECT")
+			},
+			expectedField: "webhookMethod",
 		},
 		{
 			name: "steps must be array",
