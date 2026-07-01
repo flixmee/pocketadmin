@@ -57,6 +57,7 @@ func init() {
 
 			CREATE TABLE {{_collection_groups}} (
 				[[name]]    TEXT PRIMARY KEY NOT NULL,
+				[[icon]]    TEXT DEFAULT "" NOT NULL,
 				[[created]] TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%fZ')) NOT NULL,
 				[[updated]] TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%fZ')) NOT NULL
 			);

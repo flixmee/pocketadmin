@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Allow users to import a cURL command into the Automation HTTP Request step.
-- Success: the admin UI exposes an import-by-cURL flow for HTTP Request steps, parses common cURL command options into the existing step settings, preserves existing behavior for manual editing, and focused UI checks pass or failures are reported.
+- Simplify the Collection Group upsert icon selector trigger and remove shared `btn` styling from the select-icon button.
+- Success: the icon picker still opens and shows selected/empty state, but the trigger no longer uses the `btn` class; focused UI syntax/format checks pass or failures are reported.
 
 
 Constraints/Assumptions:
@@ -10,31 +10,47 @@ Constraints/Assumptions:
 - Existing unrelated changes may be present; do not revert them.
 - When updating admin UI, consult `UI_DOCS.md`.
 - Keep Go and UI changes isolated except where this feature spans both.
+- Current icon metadata and Collection Group upsert structures must be confirmed from local files.
 
 Key decisions:
 
-- Implement cURL import entirely in `ui/src/settings/automations/httpStepForm.js`; no backend changes needed because HTTP step payload already accepts method/url/headers/body.
-- Add a modal opened from the HTTP Request step form.
-- Parse common cURL forms locally without a new dependency.
-- Support method/url/header/body import for `-X/--request`, `--url`, `-H/--header`, `-d/--data*`, `--json`, `-G/--get`, `--url-query`, `-u/--user`, and simple form values.
-- Reject file-upload form fields because the current HTTP step body model cannot faithfully represent multipart file upload payloads.
-- Extend the method dropdown with `HEAD` and `OPTIONS` so imported explicit methods remain editable.
+- Store selected collection-group icons as relative public icon paths like `Linear/Archive/archive.svg`.
+- Add optional `icon` metadata to `_collection_groups` and expose it through the admin collection group metadata API.
+- Keep collection `collectionGroup` values as plain group names; icons are group metadata, not collection fields.
+- Implement the picker as a dedicated admin UI modal that loads `icons/meta-data.json` from public assets and uses the existing `app.components.select` dropdown.
+- Current task only changes the icon selector trigger styling/markup; no backend/API changes expected.
 
 State:
   - Done:
     - Read `CONTINUITY.md`.
-    - Reset active ledger state for cURL import in Automation HTTP Request steps.
+    - Reset active ledger state for icon picker / Collection Group upsert.
     - Consulted `UI_DOCS.md`.
-    - Inspected `ui/src/settings/automations/httpStepForm.js` and `stepEditor.js`; HTTP steps use `method`, `url`, `headersText`, `bodyText`, and `timeoutText`.
-    - Added cURL import modal and parser to `ui/src/settings/automations/httpStepForm.js`.
-    - Parser sanity checks passed for quoted JSON bodies, explicit POST, `--json`, `-G` query import, `-I` HEAD, and basic auth.
-    - Ran `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npx dprint fmt src/settings/automations/httpStepForm.js`; passed.
-    - `node --check ui/src/settings/automations/httpStepForm.js` passed.
-    - `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npm run build` passed; Vite emitted existing large chunk warnings.
+    - Inspected `ui/public/icons/meta-data.json`; schema is `{ variants: string[], categories: [{ name, icons: string[] }] }`.
+    - Confirmed icon files live under `ui/public/icons/<variant>/<category>/<kebab-icon>.svg`.
+    - Inspected `collectionGroupUpsertModal`, `collectionsSidebar`, store loading, and collection group API/core model.
+    - Added `_collection_groups.icon` to initial schema, repair migration, and a new migration for existing databases.
+    - Added collection group metadata APIs/helpers: list returns `{name, icon}`, POST upserts a group, PATCH can rename and update icon.
+    - Added `collectionIconPickerModal` that loads `icons/meta-data.json`, filters by variant/category/search, validates icon filename conversion against the provided SVG structure, and returns a relative icon path.
+    - Added icon selection/clear controls to Collection Group upsert and wired create/edit group flows to persist selected icons.
+    - Updated collection group store normalization, group dropdown rendering, and sidebar group icon rendering.
+    - Updated focused Go tests for group metadata and migration column coverage.
+    - `node --check` passed for touched UI JS files.
+    - Focused Go tests passed:
+      - `go test ./core -run 'TestFindAllCollectionGroups|TestRenameAndDeleteCollectionGroup|TestBaseAppRunSystemMigrations|TestBaseAppResetBootstrapState'`
+      - `go test ./apis -run TestCollectionGroups`
+    - `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npm run build` passed; Vite emitted large chunk warnings and plugin timing info.
+    - Full icon metadata path validation passed for all variants/categories/icons.
     - `git diff --check` passed.
-    - `ui/dist/index.html` was already dirty before this task and was regenerated by the UI build.
+    - `go test ./...` was attempted and failed in unrelated existing areas: `apis TestSQLRun/single_write_query` expected `affectedRows:0` but got `1`; automation scheduler cleanup panicked in auth/workflow tests.
+    - New request: simplify Collection Group upsert icon selector trigger; do not use `btn` for the select icon button.
+    - Inspected `ui/src/collections/collectionGroupUpsertModal.js` and `ui/src/css/collectionModal.css`.
+    - Replaced the select icon trigger class with `collection-group-icon-trigger` and added compact custom styling.
+    - Added fixed preview wrapper states for selected and empty icons.
+    - Ran `env DPRINT_CACHE_DIR=/private/tmp/dprint-cache npx dprint fmt src/collections/collectionGroupUpsertModal.js src/css/collectionModal.css`; passed.
+    - `node --check src/collections/collectionGroupUpsertModal.js` passed.
+    - `git diff --check` passed.
   - Now:
-    - Ready to report cURL import implementation.
+    - Ready to report simplified selector trigger.
 
   - Next:
     - None.
@@ -46,5 +62,21 @@ Open questions (UNCONFIRMED if needed):
 Working set (files/ids/commands):
 
 - `CONTINUITY.md`
-- `ui/src/settings/automations/httpStepForm.js`
-- `ui/dist/index.html` (pre-existing dirty generated file, regenerated by build)
+- `ui/public/icons/meta-data.json`
+- `ui/src/collections/collectionIconPickerModal.js`
+- `ui/src/collections/collectionGroupUpsertModal.js`
+- `ui/src/collections/collectionsSidebar.js`
+- `ui/src/collections/collectionUpsertModal.js`
+- `ui/src/store.js`
+- `ui/src/utils.js`
+- `ui/src/css/collectionModal.css`
+- `ui/src/css/layout.css`
+- `ui/src/main.js`
+- `ui/dist/index.html`
+- `core/collection_model.go`
+- `core/app.go`
+- `apis/collection.go`
+- `migrations/*collection_group*`
+- `apis/collection_test.go`
+- `core/base_test.go`
+- `core/collection_query_test.go`

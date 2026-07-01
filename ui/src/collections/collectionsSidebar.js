@@ -75,10 +75,11 @@ export function collectionsSidebar() {
     async function renameGroup(groupName) {
         app.modals.openCollectionGroupUpsert({
             initialName: groupName,
+            initialIcon: app.store.getCollectionGroupIcon(groupName),
             title: "Edit collection group",
             submitLabel: "Save",
-            onsubmit: async (nextName) => {
-                if (nextName === groupName) {
+            onsubmit: async (nextName, icon) => {
+                if (nextName === groupName && icon === app.store.getCollectionGroupIcon(groupName)) {
                     return;
                 }
 
@@ -86,12 +87,12 @@ export function collectionsSidebar() {
                     `/api/collections/meta/groups/${encodeURIComponent(groupName)}`,
                     {
                         method: "PATCH",
-                        body: { name: nextName },
+                        body: { name: nextName, icon: icon || "" },
                     },
                 );
 
-                app.store.renameCollectionGroup(groupName, nextName);
-                app.store.collectionGroups = app.utils.sortedStrings(groups || []);
+                app.store.renameCollectionGroup(groupName, nextName, icon);
+                app.store.collectionGroups = app.utils.sortedCollectionGroups(groups || []);
 
                 const normalizedOld = app.utils.normalizeCollectionGroup(groupName);
                 if (data.openGroups[normalizedOld] !== undefined) {
@@ -287,6 +288,20 @@ export function collectionsSidebar() {
                                     {
                                         className: "inline-flex gap-5 flex-nowrap group-summary",
                                     },
+                                    t.span(
+                                        { className: "collection-group-icon" },
+                                        () => {
+                                            const icon = app.store.getCollectionGroupIcon(group.name);
+                                            if (icon) {
+                                                return t.img({
+                                                    src: () => app.utils.resolvePublicAssetURL(`icons/${icon}`),
+                                                    alt: "",
+                                                });
+                                            }
+
+                                            return t.i({ className: "ri-folder-line", ariaHidden: true });
+                                        },
+                                    ),
                                     t.span({ className: "txt" }, group.name),
                                     t.span({ className: "flex-fill" }),
                                     t.span(

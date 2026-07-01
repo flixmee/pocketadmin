@@ -26,6 +26,7 @@ func bindCollectionApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 	subGroup.PUT("/import", collectionsImport)
 	subGroup.GET("/meta/scaffolds", collectionScaffolds)
 	subGroup.GET("/meta/groups", collectionListGroups)
+	subGroup.POST("/meta/groups", collectionSaveGroup)
 	subGroup.PATCH("/meta/groups/{name}", collectionRenameGroup)
 	subGroup.DELETE("/meta/groups/{name}", collectionDeleteGroup)
 
@@ -218,7 +219,7 @@ func collectionScaffolds(e *core.RequestEvent) error {
 }
 
 func collectionListGroups(e *core.RequestEvent) error {
-	groups, err := e.App.FindAllCollectionGroups()
+	groups, err := e.App.FindAllCollectionGroupMeta()
 	if err != nil {
 		return e.BadRequestError("Failed to load collection groups.", err)
 	}
@@ -226,20 +227,47 @@ func collectionListGroups(e *core.RequestEvent) error {
 	return e.JSON(http.StatusOK, groups)
 }
 
-func collectionRenameGroup(e *core.RequestEvent) error {
+func collectionSaveGroup(e *core.RequestEvent) error {
 	form := struct {
-		Name string `form:"name" json:"name"`
+		Name string  `form:"name" json:"name"`
+		Icon *string `form:"icon" json:"icon"`
 	}{}
 	if err := e.BindBody(&form); err != nil {
 		return e.BadRequestError("Failed to load the submitted data due to invalid formatting.", err)
 	}
 
-	if err := e.App.RenameCollectionGroup(e.Request.PathValue("name"), form.Name); err != nil {
+	if strings.TrimSpace(form.Name) == "" {
+		return e.BadRequestError("Missing collection group name.", nil)
+	}
+
+	if err := e.App.SaveCollectionGroup(form.Name, form.Icon); err != nil {
+		return e.BadRequestError("Failed to save collection group.", err)
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		groups, err := e.App.FindAllCollectionGroupMeta()
+		if err != nil {
+			return err
+		}
+		return e.JSON(http.StatusOK, groups)
+	})
+}
+
+func collectionRenameGroup(e *core.RequestEvent) error {
+	form := struct {
+		Name string  `form:"name" json:"name"`
+		Icon *string `form:"icon" json:"icon"`
+	}{}
+	if err := e.BindBody(&form); err != nil {
+		return e.BadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+	}
+
+	if err := e.App.RenameCollectionGroupWithIcon(e.Request.PathValue("name"), form.Name, form.Icon); err != nil {
 		return e.BadRequestError("Failed to rename collection group.", err)
 	}
 
 	return execAfterSuccessTx(true, e.App, func() error {
-		groups, err := e.App.FindAllCollectionGroups()
+		groups, err := e.App.FindAllCollectionGroupMeta()
 		if err != nil {
 			return err
 		}

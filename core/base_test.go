@@ -135,6 +135,17 @@ func TestBaseAppBootstrap(t *testing.T) {
 		t.Fatalf("Expected _collection_groups table to exist, got %d matches", totalCollectionGroupsTables)
 	}
 
+	var totalCollectionGroupIconColumns int
+	err = app.DB().
+		NewQuery("SELECT count(*) FROM pragma_table_info('_collection_groups') WHERE name = 'icon'").
+		Row(&totalCollectionGroupIconColumns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if totalCollectionGroupIconColumns != 1 {
+		t.Fatalf("Expected _collection_groups.icon to exist, got %d matches", totalCollectionGroupIconColumns)
+	}
+
 	// reset
 	if err := app.ResetBootstrapState(); err != nil {
 		t.Fatal(err)
@@ -207,6 +218,17 @@ func TestBaseAppRunSystemMigrationsAddsCollectionGroupColumn(t *testing.T) {
 	}
 	if totalCollectionGroupsTables != 1 {
 		t.Fatalf("Expected rerun migrations to restore _collection_groups, got %d matches", totalCollectionGroupsTables)
+	}
+
+	var totalCollectionGroupIconColumns int
+	err = app.DB().
+		NewQuery("SELECT count(*) FROM pragma_table_info('_collection_groups') WHERE name = 'icon'").
+		Row(&totalCollectionGroupIconColumns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if totalCollectionGroupIconColumns != 1 {
+		t.Fatalf("Expected rerun migrations to restore _collection_groups.icon, got %d matches", totalCollectionGroupIconColumns)
 	}
 }
 

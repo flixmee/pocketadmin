@@ -515,25 +515,23 @@
         &::before {
           content: "" !important;
         }
+        .collection-group-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 20px;
+          height: 20px;
+          flex-shrink: 0;
+          img {
+            width: 18px;
+            height: 18px;
+            object-fit: contain;
+          }
+        }
         .txt {
           &::before {
-            content: "\ef31";
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            line-height: 20px;
-            align-content: center;
-            flex-shrink: 0;
-            position: relative;
-            top: auto;
-            bottom: auto;
-            left: auto;
-            right: auto;
-            order: 1;
-            padding: 0;
-            margin: 0;
-            font-size: 1em;
-            font-family: var(--iconFontFamily);
+            content: none;
+            display: none;
           }
         }
       }

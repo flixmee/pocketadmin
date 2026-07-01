@@ -403,11 +403,21 @@ type App interface {
 	// FindAllCollectionGroups returns all registered collection group names.
 	FindAllCollectionGroups() ([]string, error)
 
+	// FindAllCollectionGroupMeta returns all registered collection groups with their metadata.
+	FindAllCollectionGroupMeta() ([]*CollectionGroup, error)
+
 	// EnsureCollectionGroup stores the provided group name in the groups registry if it is non-empty.
 	EnsureCollectionGroup(name string) error
 
+	// SaveCollectionGroup creates or updates a registered collection group.
+	SaveCollectionGroup(name string, icon *string) error
+
 	// RenameCollectionGroup renames a registered collection group and updates all collections using it.
 	RenameCollectionGroup(oldName, newName string) error
+
+	// RenameCollectionGroupWithIcon renames a registered collection group, updates all collections using it
+	// and optionally updates its icon metadata.
+	RenameCollectionGroupWithIcon(oldName, newName string, icon *string) error
 
 	// DeleteCollectionGroup removes a registered collection group and clears it from all collections using it.
 	DeleteCollectionGroup(name string) error

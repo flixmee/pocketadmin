@@ -1695,14 +1695,27 @@ func TestCollectionGroups(t *testing.T) {
 			},
 			ExpectedStatus: 200,
 			ExpectedContent: []string{
-				`["Content"]`,
+				`[{"name":"Content","icon":""}]`,
+			},
+		},
+		{
+			Name:   "create group",
+			Method: http.MethodPost,
+			URL:    "/api/collections/meta/groups",
+			Body:   strings.NewReader(`{"name":"Content","icon":"Linear/Archive/archive.svg"}`),
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`[{"name":"Content","icon":"Linear/Archive/archive.svg"}]`,
 			},
 		},
 		{
 			Name:   "rename group",
 			Method: http.MethodPatch,
 			URL:    "/api/collections/meta/groups/Content",
-			Body:   strings.NewReader(`{"name":"Primary"}`),
+			Body:   strings.NewReader(`{"name":"Primary","icon":"Bold/Archive/archive.svg"}`),
 			Headers: map[string]string{
 				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
 			},
@@ -1718,7 +1731,7 @@ func TestCollectionGroups(t *testing.T) {
 			},
 			ExpectedStatus: 200,
 			ExpectedContent: []string{
-				`["Primary"]`,
+				`[{"name":"Primary","icon":"Bold/Archive/archive.svg"}]`,
 			},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				collection, err := app.FindCollectionByNameOrId("demo1")

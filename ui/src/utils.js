@@ -27,6 +27,18 @@ Prism.languages.pbrule = {
 
 const utils = {
     /**
+     * Resolves a public asset path using the configured Vite base URL.
+     *
+     * @param  {string} path
+     * @return {string}
+     */
+    resolvePublicAssetURL(path) {
+        path = String(path || "").replace(/^\/+/, "");
+
+        return import.meta.env.BASE_URL + path;
+    },
+
+    /**
      * Checks whether value is plain object.
      *
      * @param  {Mixed} value
@@ -1405,6 +1417,45 @@ const utils = {
      */
     normalizeCollectionGroup(value = "") {
         return String(value || "").trim();
+    },
+
+    /**
+     * Normalizes a collection group metadata object.
+     *
+     * @param  {string|Object} value
+     * @return {{name: string, icon: string}}
+     */
+    normalizeCollectionGroupMeta(value = "") {
+        if (typeof value == "string") {
+            return {
+                name: app.utils.normalizeCollectionGroup(value),
+                icon: "",
+            };
+        }
+
+        return {
+            name: app.utils.normalizeCollectionGroup(value?.name),
+            icon: String(value?.icon || "").trim(),
+        };
+    },
+
+    /**
+     * Returns a sorted shallow copy of the provided collection group metadata.
+     *
+     * @param  {Array<string|Object>} groups
+     * @return {Array<{name: string, icon: string}>}
+     */
+    sortedCollectionGroups(groups = []) {
+        const indexed = new Map();
+
+        for (const group of groups) {
+            const normalized = app.utils.normalizeCollectionGroupMeta(group);
+            if (normalized.name) {
+                indexed.set(normalized.name, normalized);
+            }
+        }
+
+        return Array.from(indexed.values()).sort((a, b) => a.name.localeCompare(b.name));
     },
 
     /**

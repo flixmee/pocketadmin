@@ -3,6 +3,7 @@ window.app.modals = window.app.modals || {};
 
 window.app.modals.openCollectionGroupUpsert = function(settings = {
     initialName: "",
+    initialIcon: "",
     title: "",
     submitLabel: "",
     onsubmit: null,
@@ -21,6 +22,7 @@ function collectionGroupUpsertModal(settings) {
 
     const data = store({
         name: settings.initialName || "",
+        icon: settings.initialIcon || "",
         isSubmitting: false,
         get normalizedName() {
             return app.utils.normalizeCollectionGroup(data.name);
@@ -38,7 +40,7 @@ function collectionGroupUpsertModal(settings) {
         data.isSubmitting = true;
 
         try {
-            const result = await settings.onsubmit?.(data.normalizedName);
+            const result = await settings.onsubmit?.(data.normalizedName, data.icon);
             if (result === false) {
                 data.isSubmitting = false;
                 return;
@@ -92,6 +94,56 @@ function collectionGroupUpsertModal(settings) {
                     value: () => data.name,
                     oninput: (e) => (data.name = e.target.value),
                 }),
+            ),
+            t.div(
+                { className: "field" },
+                t.label({}, "Icon"),
+                t.div(
+                    { className: "collection-group-icon-field" },
+                    t.button(
+                        {
+                            type: "button",
+                            className: "collection-group-icon-trigger",
+                            onclick: () => {
+                                app.modals.openCollectionIconPicker({
+                                    selectedIcon: data.icon,
+                                    onselect: (icon) => {
+                                        data.icon = icon || "";
+                                    },
+                                });
+                            },
+                        },
+                        () => {
+                            if (data.icon) {
+                                return t.span(
+                                    { className: "collection-group-icon-trigger-preview" },
+                                    t.img({
+                                        src: () => app.utils.resolvePublicAssetURL(`icons/${data.icon}`),
+                                        alt: "",
+                                    }),
+                                );
+                            }
+
+                            return t.span(
+                                { className: "collection-group-icon-trigger-preview empty" },
+                                t.i({ className: "ri-folder-line", ariaHidden: true }),
+                            );
+                        },
+                        t.span({ className: "txt" }, () => data.icon ? "Change icon" : "Choose icon"),
+                    ),
+                    t.button(
+                        {
+                            type: "button",
+                            className: "btn sm transparent secondary circle",
+                            hidden: () => !data.icon,
+                            ariaDescription: app.attrs.tooltip("Clear icon", "top"),
+                            onclick: () => {
+                                data.icon = "";
+                            },
+                        },
+                        t.i({ className: "ri-close-line", ariaHidden: true }),
+                    ),
+                ),
             ),
         ),
         t.footer(

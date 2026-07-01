@@ -32,6 +32,11 @@ const systemHookIdCollection = "__pbCollectionSystemHook__"
 const defaultLowercaseRecordIdPattern = "^[a-z0-9]+$"
 const collectionGroupsTable = "_collection_groups"
 
+type CollectionGroup struct {
+	Name string `db:"name" json:"name"`
+	Icon string `db:"icon" json:"icon"`
+}
+
 func (app *BaseApp) registerCollectionHooks() {
 	app.OnModelValidate().Bind(&hook.Handler[*ModelEvent]{
 		Id: systemHookIdCollection,
@@ -974,18 +979,41 @@ func normalizeCollectionGroupName(name string) string {
 	return strings.TrimSpace(name)
 }
 
+func normalizeCollectionGroupIcon(icon string) string {
+	return strings.TrimSpace(icon)
+}
+
 func (app *BaseApp) EnsureCollectionGroup(name string) error {
+	return app.SaveCollectionGroup(name, nil)
+}
+
+func (app *BaseApp) SaveCollectionGroup(name string, icon *string) error {
 	name = normalizeCollectionGroupName(name)
 	if name == "" {
 		return nil
 	}
 
+	normalizedIcon := ""
+	if icon != nil {
+		normalizedIcon = normalizeCollectionGroupIcon(*icon)
+	}
+
 	_, err := app.DB().
 		NewQuery(`
-			INSERT OR IGNORE INTO {{_collection_groups}} ([[name]], [[created]], [[updated]])
-			VALUES ({:name}, (strftime('%Y-%m-%d %H:%M:%fZ')), (strftime('%Y-%m-%d %H:%M:%fZ')))
+			INSERT OR IGNORE INTO {{_collection_groups}} ([[name]], [[icon]], [[created]], [[updated]])
+			VALUES ({:name}, {:icon}, (strftime('%Y-%m-%d %H:%M:%fZ')), (strftime('%Y-%m-%d %H:%M:%fZ')))
 		`).
-		Bind(dbx.Params{"name": name}).
+		Bind(dbx.Params{"name": name, "icon": normalizedIcon}).
+		Execute()
+	if err != nil || icon == nil {
+		return err
+	}
+
+	_, err = app.DB().
+		Update(collectionGroupsTable, dbx.Params{
+			"icon":    normalizedIcon,
+			"updated": types.NowDateTime().String(),
+		}, dbx.HashExp{"name": name}).
 		Execute()
 
 	return err
@@ -1004,7 +1032,24 @@ func (app *BaseApp) FindAllCollectionGroups() ([]string, error) {
 	return result, err
 }
 
+func (app *BaseApp) FindAllCollectionGroupMeta() ([]*CollectionGroup, error) {
+	result := []*CollectionGroup{}
+
+	err := app.DB().
+		Select("name", "icon").
+		From(collectionGroupsTable).
+		OrderBy("LOWER(name) ASC").
+		AndOrderBy("name ASC").
+		All(&result)
+
+	return result, err
+}
+
 func (app *BaseApp) RenameCollectionGroup(oldName, newName string) error {
+	return app.RenameCollectionGroupWithIcon(oldName, newName, nil)
+}
+
+func (app *BaseApp) RenameCollectionGroupWithIcon(oldName, newName string, icon *string) error {
 	oldName = normalizeCollectionGroupName(oldName)
 	newName = normalizeCollectionGroupName(newName)
 
@@ -1015,10 +1060,22 @@ func (app *BaseApp) RenameCollectionGroup(oldName, newName string) error {
 		return errors.New("missing new collection group name")
 	}
 	if oldName == newName {
-		return app.EnsureCollectionGroup(newName)
+		return app.SaveCollectionGroup(newName, icon)
 	}
 
 	return app.RunInTransaction(func(txApp App) error {
+		groupIcon := ""
+		if icon == nil {
+			_ = txApp.DB().
+				Select("icon").
+				From(collectionGroupsTable).
+				AndWhere(dbx.HashExp{"name": oldName}).
+				Limit(1).
+				Row(&groupIcon)
+		} else {
+			groupIcon = normalizeCollectionGroupIcon(*icon)
+		}
+
 		collections := []*Collection{}
 		err := txApp.CollectionQuery().
 			AndWhere(dbx.HashExp{"collectionGroup": oldName}).
@@ -1027,7 +1084,7 @@ func (app *BaseApp) RenameCollectionGroup(oldName, newName string) error {
 			return err
 		}
 
-		if err := txApp.EnsureCollectionGroup(newName); err != nil {
+		if err := txApp.SaveCollectionGroup(newName, &groupIcon); err != nil {
 			return err
 		}
 

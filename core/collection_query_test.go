@@ -150,6 +150,20 @@ func TestFindAllCollectionGroups(t *testing.T) {
 	if !slices.Contains(groups, "Content") {
 		t.Fatalf("Expected groups to contain %q, got %v", "Content", groups)
 	}
+
+	icon := "Linear/Archive/archive.svg"
+	if err := app.SaveCollectionGroup("Content", &icon); err != nil {
+		t.Fatal(err)
+	}
+
+	groupMeta, err := app.FindAllCollectionGroupMeta()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(groupMeta) != 1 || groupMeta[0].Name != "Content" || groupMeta[0].Icon != icon {
+		t.Fatalf("Expected group metadata with icon %q, got %#v", icon, groupMeta)
+	}
 }
 
 func TestRenameAndDeleteCollectionGroup(t *testing.T) {
@@ -168,7 +182,13 @@ func TestRenameAndDeleteCollectionGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := app.RenameCollectionGroup("Content", "Primary"); err != nil {
+	icon := "Linear/Archive/archive.svg"
+	if err := app.SaveCollectionGroup("Content", &icon); err != nil {
+		t.Fatal(err)
+	}
+
+	nextIcon := "Bold/Archive/archive.svg"
+	if err := app.RenameCollectionGroupWithIcon("Content", "Primary", &nextIcon); err != nil {
 		t.Fatal(err)
 	}
 
@@ -186,6 +206,14 @@ func TestRenameAndDeleteCollectionGroup(t *testing.T) {
 	}
 	if !slices.Contains(groups, "Primary") || slices.Contains(groups, "Content") {
 		t.Fatalf("Unexpected groups after rename: %v", groups)
+	}
+
+	groupMeta, err := app.FindAllCollectionGroupMeta()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groupMeta) != 1 || groupMeta[0].Name != "Primary" || groupMeta[0].Icon != nextIcon {
+		t.Fatalf("Unexpected group metadata after rename: %#v", groupMeta)
 	}
 
 	if err := app.DeleteCollectionGroup("Primary"); err != nil {

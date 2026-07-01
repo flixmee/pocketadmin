@@ -269,8 +269,13 @@ function collectionUpsertModal(rawCollection, modalSettings) {
             initialName: data.collection.collectionGroup || "",
             title: "Create collection group",
             submitLabel: "Create",
-            onsubmit: async (groupName) => {
-                app.store.addCollectionGroup(groupName);
+            onsubmit: async (groupName, icon) => {
+                const groups = await app.pb.send("/api/collections/meta/groups", {
+                    method: "POST",
+                    body: { name: groupName, icon: icon || "" },
+                });
+                app.store.collectionGroups = app.utils.sortedCollectionGroups(groups || []);
+                app.store.addCollectionGroup(groupName, icon);
                 data.collection.collectionGroup = groupName;
             },
         });
@@ -545,14 +550,28 @@ function collectionUpsertModal(rawCollection, modalSettings) {
                                 placeholder: "- Select group -",
                                 options: () => {
                                     const current = app.utils.normalizeCollectionGroup(data.collection.collectionGroup);
-                                    let groups = app.store.collectionGroups || [];
+                                    let groups = app.store.collectionGroupNames();
                                     if (current && !groups.includes(current)) {
                                         groups = groups.concat(current);
                                     }
 
                                     return app.utils.sortedStrings(groups).map((groupName) => ({
                                         value: groupName,
-                                        label: groupName,
+                                        label: () =>
+                                            t.span(
+                                                { className: "collection-group-select-option" },
+                                                app.store.getCollectionGroupIcon(groupName)
+                                                    ? t.img({
+                                                        className: "collection-group-inline-icon",
+                                                        src: () =>
+                                                            app.utils.resolvePublicAssetURL(
+                                                                `icons/${app.store.getCollectionGroupIcon(groupName)}`,
+                                                            ),
+                                                        alt: "",
+                                                    })
+                                                    : t.i({ className: "ri-folder-line", ariaHidden: true }),
+                                                t.span({ className: "txt" }, groupName),
+                                            ),
                                     }));
                                 },
                                 value: () => data.collection.collectionGroup || "",

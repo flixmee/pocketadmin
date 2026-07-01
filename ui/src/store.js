@@ -199,7 +199,7 @@ window.app.store = store({
                 app.store.collections = newCollections;
             }
 
-            newCollectionGroups = app.utils.sortedStrings(newCollectionGroups || []);
+            newCollectionGroups = app.utils.sortedCollectionGroups(newCollectionGroups || []);
             if (JSON.stringify(newCollectionGroups) != JSON.stringify(app.store.collectionGroups)) {
                 app.store.collectionGroups = newCollectionGroups;
             }
@@ -223,7 +223,7 @@ window.app.store = store({
             ]);
 
             resultCollections = app.utils.sortedCollectionsByType(resultCollections);
-            resultCollectionGroups = app.utils.sortedStrings(resultCollectionGroups || []);
+            resultCollectionGroups = app.utils.sortedCollectionGroups(resultCollectionGroups || []);
 
             // replace only if there are changes to minimize flickering
             if (JSON.stringify(app.store.collections) != JSON.stringify(resultCollections)) {
@@ -246,27 +246,38 @@ window.app.store = store({
             }
         }
     },
-    addCollectionGroup(groupName) {
+    addCollectionGroup(groupName, icon = "") {
         const normalized = app.utils.normalizeCollectionGroup(groupName);
         if (!normalized) {
             return;
         }
 
-        if (!app.store.collectionGroups.includes(normalized)) {
-            app.store.collectionGroups = app.utils.sortedStrings(app.store.collectionGroups.concat(normalized));
+        const existing = app.store.collectionGroups.find((group) => group.name === normalized);
+        const normalizedIcon = String(icon || "").trim();
+        if (existing) {
+            existing.icon = normalizedIcon || existing.icon || "";
+            app.store.collectionGroups = app.utils.sortedCollectionGroups(app.store.collectionGroups);
+            return;
         }
+
+        app.store.collectionGroups = app.utils.sortedCollectionGroups(
+            app.store.collectionGroups.concat({ name: normalized, icon: normalizedIcon }),
+        );
     },
-    renameCollectionGroup(oldName, newName) {
+    renameCollectionGroup(oldName, newName, icon = undefined) {
         const normalizedOld = app.utils.normalizeCollectionGroup(oldName);
         const normalizedNew = app.utils.normalizeCollectionGroup(newName);
         if (!normalizedOld || !normalizedNew) {
             return;
         }
 
-        app.store.collectionGroups = app.utils.sortedStrings(
+        const oldGroup = app.store.collectionGroups.find((group) => group.name === normalizedOld);
+        const nextIcon = typeof icon == "undefined" ? oldGroup?.icon || "" : String(icon || "").trim();
+
+        app.store.collectionGroups = app.utils.sortedCollectionGroups(
             app.store.collectionGroups
-                .filter((groupName) => groupName !== normalizedOld)
-                .concat(normalizedNew),
+                .filter((group) => group.name !== normalizedOld && group.name !== normalizedNew)
+                .concat({ name: normalizedNew, icon: nextIcon }),
         );
 
         for (const collection of app.store.collections) {
@@ -283,7 +294,7 @@ window.app.store = store({
             return;
         }
 
-        app.store.collectionGroups = app.store.collectionGroups.filter((name) => name !== normalized);
+        app.store.collectionGroups = app.store.collectionGroups.filter((group) => group.name !== normalized);
 
         for (const collection of app.store.collections) {
             if (app.utils.normalizeCollectionGroup(collection.collectionGroup) === normalized) {
@@ -292,6 +303,13 @@ window.app.store = store({
         }
 
         app.store.collections = app.utils.sortedCollectionsByType(app.store.collections);
+    },
+    collectionGroupNames() {
+        return app.store.collectionGroups.map((group) => group.name);
+    },
+    getCollectionGroupIcon(groupName) {
+        const normalized = app.utils.normalizeCollectionGroup(groupName);
+        return app.store.collectionGroups.find((group) => group.name === normalized)?.icon || "";
     },
     addOrUpdateCollection(collection) {
         const index = app.store.collections.findIndex((c) => c.id == collection.id);
