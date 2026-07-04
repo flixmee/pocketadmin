@@ -1,4 +1,4 @@
-import { formFields, normalizeLayout, readLayoutPreference } from "./recordFormLayoutModal";
+import { formFields } from "./recordFormLayoutModal";
 
 window.app = window.app || {};
 window.app.modals = window.app.modals || {};
@@ -60,8 +60,6 @@ function recordUpsertModal(collection, rawRecord, modalSettings) {
     const uniqueId = "record_upsert_" + app.utils.randomString();
 
     const listingColumnsPreferences = app.utils.getLocalHistory(app.consts.COLUMNS_STORAGE_PREFIX + collection.id, {});
-    const formLayoutPreferences = readLayoutPreference(collection);
-
     const data = store({
         isLoading: true,
         isSaving: false,
@@ -667,23 +665,13 @@ function recordUpsertModal(collection, rawRecord, modalSettings) {
                         const rows = [];
 
                         const excludedFields = data.excludedFields;
-                        const fieldsById = new Map(
-                            formFields(collection, excludedFields).map((field) => [field.id, field]),
-                        );
-                        const layout = normalizeLayout(collection, formLayoutPreferences, excludedFields);
-
-                        for (const item of layout) {
-                            const field = fieldsById.get(item.id);
-                            if (!field) {
-                                continue;
-                            }
-
+                        for (const field of formFields(collection, excludedFields)) {
                             rows.push(
                                 t.div(
                                     // blur if not hidden and not explicitly toggle-on
                                     {
                                         className: () =>
-                                            `col-${item.w || 12} ${
+                                            `col-12 ${
                                                 field.hidden && !listingColumnsPreferences[field.id]
                                                     ? "hidden-field-blur"
                                                     : ""

@@ -124,6 +124,17 @@ func TestBaseAppBootstrap(t *testing.T) {
 		t.Fatalf("Expected _collections.collectionGroup to exist, got %d matches", totalCollectionGroupColumns)
 	}
 
+	var totalCollectionRearrangeColumns int
+	err = app.DB().
+		NewQuery("SELECT count(*) FROM pragma_table_info('_collections') WHERE name = 'rearrange'").
+		Row(&totalCollectionRearrangeColumns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if totalCollectionRearrangeColumns != 1 {
+		t.Fatalf("Expected _collections.rearrange to exist, got %d matches", totalCollectionRearrangeColumns)
+	}
+
 	var totalCollectionGroupsTables int
 	err = app.DB().
 		NewQuery("SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = '_collection_groups'").
@@ -184,12 +195,22 @@ func TestBaseAppRunSystemMigrationsAddsCollectionGroupColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	_, err = app.DB().DropColumn("_collections", "rearrange").Execute()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	_, err = app.DB().NewQuery("DROP TABLE IF EXISTS {{_collection_groups}}").Execute()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	_, err = app.DB().Delete("_migrations", dbx.HashExp{"file": "1762156800_collection_group.go"}).Execute()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = app.DB().Delete("_migrations", dbx.HashExp{"file": "1640988001_collection_rearrange.go"}).Execute()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,6 +228,17 @@ func TestBaseAppRunSystemMigrationsAddsCollectionGroupColumn(t *testing.T) {
 	}
 	if totalCollectionGroupColumns != 1 {
 		t.Fatalf("Expected rerun migrations to restore _collections.collectionGroup, got %d matches", totalCollectionGroupColumns)
+	}
+
+	var totalCollectionRearrangeColumns int
+	err = app.DB().
+		NewQuery("SELECT count(*) FROM pragma_table_info('_collections') WHERE name = 'rearrange'").
+		Row(&totalCollectionRearrangeColumns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if totalCollectionRearrangeColumns != 1 {
+		t.Fatalf("Expected rerun migrations to restore _collections.rearrange, got %d matches", totalCollectionRearrangeColumns)
 	}
 
 	var totalCollectionGroupsTables int

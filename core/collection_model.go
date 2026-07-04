@@ -378,6 +378,7 @@ type baseCollection struct {
 	Type            string                  `db:"type" json:"type" form:"type"`
 	Fields          FieldsList              `db:"fields" json:"fields" form:"fields"`
 	Indexes         types.JSONArray[string] `db:"indexes" json:"indexes" form:"indexes"`
+	Rearrange       types.JSONMap[any]      `db:"rearrange" json:"rearrange" form:"rearrange"`
 	Created         types.DateTime          `db:"created" json:"created"`
 	Updated         types.DateTime          `db:"updated" json:"updated"`
 
@@ -620,6 +621,7 @@ func (m *Collection) DBExport(app App) (map[string]any, error) {
 		"collectionGroup": m.CollectionGroup,
 		"fields":          m.Fields,
 		"indexes":         m.Indexes,
+		"rearrange":       m.Rearrange,
 		"system":          m.System,
 		"created":         m.Created,
 		"updated":         m.Updated,

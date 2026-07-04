@@ -252,7 +252,6 @@
   }
 
   .modal-content {
-    display: flex;
     overflow: auto;
     min-height: 0;
     padding-top: 8px;
@@ -270,16 +269,16 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     min-width: 0;
   }
 
+  .record-form-layout-main-header,
   .record-form-layout-toolbar {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 10px;
-    padding-bottom: 10px;
 
     .btn {
       color: var(--rfl-text);
@@ -289,6 +288,14 @@
       &:hover {
         border-color: var(--rfl-accent);
       }
+    }
+  }
+
+  .record-form-layout-main-header {
+    justify-content: space-between;
+
+    .record-form-layout-panel-title {
+      margin-bottom: 0;
     }
   }
 
@@ -316,11 +323,78 @@
     letter-spacing: 0.06em;
   }
 
+  .record-form-layout-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .record-form-layout-section {
+    overflow: hidden;
+    border: 1px solid var(--rfl-panel-border);
+    border-radius: 8px;
+    background: var(--rfl-panel);
+  }
+
+  .record-form-layout-section-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px;
+    border-bottom: 1px solid var(--rfl-panel-border);
+    background: var(--rfl-panel-2);
+
+    .btn {
+      flex-shrink: 0;
+      color: var(--rfl-text);
+      border-color: var(--rfl-panel-border);
+      background: var(--rfl-panel);
+
+      &:hover {
+        border-color: var(--rfl-accent);
+      }
+    }
+  }
+
+  .record-form-layout-section-target:not(.outline) {
+    color: var(--rfl-bg);
+    border-color: var(--rfl-accent);
+    background: var(--rfl-accent);
+  }
+
+  .record-form-layout-section-fields {
+    display: grid;
+    flex: 1 1 auto;
+    grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1.2fr);
+    gap: 8px;
+    min-width: 0;
+
+    input,
+    textarea {
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      color: var(--rfl-text);
+      border-color: var(--rfl-panel-border);
+      background: var(--rfl-bg);
+    }
+
+    textarea {
+      min-height: 38px;
+      resize: vertical;
+    }
+  }
+
+  .record-form-layout-section-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
   .record-form-layout-board,
   .record-form-layout-trash-board {
     padding: 10px;
-    border: 1px solid var(--rfl-panel-border);
-    border-radius: 14px;
     --gl-item-bg: var(--rfl-panel);
     --gl-item-border: var(--rfl-panel-border);
     --gl-item-radius: 10px;
@@ -331,7 +405,7 @@
 
   .record-form-layout-board {
     flex: 1 1 auto;
-    min-height: 540px;
+    min-height: 150px;
     background:
       radial-gradient(circle, var(--rfl-grid-dot) 1px, transparent 1px) -2px -2px / 24px 24px,
       var(--rfl-bg);
@@ -348,6 +422,8 @@
   .record-form-layout-trash-board {
     position: relative;
     min-height: 180px;
+    border: 1px dashed var(--rfl-panel-border);
+    border-radius: 8px;
     border-style: dashed;
     background: var(--rfl-bg);
     --gl-dropzone-color: var(--rfl-danger);
@@ -385,6 +461,23 @@
       &:hover {
         border-color: var(--rfl-accent);
       }
+    }
+  }
+
+  .record-form-layout-target {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--rfl-panel-border);
+    border-radius: 8px;
+    color: var(--rfl-muted);
+    background: var(--rfl-panel);
+
+    i {
+      flex-shrink: 0;
+      color: var(--rfl-accent);
     }
   }
 
@@ -455,8 +548,35 @@
     }
 
     .record-form-layout-board {
-      min-height: 420px;
+      min-height: 150px;
     }
+
+    .record-form-layout-section-header,
+    .record-form-layout-section-fields {
+      grid-template-columns: 1fr;
+    }
+
+    .record-form-layout-section-header {
+      align-items: stretch;
+      flex-wrap: wrap;
+    }
+  }
+}
+
+.record-form-section {
+  margin-top: var(--xsSpacing);
+  padding-top: var(--smSpacing);
+  border-top: 1px solid var(--surfaceAlt3Color);
+
+  h6 {
+    margin: 0;
+    font-size: var(--baseFontSize);
+  }
+
+  p {
+    margin: 3px 0 0;
+    color: var(--surfaceTxtHintColor);
+    font-size: var(--smFontSize);
   }
 }
 

@@ -43,6 +43,7 @@ func init() {
 				[[collectionGroup]] TEXT DEFAULT "" NOT NULL,
 				[[fields]]     JSON DEFAULT "[]" NOT NULL,
 				[[indexes]]    JSON DEFAULT "[]" NOT NULL,
+				[[rearrange]]  JSON DEFAULT "{}" NOT NULL,
 				[[listRule]]   TEXT DEFAULT NULL,
 				[[viewRule]]   TEXT DEFAULT NULL,
 				[[createRule]] TEXT DEFAULT NULL,
