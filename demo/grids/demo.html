@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Form Builder — GridLayout demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#10131a; --panel:#171b24; --panel-2:#1b202c; --panel-border:#262c3a;
+    --grid-dot:#232938; --text:#e7e9f0; --muted:#8890a4;
+    --accent:#5eead4; --accent-dim:rgba(94,234,212,.14); --danger:#ff8a65;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',system-ui,sans-serif;min-height:100vh;}
+
+  header{padding:28px clamp(16px,4vw,48px) 8px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;}
+  header h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em;}
+  header h1 span{color:var(--accent);}
+  header p{margin:6px 0 0;color:var(--muted);font-size:13.5px;max-width:54ch;}
+  .meta{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);display:flex;gap:18px;align-items:center;}
+  .meta b{color:var(--accent);font-weight:500;}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:0 clamp(16px,4vw,48px) 20px;}
+  .toolbar .sep{width:1px;align-self:stretch;background:var(--panel-border);margin:0 4px;}
+  button{
+    font-family:inherit;font-size:13px;font-weight:600;color:var(--text);
+    background:var(--panel);border:1px solid var(--panel-border);
+    padding:9px 14px;border-radius:8px;cursor:pointer;
+    transition:border-color .15s ease,transform .1s ease;
+  }
+  button:hover{border-color:var(--accent);}
+  button:active{transform:scale(.97);}
+  button.primary{background:var(--accent);color:#08211d;border-color:var(--accent);}
+  select{
+    font-family:inherit;font-size:13px;font-weight:600;color:var(--text);
+    background:var(--panel);border:1px solid var(--panel-border);
+    padding:9px 12px;border-radius:8px;cursor:pointer;
+  }
+  select:hover{border-color:var(--accent);}
+  select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+
+  #builder{display:flex;gap:18px;align-items:flex-start;padding:0 clamp(16px,4vw,48px) 60px;}
+
+  .panel-title{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+
+  #canvas-col{flex:1 1 auto;min-width:0;}
+  #trash-col{width:180px;flex:0 0 180px;}
+
+  .gl-container{
+    background-image:radial-gradient(circle, var(--grid-dot) 1px, transparent 1px);
+    background-size:24px 24px;background-position:-2px -2px;
+    border:1px solid var(--panel-border);border-radius:14px;padding:10px;
+    min-height:140px;
+    --gl-item-bg:var(--panel); --gl-item-border:var(--panel-border); --gl-item-radius:10px;
+  }
+  #trash-board.gl-container{
+    min-height:200px;border-style:dashed;
+    background-image:none;
+  }
+  #trash-board.gl-drop-target{--gl-dropzone-color:var(--danger);}
+  .trash-hint{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    text-align:center;color:var(--muted);font-size:12px;padding:20px;pointer-events:none;
+  }
+
+  /* --- field cards on the canvas --- */
+  .field{padding:10px 14px 12px;display:flex;flex-direction:column;position:relative;}
+  .field-heading{justify-content:center;}
+  .field-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .drag-handle{
+    cursor:grab;color:var(--muted);font-size:14px;line-height:1;
+    padding:2px 4px;border-radius:5px;user-select:none;touch-action:none;
+  }
+  .drag-handle:active{cursor:grabbing;}
+  .type-tag{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);
+    background:var(--accent-dim);border-radius:5px;padding:2px 6px;letter-spacing:.03em;
+  }
+  .field-remove{
+    margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;
+    font-size:15px;line-height:1;padding:2px 6px;border-radius:6px;
+  }
+  .field-remove:hover{color:var(--danger);background:var(--panel-border);}
+  .field-label{
+    display:block;font-size:13px;font-weight:600;margin-bottom:6px;
+    outline:none;border-radius:4px;padding:1px 3px;
+  }
+  .field-label:focus{background:var(--accent-dim);}
+  .heading-label{font-size:16px;text-align:center;width:100%;}
+  .field-control input[type=text],
+  .field-control input[type=email],
+  .field-control input[type=number],
+  .field-control input[type=date],
+  .field-control select,
+  .field-control textarea{
+    width:100%;font-family:inherit;font-size:12.5px;color:var(--text);
+    background:var(--bg);border:1px solid var(--panel-border);border-radius:6px;
+    padding:6px 8px;resize:none;
+  }
+  .inline-check{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin-right:12px;}
+  .required-toggle{
+    margin-top:8px;display:flex;align-items:center;gap:6px;
+    font-size:11px;color:var(--muted);
+  }
+  .field .coord{
+    position:absolute;right:8px;bottom:6px;font-family:'IBM Plex Mono',monospace;
+    font-size:10px;color:var(--muted);
+  }
+  .gl-resize-handle{--gl-handle-color:var(--muted);}
+  .gl-placeholder{--gl-placeholder-bg:var(--accent-dim);--gl-placeholder-border:var(--accent);}
+
+  /* --- overlays: preview + export --- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(6,8,12,.72);display:none;
+    align-items:flex-start;justify-content:center;padding:6vh 20px;z-index:2000;
+  }
+  .overlay.open{display:flex;}
+  .overlay-card{
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:14px;
+    width:min(560px,100%);max-height:86vh;overflow:auto;padding:22px 24px 26px;
+  }
+  .overlay-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .overlay-head h2{margin:0;font-size:16px;}
+  .overlay-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:2px 8px;border-radius:6px;}
+  .overlay-close:hover{background:var(--panel-border);color:var(--text);}
+
+  #previewForm .preview-field{margin-bottom:16px;}
+  #previewForm label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;}
+  #previewForm .req-mark{color:var(--danger);margin-left:3px;}
+  #previewForm input, #previewForm select, #previewForm textarea{
+    width:100%;font-family:inherit;font-size:13px;color:var(--text);
+    background:var(--bg);border:1px solid var(--panel-border);border-radius:6px;padding:8px 10px;
+  }
+  .preview-heading{margin:18px 0 10px;font-size:15px;color:var(--accent);}
+  .preview-heading:first-child{margin-top:0;}
+  #previewForm button[type=submit]{
+    margin-top:6px;background:var(--accent);color:#08211d;border:none;
+    padding:10px 16px;border-radius:8px;font-weight:700;cursor:pointer;
+  }
+
+  #exportJson{
+    width:100%;height:340px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+    background:var(--bg);color:var(--text);border:1px solid var(--panel-border);
+    border-radius:8px;padding:12px;resize:vertical;
+  }
+
+  footer{padding:0 clamp(16px,4vw,48px) 40px;color:var(--muted);font-size:12px;}
+  footer code{background:var(--panel);border:1px solid var(--panel-border);padding:1px 6px;border-radius:4px;font-family:'IBM Plex Mono',monospace;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Form<span>Builder</span></h1>
+    <p>Add fields, then drag them by the grip handle to reorder, or resize from the bottom-right corner to change their width. Drag a field onto the trash zone to delete it.</p>
+  </div>
+  <div class="meta">
+    <span>fields: <b id="fieldCount">–</b></span>
+  </div>
+</header>
+
+<div class="toolbar">
+  <select id="fieldType">
+    <option value="text">Text field</option>
+    <option value="email">Email field</option>
+    <option value="number">Number field</option>
+    <option value="textarea">Long answer</option>
+    <option value="select">Dropdown</option>
+    <option value="checkbox">Checkbox</option>
+    <option value="radio">Radio group</option>
+    <option value="date">Date</option>
+    <option value="heading">Section heading</option>
+  </select>
+  <button class="primary" id="addBtn">+ Add field</button>
+  <span class="sep"></span>
+  <button id="previewBtn">Preview form</button>
+  <button id="exportBtn">Export JSON</button>
+  <button id="resetBtn">Reset</button>
+</div>
+
+<div id="builder">
+  <div id="canvas-col">
+    <p class="panel-title">Form canvas</p>
+    <div id="canvas-board"></div>
+  </div>
+  <div id="trash-col">
+    <p class="panel-title">Trash</p>
+    <div id="trash-board" style="position:relative;">
+      <div class="trash-hint">Drag a field here to remove it</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Import as an ES module: <code>import GridLayout from './grid-layout.js'</code> — no build step, no dependencies.
+  Canvas and trash share <code>group: 'form-builder'</code>; dragging a field into the trash area fires <code>itemadded</code>, which immediately removes it.
+</footer>
+
+<!-- Preview overlay -->
+<div class="overlay" id="previewOverlay">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <h2>Live preview</h2>
+      <button class="overlay-close" data-close="previewOverlay">×</button>
+    </div>
+    <form id="previewForm" onsubmit="event.preventDefault(); alert('This is a preview — nothing was submitted.');"></form>
+  </div>
+</div>
+
+<!-- Export overlay -->
+<div class="overlay" id="exportOverlay">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <h2>Form schema (JSON)</h2>
+      <button class="overlay-close" data-close="exportOverlay">×</button>
+    </div>
+    <textarea id="exportJson" readonly></textarea>
+    <div style="margin-top:12px;">
+      <button class="primary" id="copyJsonBtn">Copy to clipboard</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import GridLayout from './grid-layout.js';
+
+  // --- field type definitions -----------------------------------------
+  const FIELD_DEFS = {
+    text:     { tag: 'Text',     label: 'Text field',      w: 6,  h: 2, control: enabled => `<input type="text" placeholder="Enter text" ${enabled ? '' : 'disabled'}>` },
+    email:    { tag: 'Email',    label: 'Email address',   w: 6,  h: 2, control: enabled => `<input type="email" placeholder="name@example.com" ${enabled ? '' : 'disabled'}>` },
+    number:   { tag: 'Number',   label: 'Number field',    w: 3,  h: 2, control: enabled => `<input type="number" placeholder="0" ${enabled ? '' : 'disabled'}>` },
+    textarea: { tag: 'Textarea', label: 'Long answer',     w: 6,  h: 3, control: enabled => `<textarea rows="2" placeholder="Enter details" ${enabled ? '' : 'disabled'}></textarea>` },
+    select:   { tag: 'Select',   label: 'Choose an option', w: 6, h: 2, control: enabled => `<select ${enabled ? '' : 'disabled'}><option>Option A</option><option>Option B</option><option>Option C</option></select>` },
+    checkbox: { tag: 'Checkbox', label: 'Agree to terms',  w: 6,  h: 2, control: enabled => `<label class="inline-check"><input type="checkbox" ${enabled ? '' : 'disabled'}> Yes</label>` },
+    radio:    { tag: 'Radio',    label: 'Pick one',        w: 6,  h: 2, control: enabled => `<label class="inline-check"><input type="radio" name="r-${Math.random().toString(36).slice(2)}" ${enabled ? '' : 'disabled'}> Option A</label><label class="inline-check"><input type="radio" name="r-${Math.random().toString(36).slice(2)}" ${enabled ? '' : 'disabled'}> Option B</label>` },
+    date:     { tag: 'Date',     label: 'Date',            w: 4,  h: 2, control: enabled => `<input type="date" ${enabled ? '' : 'disabled'}>` },
+    heading:  { tag: 'Heading',  label: 'Section heading', w: 12, h: 1, control: () => '', heading: true },
+  };
+
+  const fieldMeta = new Map(); // id -> { type, label, required }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str ?? '';
+    return div.innerHTML;
+  }
+
+  function buildFieldElement(type, meta) {
+    const def = FIELD_DEFS[type];
+    const el = document.createElement('div');
+    el.className = 'field' + (def.heading ? ' field-heading' : '');
+    el.innerHTML = def.heading
+      ? `<div class="field-head"><span class="drag-handle" title="Drag to move">⠿</span><span class="type-tag">${def.tag}</span><button class="field-remove" type="button" title="Remove">×</button></div>
+         <div class="field-label heading-label" contenteditable="true" spellcheck="false">${escapeHtml(meta.label)}</div>
+         <div class="coord"></div>`
+      : `<div class="field-head"><span class="drag-handle" title="Drag to move">⠿</span><span class="type-tag">${def.tag}</span><button class="field-remove" type="button" title="Remove">×</button></div>
+         <label class="field-label" contenteditable="true" spellcheck="false">${escapeHtml(meta.label)}</label>
+         <div class="field-control">${def.control(false)}</div>
+         <label class="required-toggle"><input type="checkbox" class="required-check" ${meta.required ? 'checked' : ''}> Required</label>
+         <div class="coord"></div>`;
+    return el;
+  }
+
+  function wireField(el, id, meta, grid) {
+    const labelEl = el.querySelector('.field-label');
+    labelEl.addEventListener('input', () => { meta.label = labelEl.textContent.trim() || meta.label; });
+    const reqEl = el.querySelector('.required-check');
+    if (reqEl) reqEl.addEventListener('change', () => { meta.required = reqEl.checked; });
+    el.querySelector('.field-remove').addEventListener('click', () => {
+      grid.removeItem(id);
+      fieldMeta.delete(id);
+      refreshAll();
+    });
+  }
+
+  // --- canvas + trash grids, sharing a group so items can move between them
+  const canvasGrid = new GridLayout('#canvas-board', {
+    group: 'form-builder',
+    columns: 12,
+    rowHeight: 74,
+    gap: 14,
+    handleSelector: '.drag-handle',
+    breakpoints: { 0: 4, 560: 8, 900: 12 },
+  });
+
+  const trashGrid = new GridLayout('#trash-board', {
+    group: 'form-builder',
+    columns: 1,
+    rowHeight: 74,
+    gap: 14,
+    draggable: false,
+    resizable: false,
+    breakpoints: { 0: 1 },
+  });
+  trashGrid.on('itemadded', ({ id }) => {
+    trashGrid.removeItem(id);
+    fieldMeta.delete(id);
+    refreshAll();
+  });
+
+  const fieldCountEl = document.getElementById('fieldCount');
+  function refreshAll() {
+    fieldCountEl.textContent = canvasGrid.items.length;
+    canvasGrid.items.forEach(item => {
+      const badge = item.el.querySelector('.coord');
+      if (badge) badge.textContent = `w${item.w}`;
+    });
+  }
+  canvasGrid.on('change', refreshAll);
+
+  function addField(type) {
+    const def = FIELD_DEFS[type];
+    const meta = { type, label: def.label, required: false };
+    const el = buildFieldElement(type, meta);
+    const id = canvasGrid.addItem(el, { w: def.w, h: def.h, x: 0, y: 999 });
+    fieldMeta.set(id, meta);
+    wireField(el, id, meta, canvasGrid);
+    refreshAll();
+  }
+
+  document.getElementById('addBtn').addEventListener('click', () => {
+    addField(document.getElementById('fieldType').value);
+  });
+
+  // seed a starter form
+  addField('heading');
+  addField('text');
+  addField('email');
+  addField('textarea');
+
+  // --- preview -----------------------------------------------------------
+  function buildPreviewHTML() {
+    const layout = canvasGrid.getLayout().sort((a, b) => a.y - b.y || a.x - b.x);
+    return layout.map(item => {
+      const meta = fieldMeta.get(item.id);
+      if (!meta) return '';
+      const def = FIELD_DEFS[meta.type];
+      if (def.heading) return `<h3 class="preview-heading">${escapeHtml(meta.label)}</h3>`;
+      const req = meta.required ? '<span class="req-mark">*</span>' : '';
+      return `<div class="preview-field">
+        <label>${escapeHtml(meta.label)}${req}</label>
+        ${def.control(true)}
+      </div>`;
+    }).join('') + '<button type="submit">Submit</button>';
+  }
+
+  const previewOverlay = document.getElementById('previewOverlay');
+  document.getElementById('previewBtn').addEventListener('click', () => {
+    document.getElementById('previewForm').innerHTML = buildPreviewHTML();
+    previewOverlay.classList.add('open');
+  });
+
+  // --- export --------------------------------------------------------------
+  const exportOverlay = document.getElementById('exportOverlay');
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const layout = canvasGrid.getLayout().sort((a, b) => a.y - b.y || a.x - b.x);
+    const schema = layout.map(item => {
+      const meta = fieldMeta.get(item.id) || {};
+      return { id: item.id, type: meta.type, label: meta.label, required: !!meta.required, x: item.x, y: item.y, w: item.w, h: item.h };
+    });
+    document.getElementById('exportJson').value = JSON.stringify(schema, null, 2);
+    exportOverlay.classList.add('open');
+  });
+  document.getElementById('copyJsonBtn').addEventListener('click', async () => {
+    const ta = document.getElementById('exportJson');
+    ta.select();
+    try {
+      await navigator.clipboard.writeText(ta.value);
+      const btn = document.getElementById('copyJsonBtn');
+      const original = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = original; }, 1200);
+    } catch {
+      // clipboard API unavailable — the text is already selected for manual copy
+    }
+  });
+
+  document.querySelectorAll('[data-close]').forEach(btn => {
+    btn.addEventListener('click', () => document.getElementById(btn.dataset.close).classList.remove('open'));
+  });
+  document.querySelectorAll('.overlay').forEach(ov => {
+    ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('open'); });
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => location.reload());
+</script>
+</body>
+</html>
