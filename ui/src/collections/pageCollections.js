@@ -237,6 +237,16 @@ export function pageCollections(route) {
                         },
                         t.i({ className: "ri-settings-3-line", ariaHidden: true }),
                     ),
+                    t.button(
+                        {
+                            hidden: () => app.store.activeCollection?.type == "view",
+                            type: "button",
+                            className: "btn circle transparent secondary tooltip-bottom",
+                            ariaLabel: app.attrs.tooltip("Form layout"),
+                            onclick: () => app.modals.openRecordFormLayout(app.store.activeCollection),
+                        },
+                        t.i({ className: "ri-layout-grid-line", ariaHidden: true }),
+                    ),
                     app.components.refreshButton({
                         onclick: () => refreshRecordsList(),
                         className: () =>

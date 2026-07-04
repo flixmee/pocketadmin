@@ -196,6 +196,270 @@
   }
 }
 
+.record-form-layout-modal {
+  --rfl-bg: #10131a;
+  --rfl-panel: #171b24;
+  --rfl-panel-2: #1b202c;
+  --rfl-panel-border: #262c3a;
+  --rfl-grid-dot: #232938;
+  --rfl-text: #e7e9f0;
+  --rfl-muted: #8890a4;
+  --rfl-accent: #5eead4;
+  --rfl-accent-dim: rgba(94, 234, 212, 0.14);
+  --rfl-danger: #ff8a65;
+
+  width: 100%;
+  color: var(--rfl-text);
+  background: var(--rfl-bg);
+
+  &::after {
+    background: var(--rfl-bg);
+  }
+
+  .record-form-layout-header {
+    align-items: flex-end;
+    gap: var(--spacing);
+    padding-top: 28px;
+    padding-bottom: 8px;
+    border-bottom: 0;
+    background: var(--rfl-bg);
+  }
+
+  .record-form-layout-title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0;
+
+    span {
+      color: var(--rfl-accent);
+    }
+  }
+
+  .record-form-layout-meta {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-left: auto;
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--rfl-muted);
+
+    b {
+      color: var(--rfl-accent);
+      font-weight: 500;
+    }
+  }
+
+  .modal-content {
+    display: flex;
+    overflow: auto;
+    min-height: 0;
+    padding-top: 8px;
+  }
+
+  .record-form-layout-shell {
+    display: flex;
+    align-items: stretch;
+    gap: var(--spacing);
+    width: 100%;
+    min-height: 0;
+  }
+
+  .record-form-layout-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .record-form-layout-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-bottom: 10px;
+
+    .btn {
+      color: var(--rfl-text);
+      border-color: var(--rfl-panel-border);
+      background: var(--rfl-panel);
+
+      &:hover {
+        border-color: var(--rfl-accent);
+      }
+    }
+  }
+
+  .record-form-layout-field-select {
+    min-width: 220px;
+    max-width: 360px;
+
+    > .dropdown-toggle {
+      color: var(--rfl-text);
+      border-color: var(--rfl-panel-border);
+      background: var(--rfl-panel);
+
+      &:hover {
+        border-color: var(--rfl-accent);
+      }
+    }
+  }
+
+  .record-form-layout-panel-title {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--rfl-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .record-form-layout-board,
+  .record-form-layout-trash-board {
+    padding: 10px;
+    border: 1px solid var(--rfl-panel-border);
+    border-radius: 14px;
+    --gl-item-bg: var(--rfl-panel);
+    --gl-item-border: var(--rfl-panel-border);
+    --gl-item-radius: 10px;
+    --gl-placeholder-bg: var(--rfl-accent-dim);
+    --gl-placeholder-border: var(--rfl-accent);
+    --gl-handle-color: var(--rfl-muted);
+  }
+
+  .record-form-layout-board {
+    flex: 1 1 auto;
+    min-height: 540px;
+    background:
+      radial-gradient(circle, var(--rfl-grid-dot) 1px, transparent 1px) -2px -2px / 24px 24px,
+      var(--rfl-bg);
+  }
+
+  .record-form-layout-trash {
+    display: flex;
+    flex: 0 0 220px;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .record-form-layout-trash-board {
+    position: relative;
+    min-height: 180px;
+    border-style: dashed;
+    background: var(--rfl-bg);
+    --gl-dropzone-color: var(--rfl-danger);
+  }
+
+  .record-form-layout-trash-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: var(--spacing);
+    color: var(--rfl-muted);
+    font-size: 12px;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .record-form-layout-hidden-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xsSpacing);
+    min-height: 0;
+    overflow: auto;
+    color: var(--rfl-muted);
+
+    .btn {
+      justify-content: flex-start;
+      min-width: 0;
+      color: var(--rfl-text);
+      border-color: var(--rfl-panel-border);
+      background: var(--rfl-panel);
+
+      &:hover {
+        border-color: var(--rfl-accent);
+      }
+    }
+  }
+
+  .record-form-layout-card {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .record-form-layout-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    width: 100%;
+    padding: 10px 14px 12px;
+  }
+
+  .record-form-layout-card-handle {
+    flex-shrink: 0;
+    cursor: grab;
+    color: var(--rfl-muted);
+    touch-action: none;
+
+    &:hover {
+      color: var(--rfl-text);
+    }
+  }
+
+  .record-form-layout-card-handle:active {
+    cursor: grabbing;
+  }
+
+  .record-form-layout-card .label {
+    flex-shrink: 0;
+    margin-left: auto;
+    color: var(--rfl-accent);
+    background: var(--rfl-accent-dim);
+    font-family: monospace;
+    font-size: 10px;
+    letter-spacing: 0.03em;
+  }
+
+  .modal-footer {
+    border-top-color: var(--rfl-panel-border);
+    background: var(--rfl-panel);
+
+    .btn {
+      color: var(--rfl-text);
+      border-color: var(--rfl-panel-border);
+      background: var(--rfl-panel-2);
+
+      &:hover {
+        border-color: var(--rfl-accent);
+      }
+    }
+  }
+
+  @media (max-width: 700px) {
+    .record-form-layout-shell {
+      flex-direction: column;
+    }
+
+    .record-form-layout-trash {
+      flex-basis: auto;
+    }
+
+    .record-form-layout-board {
+      min-height: 420px;
+    }
+  }
+}
+
 .field-type-bool {
     &.record-field-view {
         min-width: auto;

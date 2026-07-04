@@ -1,3 +1,5 @@
+import { formFields, normalizeLayout, readLayoutPreference } from "./recordFormLayoutModal";
+
 window.app = window.app || {};
 window.app.modals = window.app.modals || {};
 
@@ -58,6 +60,7 @@ function recordUpsertModal(collection, rawRecord, modalSettings) {
     const uniqueId = "record_upsert_" + app.utils.randomString();
 
     const listingColumnsPreferences = app.utils.getLocalHistory(app.consts.COLUMNS_STORAGE_PREFIX + collection.id, {});
+    const formLayoutPreferences = readLayoutPreference(collection);
 
     const data = store({
         isLoading: true,
@@ -664,9 +667,14 @@ function recordUpsertModal(collection, rawRecord, modalSettings) {
                         const rows = [];
 
                         const excludedFields = data.excludedFields;
+                        const fieldsById = new Map(
+                            formFields(collection, excludedFields).map((field) => [field.id, field]),
+                        );
+                        const layout = normalizeLayout(collection, formLayoutPreferences, excludedFields);
 
-                        for (const field of collection.fields) {
-                            if (!app.fieldTypes[field.type]?.input || excludedFields.includes(field.name)) {
+                        for (const item of layout) {
+                            const field = fieldsById.get(item.id);
+                            if (!field) {
                                 continue;
                             }
 
@@ -675,7 +683,7 @@ function recordUpsertModal(collection, rawRecord, modalSettings) {
                                     // blur if not hidden and not explicitly toggle-on
                                     {
                                         className: () =>
-                                            `col-12 ${
+                                            `col-${item.w || 12} ${
                                                 field.hidden && !listingColumnsPreferences[field.id]
                                                     ? "hidden-field-blur"
                                                     : ""

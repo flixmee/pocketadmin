@@ -47,6 +47,7 @@ import "./records/recordFilePickerModal";
 import "./records/recordsPickerModal";
 import "./records/recordPreviewModal";
 import "./records/recordImpersonateModal";
+import "./records/recordFormLayoutModal";
 import "./records/recordUpsertModal";
 import "./records/recordsList";
 import "./base/fieldSettings";
