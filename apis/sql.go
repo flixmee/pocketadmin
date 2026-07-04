@@ -56,7 +56,7 @@ type runSQLForm struct {
 
 func (form *runSQLForm) validate() error {
 	return validation.ValidateStruct(form,
-		validation.Field(&form.Query, validation.Required, validation.Length(0, 3000)),
+		validation.Field(&form.Query, validation.Required, validation.Length(0, 5000)),
 	)
 }
 
@@ -73,7 +73,10 @@ type runSQLResult struct {
 	Rows         [][]any              `json:"rows"`
 }
 
-var knownWriteQueryPrefixes = []string{"INSERT", "CREATE", "UPDATE", "DELETE", "DROP", "DETACH"}
+var knownWriteQueryPrefixes = []string{
+	"INSERT", "CREATE", "UPDATE", "DELETE",
+	"DROP", "DETACH", "ALTER", "REPLACE",
+}
 
 func executeQuery(app core.App, query string, maxRows int) (*runSQLResult, error) {
 	query = strings.TrimSpace(query)

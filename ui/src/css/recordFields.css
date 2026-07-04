@@ -197,9 +197,12 @@
 }
 
 .field-type-bool {
-  &.record-field-view .label {
-    min-width: 48px;
-  }
+    &.record-field-view {
+        min-width: auto;
+        .label {
+            min-width: 48px;
+        }
+    }
 }
 
 .field-type-json {
@@ -375,6 +378,11 @@
   }
 }
 
+.more-marker {
+    align-self: flex-end;
+    color: var(--surfaceTxtHintColor);
+}
+
 .field-type-select {
   .field-select-choices-input {
     > input {
@@ -395,13 +403,15 @@
   color: var(--surfaceTxtHintColor);
 }
 
+.field-type-select,
 .field-type-file {
-  &.record-field-view {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 5px;
-  }
+    &.record-field-view {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+        min-width: auto;
+    }
 }
 
 .field-type-media {
@@ -439,6 +449,13 @@
       gap: 5px;
     }
   }
+}
+
+.field-type-autodate,
+.field-type-date {
+    &.record-field-view {
+        flex-shrink: 0;
+    }
 }
 
 .hidden-field-blur {

@@ -44,7 +44,6 @@ if (app.pb.authStore.isValid) {
             // clear the store only on invalidated/expired token
             const status = err?.status << 0;
             if (status == 401 || status == 403) {
-                app.utils.rememberPath();
                 app.pb.cancelAllRequests();
                 app.pb.authStore.clear();
             }
@@ -188,13 +187,9 @@ async function fetchFileToken() {
     });
 }
 
-// Generic API error handler
-// -------------------------------------------------------------------
-
 /**
- * Helper to parse a response error and to show an optional toast message.
- * In case of 401 it clears the auth store and redirects to the home page.
- * In case of 403 it redirects to the home or login page.
+ * Generic API error handler that loads the response error into the app store
+ * with the option to show a generic toast message.
  *
  * Example:
  *
@@ -208,8 +203,8 @@ async function fetchFileToken() {
  * }
  * ```
  *
- * @param {Error}  err
- * @param {boolean} showToast
+ * @param {Error}   err
+ * @param {boolean} [showToast]
  */
 window.app.checkApiError = function(err, showToast = true) {
     if (!err || !(err instanceof Error) || err.isAbort) {
@@ -238,7 +233,6 @@ window.app.checkApiError = function(err, showToast = true) {
 
     // unauthorized
     if (statusCode === 401 && window.location.hash != LOGIN_PATH) {
-        app.utils.rememberPath();
         app.pb.cancelAllRequests();
         return app.pb.authStore.clear();
     }
