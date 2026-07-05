@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Update `ui/src/records/recordUpsertModal.js` so the record upsert form does not apply saved rearrange/form layout preferences.
-- Success: record fields render in collection field order/default full-width layout; `recordUpsertModal` no longer reads or applies `collection.rearrange`; targeted checks pass.
+- Fix `Uncaught ReferenceError: data is not defined` in `ui/src/fields/json/settings.js`.
+- Success: JSON field settings use the component `props` contract, no stale `data.field` references remain, and targeted UI build/checks pass.
 
 Constraints/Assumptions:
 
@@ -13,20 +13,21 @@ Constraints/Assumptions:
 
 Key decisions:
 
-- Persist section metadata under `collection.rearrange.sections` and keep flattened `collection.rearrange.layout` for backward-compatible consumers.
+- Use `props.field` for JSON schema state because field settings components receive `props` and other JSON settings already use `props.field`.
 
 State:
   - Done:
     - Read `CONTINUITY.md`.
-    - Reset active ledger state for the `recordUpsertModal` no-rearrange request.
-    - Inspected `recordUpsertModal.js` and confirmed it currently reads `readLayoutPreference()` and renders through `normalizeSections()`.
-    - Updated `recordUpsertModal.js` to import only `formFields`, stop reading form layout preferences, and render regular fields in collection field order as full-width rows.
-    - Updated `docs/collection-rearrange-api.md` to clarify `rearrange` metadata is not applied by the record create/update modal.
-    - Ran `npm run build` in `ui/`; build passed with the existing dprint cache warning under `~/Library/Caches`.
-    - Confirmed `recordUpsertModal.js` has no remaining `readLayoutPreference`/`normalizeLayout`/`normalizeSections`/`rearrange` references.
-    - Ran `git diff --check -- ui/src/records/recordUpsertModal.js docs/collection-rearrange-api.md CONTINUITY.md`; passed.
+    - Inspected `ui/src/fields/json/settings.js`; found `data.field` used in `settings(props)`.
+    - Inspected `ui/src/fields/json/schemaState.js`.
+    - Reviewed `UI_DOCS.md` settings component contract: settings receive `props.field`.
+    - Replaced all `data.field` references in JSON settings with `props.field`.
+    - Confirmed no `data.field` references remain in `ui/src/fields/json`.
+    - Ran `npm run build` from `ui/`; passed. It still prints the existing dprint cache permission warning under `~/Library/Caches`.
+    - Reverted the generated `ui/dist/index.html` asset-reference churn caused by the build; source fix remains.
+    - Ran `git diff --check -- ui/src/fields/json/settings.js CONTINUITY.md ui/dist/index.html`; passed.
   - Now:
-    - Ready to report the no-rearrange upsert modal update.
+    - Ready to report the JSON settings fix.
   - Next:
     - None.
 
@@ -37,8 +38,8 @@ Open questions (UNCONFIRMED if needed):
 Working set (files/ids/commands):
 
 - `CONTINUITY.md`
-- `ui/src/records/recordUpsertModal.js`
-- `ui/src/records/recordFormLayoutModal.js`
-- `docs/collection-rearrange-api.md`
+- `ui/src/fields/json/settings.js`
+- `ui/src/fields/json/schemaState.js`
+- `UI_DOCS.md`
 - `npm run build` from `ui/`
-- `git diff --check -- ui/src/records/recordUpsertModal.js docs/collection-rearrange-api.md CONTINUITY.md`
+- `git diff --check -- ui/src/fields/json/settings.js CONTINUITY.md ui/dist/index.html`

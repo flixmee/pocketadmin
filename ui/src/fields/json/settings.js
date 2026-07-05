@@ -10,7 +10,7 @@ import { defaultJsonSchema, getJsonSchemaState, setJsonSchemaState } from "./sch
 // }
 export function settings(props) {
     const uniqueId = "f_" + app.utils.randomString();
-    const initialSchemaState = getJsonSchemaState(data.field);
+    const initialSchemaState = getJsonSchemaState(props.field);
 
     const local = store({
         showInfo: false,
@@ -72,7 +72,7 @@ export function settings(props) {
                                             local.showSchemaBanner = true;
                                         }
 
-                                        setJsonSchemaState(data.field, {
+                                        setJsonSchemaState(props.field, {
                                             enabled: local.schemaEnabled,
                                             value: local.schemaValue,
                                             showBanner: local.showSchemaBanner,
@@ -104,7 +104,7 @@ export function settings(props) {
                                                 if (!schemaStr) {
                                                     local.showSchemaBanner = false;
                                                 }
-                                                setJsonSchemaState(data.field, {
+                                                setJsonSchemaState(props.field, {
                                                     enabled: local.schemaEnabled,
                                                     value: local.schemaValue,
                                                     showBanner: local.showSchemaBanner,
@@ -135,7 +135,7 @@ export function settings(props) {
                                     ariaLabel: "Dismiss",
                                     onclick: () => {
                                         local.showSchemaBanner = false;
-                                        setJsonSchemaState(data.field, {
+                                        setJsonSchemaState(props.field, {
                                             enabled: local.schemaEnabled,
                                             value: local.schemaValue,
                                             showBanner: local.showSchemaBanner,
