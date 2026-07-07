@@ -36,6 +36,7 @@ The form layout builder currently stores this shape:
 
 ```json
 {
+  "type": "sections",
   "layout": [
     {
       "id": "title_field_id",
@@ -88,7 +89,8 @@ The form layout builder currently stores this shape:
 
 Properties:
 
-- `layout`: flattened compatibility fallback for fields shown in the record form
+- `type`: layout mode used by the admin UI; supported values are `sections` and `normal`
+- `layout`: flattened compatibility fallback for fields shown in the layout metadata
 - `layout[].id`: collection field id, not field name
 - `layout[].x`: horizontal grid position
 - `layout[].y`: vertical grid position
@@ -99,31 +101,122 @@ Properties:
 - `sections[].name`: section heading text
 - `sections[].description`: optional section helper text
 - `sections[].layout`: section-local grid item definitions using the same item shape as `layout`
-- `hidden`: collection field ids intentionally omitted from the record form
+- `hidden`: collection field ids intentionally omitted from the form layout metadata
+
+If `type` is missing or unknown, the admin UI treats the layout as `sections` for backward compatibility. The UI label for `sections` is "Sections and tabs".
+
+### Layout Types
+
+`sections` is the default layout type and preserves the existing section builder behavior. Sections are ordered top to bottom and can be added, renamed, described, moved, removed, and used as drag targets.
+
+`normal` uses the same `sections` storage shape, but reserves two structural section ids:
+
+- `main`: the main/left column
+- `right`: the right column
+
+In `normal` mode, `main` and `right` are fixed structural areas. The admin UI shows their labels but does not allow renaming, removing, or reordering them. Users can still add extra sections in normal mode; those sections stack in the main/left column before the right column and remain editable, removable, reorderable, and available as field drop targets.
+
+Example normal layout:
+
+```json
+{
+  "type": "normal",
+  "layout": [
+    {
+      "id": "title_field_id",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 1
+    },
+    {
+      "id": "status_field_id",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 1
+    },
+    {
+      "id": "slug_field_id",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 1
+    }
+  ],
+  "sections": [
+    {
+      "id": "main",
+      "name": "Main",
+      "description": "",
+      "layout": [
+        {
+          "id": "title_field_id",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 1
+        }
+      ]
+    },
+    {
+      "id": "section_metadata",
+      "name": "Metadata",
+      "description": "Publishing state and classification.",
+      "layout": [
+        {
+          "id": "status_field_id",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 1
+        }
+      ]
+    },
+    {
+      "id": "right",
+      "name": "Right column",
+      "description": "",
+      "layout": [
+        {
+          "id": "slug_field_id",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 1
+        }
+      ]
+    }
+  ],
+  "hidden": []
+}
+```
 
 ### Sections
 
 `sections` is the primary section-aware layout format used by the current admin UI.
 
-Each section represents one form area. Fields are assigned to a section by placing their grid item in that section's `layout` array. The order of `sections` controls the order of areas in the record form.
+Each section represents one form layout area. Fields are assigned to a section by placing their grid item in that section's `layout` array. The order of `sections` controls the order of areas in the layout metadata.
 
 The top-level `layout` is kept as a flattened compatibility fallback. When writing section-aware data, keep `layout` equal to all `sections[].layout` items flattened in section order.
 
-If `sections` is missing or empty, the admin UI treats the top-level `layout` as a legacy single-section layout with the default section id `main`. If both `sections` and `layout` are empty, fields are rendered in collection field order.
+If `sections` is missing or empty, the admin UI treats the top-level `layout` as a legacy single-section layout with the default section id `main`. If both `sections` and `layout` are empty, fields are normalized in collection field order.
 
 Section metadata rules:
 
 - `sections[].id` should be unique within the collection layout.
 - Empty `name` and `description` values are allowed.
-- Section headings are shown in record forms only when there is more than one section or at least one section has a name or description.
+- In `normal` mode, `main` and `right` are reserved structural ids.
+- Section headings are meaningful only when there is more than one section or at least one section has a name or description.
 - Empty sections can be saved and remain available as drop areas in the layout builder.
 
 Notes:
 
 - Field ids are used so layouts survive field renames.
-- Unknown or deleted field ids are ignored by the admin UI when rendering the form.
+- Unknown or deleted field ids are ignored by the admin UI when normalizing the layout.
 - When `sections` exists, fields not found in `sections` or `hidden` are appended to the first normalized section.
 - When `sections` exists, the admin UI uses section order and section-local layouts.
+- When `type` is `normal`, the admin UI preserves extra non-structural sections, keeps the `right` section as the side column, and normalizes unknown section ids as main-column sections.
 - The admin UI clamps grid coordinates and sizes before rendering.
 
 ## Collection APIs
@@ -161,6 +254,7 @@ Example collection fragment:
   "name": "posts",
   "type": "base",
   "rearrange": {
+    "type": "sections",
     "layout": [
       {
         "id": "title_field_id",
@@ -239,6 +333,7 @@ Body fragment:
 ```json
 {
   "rearrange": {
+    "type": "sections",
     "layout": [
       {
         "id": "title_field_id",
@@ -302,7 +397,7 @@ Returns the updated collection model, including the saved `rearrange` value.
 curl -X PATCH \
   -H 'Authorization: YOUR_SUPERUSER_TOKEN' \
   -H 'Content-Type: application/json' \
-  -d '{"rearrange":{"layout":[{"id":"title_field_id","x":0,"y":0,"w":12,"h":1},{"id":"status_field_id","x":0,"y":0,"w":6,"h":1}],"sections":[{"id":"main","name":"Content","description":"Primary editorial fields.","layout":[{"id":"title_field_id","x":0,"y":0,"w":12,"h":1}]},{"id":"section_metadata","name":"Metadata","description":"Publishing state and classification.","layout":[{"id":"status_field_id","x":0,"y":0,"w":6,"h":1}]}],"hidden":["description_field_id"]}}' \
+  -d '{"rearrange":{"type":"sections","layout":[{"id":"title_field_id","x":0,"y":0,"w":12,"h":1},{"id":"status_field_id","x":0,"y":0,"w":6,"h":1}],"sections":[{"id":"main","name":"Content","description":"Primary editorial fields.","layout":[{"id":"title_field_id","x":0,"y":0,"w":12,"h":1}]},{"id":"section_metadata","name":"Metadata","description":"Publishing state and classification.","layout":[{"id":"status_field_id","x":0,"y":0,"w":6,"h":1}]}],"hidden":["description_field_id"]}}' \
   'http://127.0.0.1:8090/api/collections/posts'
 ```
 
@@ -324,7 +419,9 @@ The record form layout modal:
 
 - reads `collection.rearrange` first
 - falls back to the old local browser history value only when `collection.rearrange` is empty
-- saves `{ "sections": [...], "layout": [...], "hidden": [...] }` to `collection.rearrange`
+- saves `{ "type": "...", "sections": [...], "layout": [...], "hidden": [...] }` to `collection.rearrange`
+- lets users choose `normal` or `sections` mode from the layout type selector
+- renders normal mode with a fixed `main` area, a fixed `right` column, and optional extra sections in the main/left column
 - lets fields move between sections by dragging across section areas
 - appends newly discovered fields to the first section when they are not already present in `sections` or `hidden`
 - clears the old local browser history value after a successful collection save

@@ -299,7 +299,13 @@
     }
   }
 
-  .record-form-layout-field-select {
+  .record-form-layout-type-field {
+    flex: 0 0 190px;
+    min-width: 190px;
+  }
+
+  .record-form-layout-field-select,
+  .record-form-layout-type-select {
     min-width: 220px;
     max-width: 360px;
 
@@ -312,6 +318,11 @@
         border-color: var(--rfl-accent);
       }
     }
+  }
+
+  .record-form-layout-type-select {
+    min-width: 190px;
+    max-width: 220px;
   }
 
   .record-form-layout-panel-title {
@@ -329,11 +340,36 @@
     gap: 14px;
   }
 
+  .record-form-layout-sections.is-normal {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 340px);
+    align-items: start;
+
+    .record-form-layout-section {
+      grid-column: 1;
+    }
+
+    .record-form-layout-section-right {
+      grid-column: 2;
+      grid-row: 1 / span 100;
+    }
+  }
+
   .record-form-layout-section {
     overflow: hidden;
     border: 1px solid var(--rfl-panel-border);
     border-radius: 8px;
     background: var(--rfl-panel);
+  }
+
+  .record-form-layout-section-fixed {
+    min-width: 0;
+  }
+
+  .record-form-layout-section-right {
+    .record-form-layout-board {
+      min-height: 320px;
+    }
   }
 
   .record-form-layout-section-header {
@@ -382,6 +418,18 @@
     textarea {
       min-height: 38px;
       resize: vertical;
+    }
+  }
+
+  .record-form-layout-section-label {
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+    color: var(--rfl-text);
+
+    strong {
+      font-size: 13px;
+      font-weight: 700;
     }
   }
 
@@ -549,6 +597,16 @@
 
     .record-form-layout-board {
       min-height: 150px;
+    }
+
+    .record-form-layout-sections.is-normal {
+      grid-template-columns: 1fr;
+
+      .record-form-layout-section,
+      .record-form-layout-section-right {
+        grid-column: auto;
+        grid-row: auto;
+      }
     }
 
     .record-form-layout-section-header,

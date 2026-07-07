@@ -7,6 +7,14 @@ window.app.consts.FORM_LAYOUT_STORAGE_PREFIX = "pbFormLayout_";
 
 const COLUMNS = 12;
 const DEFAULT_SECTION_ID = "main";
+const RIGHT_COLUMN_SECTION_ID = "right";
+const LAYOUT_TYPE_NORMAL = "normal";
+const LAYOUT_TYPE_SECTIONS = "sections";
+const DEFAULT_LAYOUT_TYPE = LAYOUT_TYPE_SECTIONS;
+const LAYOUT_TYPE_OPTIONS = [
+    { value: LAYOUT_TYPE_NORMAL, label: "Normal" },
+    { value: LAYOUT_TYPE_SECTIONS, label: "Sections and tabs" },
+];
 
 window.app.modals.openRecordFormLayout = function(collection, options = {}) {
     const modal = recordFormLayoutModal(collection, options);
@@ -31,6 +39,7 @@ function recordFormLayoutModal(collection, options = {}) {
     const initialPreference = readLayoutPreference(collection);
     const initialSections = normalizeSections(collection, initialPreference);
     const local = store({
+        layoutType: initialPreference.type,
         sections: initialSections,
         hidden: initialPreference.hidden,
         selectedFieldId: "",
@@ -51,6 +60,7 @@ function recordFormLayoutModal(collection, options = {}) {
         syncSectionsFromGrids(false);
 
         const preference = {
+            type: local.layoutType,
             layout: flattenSections(local.sections),
             sections: serializeSections(local.sections),
             hidden: local.hidden,
@@ -85,9 +95,23 @@ function recordFormLayoutModal(collection, options = {}) {
 
     function resetLayout() {
         local.hidden = [];
-        local.sections = defaultSections(collection);
+        local.sections = defaultSections(collection, [], local.layoutType);
         local.selectedSectionId = local.sections[0]?.id || DEFAULT_SECTION_ID;
         local.selectedFieldId = "";
+        local.isDirty = true;
+        rerenderCanvas();
+    }
+
+    function setLayoutType(type) {
+        type = normalizeLayoutType(type);
+        if (type == local.layoutType) {
+            return;
+        }
+
+        syncSectionsFromGrids(false);
+        local.layoutType = type;
+        local.sections = normalizeSectionsForType(type, local.sections);
+        local.selectedSectionId = local.sections[0]?.id || DEFAULT_SECTION_ID;
         local.isDirty = true;
         rerenderCanvas();
     }
@@ -171,12 +195,26 @@ function recordFormLayoutModal(collection, options = {}) {
 
         const section = {
             id: createSectionId(),
-            name: `Section ${local.sections.length + 1}`,
+            name: nextSectionName(),
             description: "",
             layout: [],
         };
 
-        local.sections = [...local.sections, section];
+        if (local.layoutType == LAYOUT_TYPE_NORMAL) {
+            const rightIndex = local.sections.findIndex((candidate) => candidate.id == RIGHT_COLUMN_SECTION_ID);
+            if (rightIndex >= 0) {
+                local.sections = [
+                    ...local.sections.slice(0, rightIndex),
+                    section,
+                    ...local.sections.slice(rightIndex),
+                ];
+            } else {
+                local.sections = [...local.sections, section];
+            }
+        } else {
+            local.sections = [...local.sections, section];
+        }
+
         local.selectedSectionId = section.id;
         local.isDirty = true;
         rerenderCanvas();
@@ -186,7 +224,7 @@ function recordFormLayoutModal(collection, options = {}) {
         syncSectionsFromGrids(false);
 
         const index = local.sections.findIndex((section) => section.id == sectionId);
-        if (index < 0 || local.sections.length <= 1) {
+        if (index < 0 || !canRemoveSection(sectionId)) {
             return;
         }
 
@@ -195,7 +233,7 @@ function recordFormLayoutModal(collection, options = {}) {
             layout: [...(section.layout || [])],
         }));
         const [removed] = sections.splice(index, 1);
-        const targetIndex = Math.max(0, index - 1);
+        const targetIndex = sectionRemovalTargetIndex(sections, index);
         const target = sections[targetIndex];
         const nextY = target.layout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
 
@@ -215,7 +253,24 @@ function recordFormLayoutModal(collection, options = {}) {
     }
 
     function moveSection(sectionId, direction) {
+        if (!canMoveSection(sectionId, direction)) {
+            return;
+        }
+
         syncSectionsFromGrids(false);
+
+        if (local.layoutType == LAYOUT_TYPE_NORMAL) {
+            const right = local.sections.find((section) => section.id == RIGHT_COLUMN_SECTION_ID);
+            const leftSections = local.sections.filter((section) => section.id != RIGHT_COLUMN_SECTION_ID);
+            const index = leftSections.findIndex((section) => section.id == sectionId);
+            const targetIndex = index + direction;
+
+            [leftSections[index], leftSections[targetIndex]] = [leftSections[targetIndex], leftSections[index]];
+            local.sections = right ? [...leftSections, right] : leftSections;
+            local.isDirty = true;
+            rerenderCanvas();
+            return;
+        }
 
         const index = local.sections.findIndex((section) => section.id == sectionId);
         const targetIndex = index + direction;
@@ -230,6 +285,56 @@ function recordFormLayoutModal(collection, options = {}) {
         rerenderCanvas();
     }
 
+    function canRemoveSection(sectionId) {
+        if (local.layoutType != LAYOUT_TYPE_NORMAL) {
+            return local.sections.length > 1;
+        }
+
+        return !isNormalStructuralSection(sectionId)
+            && local.sections.some((section) => !isNormalStructuralSection(section.id) && section.id == sectionId);
+    }
+
+    function canMoveSection(sectionId, direction) {
+        if (local.layoutType != LAYOUT_TYPE_NORMAL) {
+            const index = local.sections.findIndex((section) => section.id == sectionId);
+            const targetIndex = index + direction;
+            return index >= 0 && targetIndex >= 0 && targetIndex < local.sections.length;
+        }
+
+        if (isNormalStructuralSection(sectionId)) {
+            return false;
+        }
+
+        const leftSections = local.sections.filter((section) => section.id != RIGHT_COLUMN_SECTION_ID);
+        const index = leftSections.findIndex((section) => section.id == sectionId);
+        const targetIndex = index + direction;
+
+        return index > 0 && targetIndex > 0 && targetIndex < leftSections.length;
+    }
+
+    function sectionRemovalTargetIndex(sections, removedIndex) {
+        if (local.layoutType != LAYOUT_TYPE_NORMAL) {
+            return Math.max(0, removedIndex - 1);
+        }
+
+        for (let i = removedIndex - 1; i >= 0; i--) {
+            if (sections[i]?.id != RIGHT_COLUMN_SECTION_ID) {
+                return i;
+            }
+        }
+
+        const nextIndex = sections.findIndex((section) => section.id != RIGHT_COLUMN_SECTION_ID);
+        return nextIndex >= 0 ? nextIndex : 0;
+    }
+
+    function nextSectionName() {
+        const count = local.layoutType == LAYOUT_TYPE_NORMAL
+            ? local.sections.filter((section) => section.id != RIGHT_COLUMN_SECTION_ID).length
+            : local.sections.length;
+
+        return `Section ${count + 1}`;
+    }
+
     function getSelectedSection() {
         return local.sections.find((section) => section.id == local.selectedSectionId) || local.sections[0];
     }
@@ -241,6 +346,7 @@ function recordFormLayoutModal(collection, options = {}) {
         }
 
         destroySectionGrids();
+        sectionsEl.classList.toggle("is-normal", local.layoutType == LAYOUT_TYPE_NORMAL);
         sectionsEl.replaceChildren(
             ...local.sections.map((section, index) => createSectionPanel(section, index)).filter(Boolean),
         );
@@ -270,8 +376,16 @@ function recordFormLayoutModal(collection, options = {}) {
     }
 
     function createSectionPanel(section, index) {
+        const isNormal = local.layoutType == LAYOUT_TYPE_NORMAL;
+        const isRightColumn = section.id == RIGHT_COLUMN_SECTION_ID;
+        const isStructuralNormalSection = isNormal && isNormalStructuralSection(section.id);
+
         return t.section(
-            { className: "record-form-layout-section" },
+            {
+                className: `record-form-layout-section ${isNormal ? "record-form-layout-section-fixed" : ""} ${
+                    isRightColumn ? "record-form-layout-section-right" : ""
+                }`,
+            },
             t.div(
                 { className: "record-form-layout-section-header" },
                 t.button(
@@ -288,32 +402,46 @@ function recordFormLayoutModal(collection, options = {}) {
                 ),
                 t.div(
                     { className: "record-form-layout-section-fields" },
-                    t.input({
-                        type: "text",
-                        value: () => section.name,
-                        placeholder: "Section name",
-                        oninput: (e) => {
-                            section.name = e.target.value;
-                            local.isDirty = true;
-                        },
-                    }),
-                    t.textarea({
-                        value: () => section.description,
-                        placeholder: "Description",
-                        rows: 1,
-                        oninput: (e) => {
-                            section.description = e.target.value;
-                            local.isDirty = true;
-                        },
-                    }),
+                    () => {
+                        if (isStructuralNormalSection) {
+                            return t.div(
+                                { className: "record-form-layout-section-label" },
+                                t.strong(null, section.name || normalSectionName(section.id)),
+                            );
+                        }
+
+                        return [
+                            t.input({
+                                type: "text",
+                                value: () => section.name,
+                                placeholder: "Section name",
+                                oninput: (e) => {
+                                    section.name = e.target.value;
+                                    local.isDirty = true;
+                                },
+                            }),
+                            t.textarea({
+                                value: () => section.description,
+                                placeholder: "Description",
+                                rows: 1,
+                                oninput: (e) => {
+                                    section.description = e.target.value;
+                                    local.isDirty = true;
+                                },
+                            }),
+                        ];
+                    },
                 ),
                 t.div(
-                    { className: "record-form-layout-section-actions" },
+                    {
+                        className: "record-form-layout-section-actions",
+                        hidden: isStructuralNormalSection,
+                    },
                     t.button(
                         {
                             type: "button",
                             className: "btn sm outline circle",
-                            disabled: () => index <= 0,
+                            disabled: () => !canMoveSection(section.id, -1),
                             ariaLabel: app.attrs.tooltip("Move section up"),
                             onclick: () => moveSection(section.id, -1),
                         },
@@ -323,7 +451,7 @@ function recordFormLayoutModal(collection, options = {}) {
                         {
                             type: "button",
                             className: "btn sm outline circle",
-                            disabled: () => index >= local.sections.length - 1,
+                            disabled: () => !canMoveSection(section.id, 1),
                             ariaLabel: app.attrs.tooltip("Move section down"),
                             onclick: () => moveSection(section.id, 1),
                         },
@@ -333,7 +461,7 @@ function recordFormLayoutModal(collection, options = {}) {
                         {
                             type: "button",
                             className: "btn sm outline circle",
-                            disabled: () => local.sections.length <= 1,
+                            disabled: () => !canRemoveSection(section.id),
                             ariaLabel: app.attrs.tooltip("Remove section"),
                             onclick: () => removeSection(section.id),
                         },
@@ -468,18 +596,36 @@ function recordFormLayoutModal(collection, options = {}) {
                     t.div(
                         { className: "record-form-layout-main-header" },
                         t.p({ className: "record-form-layout-panel-title" }, "Form canvas"),
-                        t.button(
-                            {
-                                type: "button",
-                                className: "btn sm outline",
-                                onclick: () => addSection(),
-                            },
-                            t.i({ className: "ri-layout-row-line", ariaHidden: true }),
-                            t.span({ className: "txt" }, "Add section"),
+                        t.div(
+                            { className: "record-form-layout-toolbar" },
+                            t.div(
+                                { className: "record-form-layout-type-field" },
+                                app.components.select({
+                                    className: "record-form-layout-type-select",
+                                    required: true,
+                                    options: LAYOUT_TYPE_OPTIONS,
+                                    value: () => local.layoutType,
+                                    onchange: (options) => setLayoutType(options?.[0]?.value),
+                                }),
+                            ),
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "btn sm outline",
+                                    onclick: () => addSection(),
+                                },
+                                t.i({ className: "ri-layout-row-line", ariaHidden: true }),
+                                t.span({ className: "txt" }, "Add section"),
+                            ),
                         ),
                     ),
                     t.div(
-                        { className: "record-form-layout-sections" },
+                        {
+                            className: () =>
+                                `record-form-layout-sections ${
+                                    local.layoutType == LAYOUT_TYPE_NORMAL ? "is-normal" : ""
+                                }`,
+                        },
                         local.sections.map((section, index) => createSectionPanel(section, index)),
                     ),
                 ),
@@ -583,10 +729,11 @@ export function readLayoutPreference(collection) {
 
 function normalizePreference(raw) {
     if (Array.isArray(raw)) {
-        return { layout: raw, sections: [], hidden: [] };
+        return { type: DEFAULT_LAYOUT_TYPE, layout: raw, sections: [], hidden: [] };
     }
 
     return {
+        type: normalizeLayoutType(raw?.type),
         layout: Array.isArray(raw?.layout) ? raw.layout : [],
         sections: Array.isArray(raw?.sections) ? raw.sections : [],
         hidden: Array.isArray(raw?.hidden) ? raw.hidden : [],
@@ -598,7 +745,8 @@ function isEmptyPreference(preference) {
         return section?.name || section?.description || section?.layout?.length;
     });
 
-    return !preference.layout.length && !preference.hidden.length && !hasSections;
+    return preference.type == DEFAULT_LAYOUT_TYPE && !preference.layout.length && !preference.hidden.length
+        && !hasSections;
 }
 
 export function formFields(collection, excludedFields = []) {
@@ -621,13 +769,27 @@ export function defaultLayout(collection, excludedFields = []) {
     }));
 }
 
-export function defaultSections(collection, excludedFields = []) {
-    return [{
+export function defaultSections(collection, excludedFields = [], layoutType = DEFAULT_LAYOUT_TYPE) {
+    const main = {
         id: DEFAULT_SECTION_ID,
-        name: "",
+        name: layoutType == LAYOUT_TYPE_NORMAL ? normalSectionName(DEFAULT_SECTION_ID) : "",
         description: "",
         layout: defaultLayout(collection, excludedFields),
-    }];
+    };
+
+    if (layoutType != LAYOUT_TYPE_NORMAL) {
+        return [main];
+    }
+
+    return [
+        main,
+        {
+            id: RIGHT_COLUMN_SECTION_ID,
+            name: normalSectionName(RIGHT_COLUMN_SECTION_ID),
+            description: "",
+            layout: [],
+        },
+    ];
 }
 
 export function normalizeLayout(collection, preference = {}, excludedFields = []) {
@@ -695,7 +857,7 @@ export function normalizeSections(collection, preference = {}, excludedFields = 
 
     targetSection.layout.sort(layoutSorter);
 
-    return normalizedSections;
+    return normalizeSectionsForType(normalizedPreference.type, normalizedSections);
 }
 
 function serializeSections(sections = []) {
@@ -709,6 +871,79 @@ function serializeSections(sections = []) {
 
 function flattenSections(sections = []) {
     return sections.flatMap((section) => (section.layout || []).map(normalizeItem).sort(layoutSorter));
+}
+
+function normalizeSectionsForType(type, sections = []) {
+    if (type != LAYOUT_TYPE_NORMAL) {
+        return sections.map((section) => ({
+            ...section,
+            name: `${section?.name || ""}`,
+            description: `${section?.description || ""}`,
+            layout: (section?.layout || []).map(normalizeItem).sort(layoutSorter),
+        }));
+    }
+
+    const main = {
+        id: DEFAULT_SECTION_ID,
+        name: normalSectionName(DEFAULT_SECTION_ID),
+        description: "",
+        layout: [],
+    };
+    const right = {
+        id: RIGHT_COLUMN_SECTION_ID,
+        name: normalSectionName(RIGHT_COLUMN_SECTION_ID),
+        description: "",
+        layout: [],
+    };
+    const extras = [];
+
+    for (const section of sections) {
+        if (section?.id == RIGHT_COLUMN_SECTION_ID) {
+            appendSectionLayout(right, section?.layout);
+            continue;
+        }
+
+        if (section?.id == DEFAULT_SECTION_ID) {
+            appendSectionLayout(main, section?.layout);
+            continue;
+        }
+
+        extras.push({
+            ...section,
+            name: `${section?.name || ""}`,
+            description: `${section?.description || ""}`,
+            layout: (section?.layout || []).map(normalizeItem).sort(layoutSorter),
+        });
+    }
+
+    main.layout.sort(layoutSorter);
+    right.layout.sort(layoutSorter);
+
+    return [main, ...extras, right];
+}
+
+function appendSectionLayout(section, layout = []) {
+    let nextY = section.layout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+
+    for (const item of layout) {
+        const normalized = normalizeItem(item);
+        normalized.x = 0;
+        normalized.y = nextY;
+        section.layout.push(normalized);
+        nextY += normalized.h;
+    }
+}
+
+function normalizeLayoutType(type) {
+    return type == LAYOUT_TYPE_NORMAL ? LAYOUT_TYPE_NORMAL : DEFAULT_LAYOUT_TYPE;
+}
+
+function normalSectionName(id) {
+    return id == RIGHT_COLUMN_SECTION_ID ? "Right column" : "Main";
+}
+
+function isNormalStructuralSection(id) {
+    return id == DEFAULT_SECTION_ID || id == RIGHT_COLUMN_SECTION_ID;
 }
 
 function normalizeSectionId(id, usedIds = new Set(), index = 0) {
