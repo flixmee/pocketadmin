@@ -172,6 +172,7 @@ function createRepeaterPreset(value, label, fields) {
     }
 
     const schema = {
+        present_name: label,
         type: "array",
         items: {
             type: "object",
@@ -221,6 +222,7 @@ function schemaEditorModal(settings) {
         rawSchema: "",
         visualUnsupported: false,
         selectedPreset: "",
+        presentName: "",
 
         // Visual mode state
         rootType: "object",
@@ -664,6 +666,7 @@ function schemaEditorModal(settings) {
 function initFromSchema(schemaStr, data) {
     if (!schemaStr) {
         data.rawSchema = "";
+        data.presentName = "";
         data.rootType = "object";
         data.rootRepeated = false;
         data.properties = [];
@@ -709,6 +712,7 @@ function parseSchemaToVisual(schemaStr, data) {
         "maxLength",
         "minimum",
         "maximum",
+        "present_name",
     ]);
     for (const key of Object.keys(schema)) {
         if (!supportedRootKeys.has(key)) {
@@ -722,6 +726,7 @@ function parseSchemaToVisual(schemaStr, data) {
     }
 
     data.visualUnsupported = false;
+    data.presentName = typeof schema.present_name === "string" ? schema.present_name : "";
 
     if (type === "object") {
         data.rootType = "object";
@@ -770,22 +775,22 @@ function buildSchemaFromVisual(data) {
         const objectSchema = buildVisualObjectSchema(data);
         if (data.rootRepeated) {
             return JSON.stringify(
-                {
+                attachRootMetadata(data, {
                     type: "array",
                     items: objectSchema,
-                },
+                }),
                 null,
                 2,
             );
         }
 
-        return JSON.stringify(objectSchema, null, 2);
+        return JSON.stringify(attachRootMetadata(data, objectSchema), null, 2);
     } else if (data.rootType === "array") {
         const schema = {
             type: data.rootType,
         };
         schema.items = { type: data.arrayItemType };
-        return JSON.stringify(schema, null, 2);
+        return JSON.stringify(attachRootMetadata(data, schema), null, 2);
     } else if (data.rootType === "string") {
         const schema = {
             type: data.rootType,
@@ -796,7 +801,7 @@ function buildSchemaFromVisual(data) {
         if (data.stringMaxLength !== "") {
             schema.maxLength = parseInt(data.stringMaxLength, 10);
         }
-        return JSON.stringify(schema, null, 2);
+        return JSON.stringify(attachRootMetadata(data, schema), null, 2);
     } else if (data.rootType === "number" || data.rootType === "integer") {
         const schema = {
             type: data.rootType,
@@ -807,10 +812,18 @@ function buildSchemaFromVisual(data) {
         if (data.numberMaximum !== "") {
             schema.maximum = parseFloat(data.numberMaximum);
         }
-        return JSON.stringify(schema, null, 2);
+        return JSON.stringify(attachRootMetadata(data, schema), null, 2);
     }
 
-    return JSON.stringify({ type: data.rootType }, null, 2);
+    return JSON.stringify(attachRootMetadata(data, { type: data.rootType }), null, 2);
+}
+
+function attachRootMetadata(data, schema) {
+    if (data.presentName) {
+        schema.present_name = data.presentName;
+    }
+
+    return schema;
 }
 
 function parseVisualObjectSchema(schema, data) {

@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Update `docs/json-field-api.md` to document the JSON Schema presets/admin UI changes.
-- Success: doc explains the admin UI preset picker, Root type layout, preset behavior, preset categories, and clarifies that presets only generate normal `jsonSchema` strings.
+- Add `present_name` metadata to JSON Schema presets.
+- Success: preset-generated `jsonSchema` includes `present_name`, visual/raw editing preserves it, schema-driven record input still accepts preset schemas, docs mention the custom metadata, and UI checks pass.
 
 Constraints/Assumptions:
 
@@ -19,6 +19,7 @@ Key decisions:
 - Presets are array-of-object schemas matching repeater use cases from `docs/Repeater-Field-Use-Cases.md`.
 - Applying a preset immediately loads formatted schema and parses it back into visual state when supported.
 - Keep the preset selector visible even for visually unsupported schemas so users can switch back to a supported preset.
+- Use the exact user-requested custom JSON Schema metadata key `present_name` at the root of preset-generated schemas.
 
 State:
   - Done:
@@ -46,14 +47,24 @@ State:
     - Documented Visual/Raw modes, the 60/40 Presets/Root type layout, mobile stacking, preset behavior, supported preset categories, and an API headers preset schema example.
     - Clarified that presets are admin UI helpers only and saved collections still store a plain `jsonSchema` string.
     - Ran `git diff --check -- docs/json-field-api.md CONTINUITY.md`; passed.
+    - Read current ledger, preset implementation, schema-driven JSON input parser, and current `docs/json-field-api.md`.
+    - Added root-level `present_name` to preset-generated schemas using the preset label as the value.
+    - Updated the visual schema editor to parse and preserve `present_name` when rebuilding supported schemas.
+    - Updated the schema-driven JSON record input parser to allow root-level `present_name`.
+    - Updated `docs/json-field-api.md` to document `present_name` and include it in the preset example.
+    - Ran `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/fields/json/input.js` from `ui/`; exited 0 with existing dprint cache permission warning.
+    - Ran `npm run build` from `ui/`; passed with existing dprint cache permission warning and Vite chunk-size warnings.
+    - Reverted generated `ui/dist/index.html` asset-reference churn from the build.
+    - Ran `git diff --check -- docs/json-field-api.md ui/src/fields/json/schemaEditorModal.js ui/src/fields/json/input.js CONTINUITY.md ui/dist/index.html`; passed.
   - Now:
-    - Ready to report the completed `docs/json-field-api.md` update.
+    - Ready to report the completed `present_name` update.
   - Next:
     - None.
 
 Open questions (UNCONFIRMED if needed):
 
 - Whether future nested repeater presets should expand the visual editor/input parser beyond root repeated objects is UNCONFIRMED; current presets intentionally stay compatible with the existing schema-driven record input.
+- Whether the intended key was `preset_name` instead of exact `present_name` is UNCONFIRMED; implemented exact user-requested key `present_name`.
 
 Working set (files/ids/commands):
 
@@ -62,11 +73,14 @@ Working set (files/ids/commands):
 - `docs/Repeater-Field-Use-Cases.md`
 - `UI_DOCS.md`
 - `ui/src/fields/json/settings.js`
+- `ui/src/fields/json/input.js`
 - `ui/src/fields/json/schemaEditorModal.js`
 - `ui/src/fields/json/schemaState.js`
 - `ui/src/collections/collectionUpsertModal.js`
 - `ui/src/css/recordFields.css`
 - `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/css/recordFields.css`
+- `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/fields/json/input.js`
 - `npm run build` from `ui/`
 - `git diff --check -- ui/src/fields/json/schemaEditorModal.js ui/src/css/recordFields.css CONTINUITY.md ui/dist/index.html`
 - `git diff --check -- docs/json-field-api.md CONTINUITY.md`
+- `git diff --check -- docs/json-field-api.md ui/src/fields/json/schemaEditorModal.js ui/src/fields/json/input.js CONTINUITY.md ui/dist/index.html`

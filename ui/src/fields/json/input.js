@@ -429,13 +429,14 @@ function parseSchemaNode(schema, isRoot = false, allowObjectArrayItems = false) 
     }
 
     const type = schema.type || (isRoot ? "object" : "string");
+    const rootMetadataKeys = isRoot ? ["present_name"] : [];
 
     if (type === "object") {
         if (!isRoot && !allowObjectArrayItems) {
             return null;
         }
 
-        const supportedKeys = new Set(["$schema", "type", "properties", "required"]);
+        const supportedKeys = new Set(["$schema", "type", "properties", "required", ...rootMetadataKeys]);
         if (!hasOnlySupportedKeys(schema, supportedKeys)) {
             return null;
         }
@@ -469,7 +470,7 @@ function parseSchemaNode(schema, isRoot = false, allowObjectArrayItems = false) 
     }
 
     if (type === "array") {
-        const supportedKeys = new Set(["$schema", "type", "items"]);
+        const supportedKeys = new Set(["$schema", "type", "items", ...rootMetadataKeys]);
         if (!hasOnlySupportedKeys(schema, supportedKeys)) {
             return null;
         }
@@ -486,7 +487,7 @@ function parseSchemaNode(schema, isRoot = false, allowObjectArrayItems = false) 
     }
 
     if (type === "string") {
-        const supportedKeys = new Set(["$schema", "type", "minLength", "maxLength"]);
+        const supportedKeys = new Set(["$schema", "type", "minLength", "maxLength", ...rootMetadataKeys]);
         if (!hasOnlySupportedKeys(schema, supportedKeys)) {
             return null;
         }
@@ -499,7 +500,7 @@ function parseSchemaNode(schema, isRoot = false, allowObjectArrayItems = false) 
     }
 
     if (type === "number" || type === "integer") {
-        const supportedKeys = new Set(["$schema", "type", "minimum", "maximum"]);
+        const supportedKeys = new Set(["$schema", "type", "minimum", "maximum", ...rootMetadataKeys]);
         if (!hasOnlySupportedKeys(schema, supportedKeys)) {
             return null;
         }
@@ -511,7 +512,7 @@ function parseSchemaNode(schema, isRoot = false, allowObjectArrayItems = false) 
         };
     }
 
-    if (!hasOnlySupportedKeys(schema, new Set(["$schema", "type"]))) {
+    if (!hasOnlySupportedKeys(schema, new Set(["$schema", "type", ...rootMetadataKeys]))) {
         return null;
     }
 

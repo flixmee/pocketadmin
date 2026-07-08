@@ -236,12 +236,17 @@ In Visual mode, the top controls are arranged as:
 
 On small screens these controls stack vertically.
 
-The Presets dropdown generates normal JSON Schema strings. It does not add a
-separate field option and does not change the collection API payload shape.
-After a preset is selected, the editor loads the generated schema and tries to
-represent it visually. If the current schema cannot be represented visually, the
-preset selector remains available so an admin can switch back to a supported
-schema shape.
+The Presets dropdown generates a JSON Schema string with a root-level
+`present_name` metadata key. It does not add a separate field option and does not
+change the collection API payload shape. After a preset is selected, the editor
+loads the generated schema and tries to represent it visually. If the current
+schema cannot be represented visually, the preset selector remains available so
+an admin can switch back to a supported schema shape.
+
+`present_name` stores the human-readable preset name, for example
+`"API Headers"`. The admin UI preserves this key when a supported preset schema
+is edited in Visual mode. Validation behavior is still determined by the normal
+JSON Schema keywords such as `type`, `items`, `properties`, and `required`.
 
 Current presets are repeater-style schemas: arrays of objects where every item
 uses the same structure. They cover common cases such as:
@@ -276,6 +281,7 @@ Example preset output for API headers:
 
 ```json
 {
+  "present_name": "API Headers",
   "type": "array",
   "items": {
     "type": "object",
@@ -395,4 +401,4 @@ Example:
 - Hidden JSON fields follow the same hidden-field API rules as other field types.
 - JSON Schema validation applies only to record writes, not to historical data already stored before the schema was added.
 - The admin UI may render a schema-based form for certain supported schema shapes, but API clients can still submit any value that passes backend validation.
-- JSON Schema presets are admin UI helpers only; saved collections still store a plain `jsonSchema` string.
+- JSON Schema presets are admin UI helpers only; saved collections still store a `jsonSchema` string.
