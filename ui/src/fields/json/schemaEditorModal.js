@@ -160,6 +160,10 @@ function buildTypeOptions(types) {
     return types.map((type) => ({ value: type, label: type }));
 }
 
+function findPresetByPresentName(name) {
+    return SCHEMA_PRESETS.find((preset) => preset.label === name || preset.value === name);
+}
+
 function createRepeaterPreset(value, label, fields) {
     const properties = {};
     const required = [];
@@ -316,7 +320,7 @@ function schemaEditorModal(settings) {
                 value: () => data.selectedPreset,
                 onchange: (opts) => {
                     const value = opts?.[0]?.value || "";
-                    data.selectedPreset = "";
+                    data.selectedPreset = value;
                     applyPreset(value);
                 },
             }),
@@ -667,6 +671,7 @@ function initFromSchema(schemaStr, data) {
     if (!schemaStr) {
         data.rawSchema = "";
         data.presentName = "";
+        data.selectedPreset = "";
         data.rootType = "object";
         data.rootRepeated = false;
         data.properties = [];
@@ -683,6 +688,8 @@ function initFromSchema(schemaStr, data) {
 
 function parseSchemaToVisual(schemaStr, data) {
     if (!schemaStr || !schemaStr.trim()) {
+        data.presentName = "";
+        data.selectedPreset = "";
         data.rootType = "object";
         data.rootRepeated = false;
         data.properties = [];
@@ -727,6 +734,7 @@ function parseSchemaToVisual(schemaStr, data) {
 
     data.visualUnsupported = false;
     data.presentName = typeof schema.present_name === "string" ? schema.present_name : "";
+    data.selectedPreset = findPresetByPresentName(data.presentName)?.value || "";
 
     if (type === "object") {
         data.rootType = "object";

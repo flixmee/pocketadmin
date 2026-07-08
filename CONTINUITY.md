@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Add `present_name` metadata to JSON Schema presets.
-- Success: preset-generated `jsonSchema` includes `present_name`, visual/raw editing preserves it, schema-driven record input still accepts preset schemas, docs mention the custom metadata, and UI checks pass.
+- Fix Presets select state when editing an existing JSON Schema that has `present_name`.
+- Success: saved schemas with `present_name` reopen with the matching Presets option selected, selecting a preset leaves it selected, and UI checks pass.
 
 Constraints/Assumptions:
 
@@ -56,8 +56,15 @@ State:
     - Ran `npm run build` from `ui/`; passed with existing dprint cache permission warning and Vite chunk-size warnings.
     - Reverted generated `ui/dist/index.html` asset-reference churn from the build.
     - Ran `git diff --check -- docs/json-field-api.md ui/src/fields/json/schemaEditorModal.js ui/src/fields/json/input.js CONTINUITY.md ui/dist/index.html`; passed.
+    - Read current ledger and inspected preset select state handling in `schemaEditorModal.js`.
+    - Added mapping from root `present_name` back to `selectedPreset`.
+    - Stopped clearing `selectedPreset` immediately after choosing a preset.
+    - Cleared `selectedPreset` only for empty schemas.
+    - Ran `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js` from `ui/`; exited 0 with existing dprint cache permission warning.
+    - Ran `npm run build` from `ui/`; passed with existing dprint cache permission warning and Vite chunk-size warnings.
+    - Reverted generated `ui/dist/index.html` asset-reference churn from the build.
   - Now:
-    - Ready to report the completed `present_name` update.
+    - Ready to run final checks and report the Presets select fix.
   - Next:
     - None.
 
@@ -80,6 +87,7 @@ Working set (files/ids/commands):
 - `ui/src/css/recordFields.css`
 - `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/css/recordFields.css`
 - `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/fields/json/input.js`
+- `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js`
 - `npm run build` from `ui/`
 - `git diff --check -- ui/src/fields/json/schemaEditorModal.js ui/src/css/recordFields.css CONTINUITY.md ui/dist/index.html`
 - `git diff --check -- docs/json-field-api.md CONTINUITY.md`
