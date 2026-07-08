@@ -219,6 +219,79 @@ The payload above may fail because:
 - `sku` is missing
 - `price` violates the schema minimum
 
+### Admin UI schema editor
+
+The collection field settings UI includes a JSON Schema editor for `json` fields.
+The editor has two modes:
+
+- Visual: supports common schema shapes such as root type selection, object
+  properties, required flags, repeated object schemas, array item type, string
+  length constraints, and number/integer min/max constraints
+- Raw JSON: supports editing the full schema string directly
+
+In Visual mode, the top controls are arranged as:
+
+- Presets: 60% width on wider screens
+- Root type: 40% width on wider screens
+
+On small screens these controls stack vertically.
+
+The Presets dropdown generates normal JSON Schema strings. It does not add a
+separate field option and does not change the collection API payload shape.
+After a preset is selected, the editor loads the generated schema and tries to
+represent it visually. If the current schema cannot be represented visually, the
+preset selector remains available so an admin can switch back to a supported
+schema shape.
+
+Current presets are repeater-style schemas: arrays of objects where every item
+uses the same structure. They cover common cases such as:
+
+- Questions
+- Addresses
+- Phone numbers
+- Email addresses
+- Social links
+- Education
+- Work experience
+- Skills
+- Languages
+- Family members
+- Emergency contacts
+- Order items
+- Invoice lines
+- Attachments
+- Image gallery
+- Links
+- Timeline
+- Schedule
+- Pricing tiers
+- Conditions / Rules
+- API headers
+- Query parameters
+- Metadata
+- Tags
+- FAQ
+
+Example preset output for API headers:
+
+```json
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "value": {
+        "type": "string"
+      }
+    },
+    "required": ["key", "value"]
+  }
+}
+```
+
 ## Supported Schema Standard
 
 The backend compiles and validates schemas using JSON Schema draft-07.
@@ -322,3 +395,4 @@ Example:
 - Hidden JSON fields follow the same hidden-field API rules as other field types.
 - JSON Schema validation applies only to record writes, not to historical data already stored before the schema was added.
 - The admin UI may render a schema-based form for certain supported schema shapes, but API clients can still submit any value that passes backend validation.
+- JSON Schema presets are admin UI helpers only; saved collections still store a plain `jsonSchema` string.

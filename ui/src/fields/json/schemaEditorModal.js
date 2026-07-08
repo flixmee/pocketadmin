@@ -11,9 +11,184 @@ const SUPPORTED_TYPES = ["object", "array", "string", "number", "integer", "bool
 const PROPERTY_TYPES = ["string", "number", "integer", "boolean", "object", "array"];
 const SUPPORTED_TYPE_OPTIONS = buildTypeOptions(SUPPORTED_TYPES);
 const PROPERTY_TYPE_OPTIONS = buildTypeOptions(PROPERTY_TYPES);
+const SCHEMA_PRESETS = [
+    createRepeaterPreset("questions", "Questions", [
+        ["title", "string", true],
+        ["description", "string"],
+        ["type", "string", true],
+        ["required", "boolean"],
+    ]),
+    createRepeaterPreset("addresses", "Addresses", [
+        ["type", "string"],
+        ["street", "string", true],
+        ["city", "string", true],
+        ["province", "string"],
+        ["country", "string"],
+        ["zipCode", "string"],
+    ]),
+    createRepeaterPreset("phoneNumbers", "Phone Numbers", [
+        ["type", "string"],
+        ["countryCode", "string"],
+        ["number", "string", true],
+    ]),
+    createRepeaterPreset("emailAddresses", "Email Addresses", [
+        ["type", "string"],
+        ["email", "string", true],
+    ]),
+    createRepeaterPreset("socialLinks", "Social Links", [
+        ["platform", "string", true],
+        ["url", "string", true],
+    ]),
+    createRepeaterPreset("education", "Education", [
+        ["school", "string", true],
+        ["degree", "string"],
+        ["major", "string"],
+        ["startDate", "string"],
+        ["endDate", "string"],
+        ["description", "string"],
+    ]),
+    createRepeaterPreset("workExperience", "Work Experience", [
+        ["company", "string", true],
+        ["position", "string", true],
+        ["startDate", "string"],
+        ["endDate", "string"],
+        ["responsibilities", "string"],
+    ]),
+    createRepeaterPreset("skills", "Skills", [
+        ["name", "string", true],
+        ["level", "string"],
+        ["years", "integer"],
+    ]),
+    createRepeaterPreset("languages", "Languages", [
+        ["language", "string", true],
+        ["proficiency", "string"],
+    ]),
+    createRepeaterPreset("familyMembers", "Family Members", [
+        ["name", "string", true],
+        ["relationship", "string"],
+        ["birthday", "string"],
+        ["phone", "string"],
+    ]),
+    createRepeaterPreset("emergencyContacts", "Emergency Contacts", [
+        ["name", "string", true],
+        ["phone", "string", true],
+        ["relationship", "string"],
+    ]),
+    createRepeaterPreset("orderItems", "Order Items", [
+        ["product", "string", true],
+        ["quantity", "integer", true],
+        ["price", "number", true],
+        ["discount", "number"],
+    ]),
+    createRepeaterPreset("invoiceLines", "Invoice Lines", [
+        ["description", "string", true],
+        ["qty", "integer", true],
+        ["unitPrice", "number", true],
+        ["tax", "number"],
+    ]),
+    createRepeaterPreset("attachments", "Attachments", [
+        ["file", "string", true],
+        ["description", "string"],
+        ["category", "string"],
+    ]),
+    createRepeaterPreset("imageGallery", "Image Gallery", [
+        ["image", "string", true],
+        ["caption", "string"],
+        ["alt", "string"],
+        ["sortOrder", "integer"],
+    ]),
+    createRepeaterPreset("links", "Links", [
+        ["title", "string", true],
+        ["url", "string", true],
+    ]),
+    createRepeaterPreset("timeline", "Timeline", [
+        ["date", "string", true],
+        ["title", "string", true],
+        ["description", "string"],
+    ]),
+    createRepeaterPreset("schedule", "Schedule", [
+        ["start", "string", true],
+        ["end", "string"],
+        ["speaker", "string"],
+        ["topic", "string", true],
+    ]),
+    createRepeaterPreset("pricingTiers", "Pricing Tiers", [
+        ["currency", "string", true],
+        ["amount", "number", true],
+        ["fromQty", "integer"],
+        ["toQty", "integer"],
+    ]),
+    createRepeaterPreset("rules", "Conditions / Rules", [
+        ["field", "string", true],
+        ["operator", "string", true],
+        ["value", "string"],
+    ]),
+    createRepeaterPreset("apiHeaders", "API Headers", [
+        ["key", "string", true],
+        ["value", "string", true],
+    ]),
+    createRepeaterPreset("queryParameters", "Query Parameters", [
+        ["key", "string", true],
+        ["value", "string", true],
+    ]),
+    createRepeaterPreset("metadata", "Metadata", [
+        ["key", "string", true],
+        ["value", "string", true],
+    ]),
+    createRepeaterPreset("tags", "Tags", [
+        ["name", "string", true],
+        ["color", "string"],
+        ["priority", "integer"],
+    ]),
+    createRepeaterPreset("faq", "FAQ", [
+        ["question", "string", true],
+        ["answer", "string", true],
+    ]),
+];
+const SCHEMA_PRESET_OPTIONS = SCHEMA_PRESETS.map((preset) => ({
+    value: preset.value,
+    label: () =>
+        t.div(
+            { className: "json-schema-preset-option" },
+            t.span({ className: "txt" }, preset.label),
+            t.small({ className: "txt-hint" }, preset.summary),
+        ),
+    selected: preset.label,
+}));
 
 function buildTypeOptions(types) {
     return types.map((type) => ({ value: type, label: type }));
+}
+
+function createRepeaterPreset(value, label, fields) {
+    const properties = {};
+    const required = [];
+
+    for (const [name, type, isRequired] of fields) {
+        properties[name] = { type };
+        if (isRequired) {
+            required.push(name);
+        }
+    }
+
+    const schema = {
+        type: "array",
+        items: {
+            type: "object",
+            properties,
+        },
+    };
+
+    if (required.length) {
+        schema.items.required = required;
+    }
+
+    return {
+        value,
+        label,
+        summary: fields.map(([name]) => name).join(", "),
+        schema,
+    };
 }
 
 function createPropertyState(prop = {}) {
@@ -45,6 +220,7 @@ function schemaEditorModal(settings) {
         mode: "visual", // "visual" or "raw"
         rawSchema: "",
         visualUnsupported: false,
+        selectedPreset: "",
 
         // Visual mode state
         rootType: "object",
@@ -108,6 +284,61 @@ function schemaEditorModal(settings) {
         data.properties = data.properties.filter((_, i) => i !== index);
     }
 
+    function applyPreset(value) {
+        const preset = SCHEMA_PRESETS.find((item) => item.value === value);
+        if (!preset) {
+            return;
+        }
+
+        const schemaStr = JSON.stringify(preset.schema, null, 2);
+        data.rawSchema = schemaStr;
+
+        if (parseSchemaToVisual(schemaStr, data)) {
+            data.mode = "visual";
+            data.visualUnsupported = false;
+        } else {
+            data.mode = "raw";
+            data.visualUnsupported = true;
+            app.toasts.info("This preset uses schema details that are only editable in Raw JSON mode.");
+        }
+    }
+
+    function presetSelector() {
+        return t.div(
+            { className: "field json-schema-presets" },
+            t.label({ htmlFor: uniqueId + ".presets" }, "Presets"),
+            app.components.select({
+                id: uniqueId + ".presets",
+                placeholder: "Choose preset",
+                options: SCHEMA_PRESET_OPTIONS,
+                value: () => data.selectedPreset,
+                onchange: (opts) => {
+                    const value = opts?.[0]?.value || "";
+                    data.selectedPreset = "";
+                    applyPreset(value);
+                },
+            }),
+        );
+    }
+
+    function rootTypeSelector() {
+        return t.div(
+            { className: "field json-schema-root-type" },
+            t.label({ htmlFor: uniqueId + ".rootType" }, "Root type"),
+            app.components.select({
+                id: uniqueId + ".rootType",
+                options: SUPPORTED_TYPE_OPTIONS,
+                value: () => data.rootType,
+                onchange: (opts) => {
+                    data.rootType = opts?.[0]?.value || "object";
+                    if (data.rootType !== "object") {
+                        data.rootRepeated = false;
+                    }
+                },
+            }),
+        );
+    }
+
     modal = t.div(
         {
             pbEvent: "jsonSchemaEditorModal",
@@ -150,38 +381,28 @@ function schemaEditorModal(settings) {
 
                 if (data.visualUnsupported) {
                     return t.div(
-                        { className: "alert warning m-b-base" },
+                        { className: "json-schema-visual" },
+                        presetSelector(),
                         t.div(
-                            { className: "content" },
-                            t.i({ className: "ri-alert-line" }),
-                            " This schema uses keywords not supported in visual mode. Switch to Raw JSON mode for full editing.",
+                            { className: "alert warning m-b-base" },
+                            t.div(
+                                { className: "content" },
+                                t.i({ className: "ri-alert-line" }),
+                                " This schema uses keywords not supported in visual mode. Switch to Raw JSON mode for full editing.",
+                            ),
                         ),
                     );
                 }
 
                 return t.div(
                     { className: "json-schema-visual" },
-                    // Root type selector
+                    t.div(
+                        { className: "json-schema-toolbar" },
+                        presetSelector(),
+                        rootTypeSelector(),
+                    ),
                     t.div(
                         { className: "grid sm m-b-sm" },
-                        t.div(
-                            { className: "col-sm-12" },
-                            t.div(
-                                { className: "field" },
-                                t.label({ htmlFor: uniqueId + ".rootType" }, "Root type"),
-                                app.components.select({
-                                    id: uniqueId + ".rootType",
-                                    options: SUPPORTED_TYPE_OPTIONS,
-                                    value: () => data.rootType,
-                                    onchange: (opts) => {
-                                        data.rootType = opts?.[0]?.value || "object";
-                                        if (data.rootType !== "object") {
-                                            data.rootRepeated = false;
-                                        }
-                                    },
-                                }),
-                            ),
-                        ),
                         () => {
                             if (data.rootType !== "object") return null;
 

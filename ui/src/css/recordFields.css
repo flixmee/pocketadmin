@@ -766,6 +766,35 @@
   animation: fadeIn var(--animationSpeed);
 }
 
+.json-schema-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--smSpacing);
+  align-items: start;
+  margin-bottom: var(--smSpacing);
+  > .field {
+    margin-bottom: 0;
+  }
+}
+
+.json-schema-presets {
+  .input.select .selected-container {
+    width: 100%;
+  }
+}
+
+.json-schema-preset-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  small {
+    white-space: normal;
+    line-height: var(--smLineHeight);
+  }
+}
+
 .json-schema-properties {
   margin-top: var(--smSpacing);
 }
@@ -806,6 +835,12 @@
   animation: fadeIn var(--animationSpeed);
   .input.code-editor {
     min-height: 200px;
+  }
+}
+
+@media (max-width: 600px) {
+  .json-schema-toolbar {
+    grid-template-columns: 1fr;
   }
 }
 
