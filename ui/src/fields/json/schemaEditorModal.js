@@ -17,6 +17,20 @@ const SCHEMA_PRESETS = [
         ["description", "string"],
         ["type", "string", true],
         ["required", "boolean"],
+        [
+            "options",
+            {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        label: { type: "string" },
+                        value: { type: "string" },
+                    },
+                    required: ["label", "value"],
+                },
+            },
+        ],
     ]),
     createRepeaterPreset("addresses", "Addresses", [
         ["type", "string"],
@@ -169,7 +183,7 @@ function createRepeaterPreset(value, label, fields) {
     const required = [];
 
     for (const [name, type, isRequired] of fields) {
-        properties[name] = { type };
+        properties[name] = typeof type === "string" ? { type } : type;
         if (isRequired) {
             required.push(name);
         }

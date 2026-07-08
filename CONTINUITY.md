@@ -1,7 +1,7 @@
 Goal (incl. success criteria):
 
-- Fix Presets select state when editing an existing JSON Schema that has `present_name`.
-- Success: saved schemas with `present_name` reopen with the matching Presets option selected, selecting a preset leaves it selected, and UI checks pass.
+- Add `options` to the Questions JSON Schema preset.
+- Success: Questions preset generates a nested `options` array schema, schema-driven record input can render the nested option rows, docs mention the nested options behavior, and UI checks pass.
 
 Constraints/Assumptions:
 
@@ -63,14 +63,22 @@ State:
     - Ran `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js` from `ui/`; exited 0 with existing dprint cache permission warning.
     - Ran `npm run build` from `ui/`; passed with existing dprint cache permission warning and Vite chunk-size warnings.
     - Reverted generated `ui/dist/index.html` asset-reference churn from the build.
+    - Read current ledger, Questions preset definition, JSON schema input parser, and `docs/json-field-api.md`.
+    - Added nested `options` to the Questions preset as an array of objects with required `label` and `value` string properties.
+    - Updated `createRepeaterPreset` so preset fields can use either a simple type string or a full property schema.
+    - Updated the JSON field schema-driven input parser to allow array properties and object array items.
+    - Updated `docs/json-field-api.md` to note that Questions includes nested `options`.
+    - Ran `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/fields/json/input.js` from `ui/`; exited 0 with existing dprint cache permission warning.
+    - Ran `npm run build` from `ui/`; passed with existing dprint cache permission warning and Vite chunk-size warnings.
+    - Reverted generated `ui/dist/index.html` asset-reference churn from the build.
   - Now:
-    - Ready to run final checks and report the Presets select fix.
+    - Ready to run final checks and report the Questions `options` update.
   - Next:
     - None.
 
 Open questions (UNCONFIRMED if needed):
 
-- Whether future nested repeater presets should expand the visual editor/input parser beyond root repeated objects is UNCONFIRMED; current presets intentionally stay compatible with the existing schema-driven record input.
+- Whether future nested repeater presets should expand the visual editor beyond root repeated objects is UNCONFIRMED; current work adds record input parser support for the Questions `options` nested array but leaves visual editor round-tripping conservative.
 - Whether the intended key was `preset_name` instead of exact `present_name` is UNCONFIRMED; implemented exact user-requested key `present_name`.
 
 Working set (files/ids/commands):

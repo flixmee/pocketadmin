@@ -251,7 +251,7 @@ JSON Schema keywords such as `type`, `items`, `properties`, and `required`.
 Current presets are repeater-style schemas: arrays of objects where every item
 uses the same structure. They cover common cases such as:
 
-- Questions
+- Questions, including nested `options`
 - Addresses
 - Phone numbers
 - Email addresses
@@ -297,6 +297,9 @@ Example preset output for API headers:
   }
 }
 ```
+
+The Questions preset includes a nested `options` array for choice-style
+questions. Each option item has `label` and `value` string properties.
 
 ## Supported Schema Standard
 

@@ -1,5 +1,5 @@
 const SUPPORTED_ROOT_TYPES = new Set(["object", "array", "string", "number", "integer", "boolean"]);
-const SUPPORTED_PROPERTY_TYPES = new Set(["string", "number", "integer", "boolean"]);
+const SUPPORTED_PROPERTY_TYPES = new Set(["string", "number", "integer", "boolean", "array"]);
 
 // {
 //     collection: undefined,
@@ -475,7 +475,7 @@ function parseSchemaNode(schema, isRoot = false, allowObjectArrayItems = false) 
             return null;
         }
 
-        const items = parseSchemaNode(schema.items || { type: "string" }, false, isRoot);
+        const items = parseSchemaNode(schema.items || { type: "string" }, false, true);
         if (!items) {
             return null;
         }
