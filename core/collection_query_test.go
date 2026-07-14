@@ -3,6 +3,7 @@ package core_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -227,6 +228,88 @@ func TestRenameAndDeleteCollectionGroup(t *testing.T) {
 	if cleared.CollectionGroup != "" {
 		t.Fatalf("Expected empty collectionGroup after delete, got %q", cleared.CollectionGroup)
 	}
+}
+
+func TestDeleteCollectionGroupWithCollections(t *testing.T) {
+	t.Run("deletes related group children", func(t *testing.T) {
+		app, _ := tests.NewTestApp()
+		defer app.Cleanup()
+
+		parent := core.NewBaseCollection("group_parent")
+		parent.CollectionGroup = "Content"
+		if err := app.Save(parent); err != nil {
+			t.Fatal(err)
+		}
+
+		child := core.NewBaseCollection("group_child")
+		child.CollectionGroup = "Content"
+		child.Fields.Add(&core.RelationField{
+			Name:         "parent",
+			CollectionId: parent.Id,
+			MaxSelect:    1,
+		})
+		if err := app.Save(child); err != nil {
+			t.Fatal(err)
+		}
+		parent.Fields.Add(&core.RelationField{
+			Name:         "child",
+			CollectionId: child.Id,
+			MaxSelect:    1,
+		})
+		if err := app.Save(parent); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := app.DeleteCollectionGroupWithCollections("Content"); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, name := range []string{parent.Name, child.Name} {
+			if _, err := app.FindCollectionByNameOrId(name); !errors.Is(err, sql.ErrNoRows) {
+				t.Fatalf("Expected collection %q to be deleted, got %v", name, err)
+			}
+		}
+		groups, err := app.FindAllCollectionGroups()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if slices.Contains(groups, "Content") {
+			t.Fatalf("Expected Content group to be deleted, got %v", groups)
+		}
+	})
+
+	t.Run("external reference rolls back", func(t *testing.T) {
+		app, _ := tests.NewTestApp()
+		defer app.Cleanup()
+
+		target := core.NewBaseCollection("group_target")
+		target.CollectionGroup = "Content"
+		if err := app.Save(target); err != nil {
+			t.Fatal(err)
+		}
+
+		external := core.NewBaseCollection("external_reference")
+		external.Fields.Add(&core.RelationField{
+			Name:         "target",
+			CollectionId: target.Id,
+			MaxSelect:    1,
+		})
+		if err := app.Save(external); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := app.DeleteCollectionGroupWithCollections("Content"); err == nil {
+			t.Fatal("Expected external collection reference to block group child deletion")
+		}
+
+		preserved, err := app.FindCollectionByNameOrId(target.Id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if preserved.CollectionGroup != "Content" {
+			t.Fatalf("Expected target group to be preserved, got %q", preserved.CollectionGroup)
+		}
+	})
 }
 
 func TestFindCollectionByNameOrId(t *testing.T) {

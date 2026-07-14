@@ -105,24 +105,89 @@ export function collectionsSidebar() {
         });
     }
 
-    async function removeGroup(groupName) {
-        app.modals.confirm(
-            `Remove collection group "${groupName}"? Collections in this group will become ungrouped.`,
-            async () => {
-                await app.pb.send(
-                    `/api/collections/meta/groups/${encodeURIComponent(groupName)}`,
-                    {
-                        method: "DELETE",
-                    },
-                );
-                app.store.removeCollectionGroup(groupName);
+    async function deleteGroup(groupName, childCollections, deleteCollections) {
+        try {
+            await app.pb.send(
+                `/api/collections/meta/groups/${encodeURIComponent(groupName)}${
+                    deleteCollections ? "?deleteCollections=true" : ""
+                }`,
+                { method: "DELETE" },
+            );
 
-                const normalized = app.utils.normalizeCollectionGroup(groupName);
-                if (data.openGroups[normalized] !== undefined) {
-                    const nextOpenGroups = { ...data.openGroups };
-                    delete nextOpenGroups[normalized];
-                    data.openGroups = nextOpenGroups;
+            const childIds = new Set(childCollections.map((collection) => collection.id));
+            const activeCollectionId = app.store.activeCollection?.id;
+            app.store.removeCollectionGroup(groupName);
+
+            if (deleteCollections) {
+                app.store.collections = app.utils.sortedCollectionsByType(
+                    app.store.collections.filter((collection) => !childIds.has(collection.id)),
+                );
+                data.pinned = data.pinned.filter((id) => !childIds.has(id));
+
+                if (childIds.has(activeCollectionId)) {
+                    app.store.activeCollection = app.store.collections[0];
                 }
+            }
+
+            const normalized = app.utils.normalizeCollectionGroup(groupName);
+            if (data.openGroups[normalized] !== undefined) {
+                const nextOpenGroups = { ...data.openGroups };
+                delete nextOpenGroups[normalized];
+                data.openGroups = nextOpenGroups;
+            }
+
+            if (deleteCollections) {
+                app.toasts.success(
+                    `Deleted collection group "${groupName}" and ${childCollections.length} ${
+                        childCollections.length == 1 ? "collection" : "collections"
+                    }.`,
+                );
+            } else {
+                app.toasts.success(`Removed collection group "${groupName}". Its collections are now ungrouped.`);
+            }
+        } catch (err) {
+            app.checkApiError(err);
+            return false;
+        }
+    }
+
+    function removeGroup(groupName) {
+        const normalized = app.utils.normalizeCollectionGroup(groupName);
+        const childCollections = app.store.collections.filter((collection) => {
+            return app.utils.normalizeCollectionGroup(collection.collectionGroup) === normalized;
+        });
+
+        if (!childCollections.length) {
+            app.modals.confirm(
+                `Remove empty collection group "${groupName}"?`,
+                () => deleteGroup(groupName, childCollections, false),
+                null,
+                { yesButton: "Remove group" },
+            );
+            return;
+        }
+
+        app.modals.confirm(
+            t.div(
+                { className: "block" },
+                t.h6({ className: "block txt-center" }, `Remove collection group "${groupName}"?`),
+                t.p(
+                    { className: "m-t-sm" },
+                    `This group contains ${childCollections.length} ${
+                        childCollections.length == 1 ? "collection" : "collections"
+                    }. Choose whether to delete them and all their records, or keep them as ungrouped collections.`,
+                ),
+                t.div(
+                    { className: "alert warning m-t-sm m-b-0" },
+                    "Deleting the collections cannot be undone and may be blocked by references from outside this group.",
+                ),
+            ),
+            () => deleteGroup(groupName, childCollections, true),
+            () => deleteGroup(groupName, childCollections, false),
+            {
+                className: "md",
+                yesButton: `Delete all ${childCollections.length}`,
+                noButton: "Keep collections",
             },
         );
     }
@@ -385,23 +450,43 @@ export function collectionsSidebar() {
                         hidden: () => data.search.length && !data.filteredCollections.length,
                         className: "sidebar-content new-collection",
                     },
-                    t.button(
-                        {
-                            type: "button",
-                            className: "btn outline block",
-                            onclick: () => {
-                                app.modals.openCollectionUpsert(
-                                    {},
-                                    {
-                                        onsave: (newCollection) => {
-                                            app.store.activeCollection = newCollection.id;
+                    t.div(
+                        { className: "collection-create-actions" },
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn outline block",
+                                onclick: () => {
+                                    app.modals.openCollectionUpsert(
+                                        {},
+                                        {
+                                            onsave: (newCollection) => {
+                                                app.store.activeCollection = newCollection.id;
+                                            },
                                         },
-                                    },
-                                );
+                                    );
+                                },
                             },
-                        },
-                        t.i({ className: "ri-add-line", ariaHidden: true }),
-                        t.span({ textContent: "New collection" }),
+                            t.i({ className: "ri-add-line", ariaHidden: true }),
+                            t.span({ textContent: "New collection" }),
+                        ),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn secondary block",
+                                onclick: () => {
+                                    app.modals.openCollectionPresetImport({
+                                        onsubmit: (collections) => {
+                                            if (collections[0]?.id) {
+                                                app.store.activeCollection = collections[0].id;
+                                            }
+                                        },
+                                    });
+                                },
+                            },
+                            t.i({ className: "ri-layout-grid-line", ariaHidden: true }),
+                            t.span({ textContent: "From preset" }),
+                        ),
                     ),
                 ),
             ];

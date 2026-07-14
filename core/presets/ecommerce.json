@@ -1,0 +1,819 @@
+{
+  "id": "ecommerce",
+  "name": "E-commerce",
+  "version": "1.0.0",
+  "description": "A normalized storefront schema for catalog, customers, carts, orders, promotions, reviews, and wishlists.",
+  "collections": [
+    {
+      "name": "product_categories",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 200
+        },
+        {
+          "name": "slug",
+          "type": "slug",
+          "required": true,
+          "attachedField": "name",
+          "max": 200
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "max": 1000
+        },
+        {
+          "name": "parent",
+          "type": "relation",
+          "collectionRef": "$collection.product_categories",
+          "maxSelect": 1
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "products",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 300
+        },
+        {
+          "name": "slug",
+          "type": "slug",
+          "required": true,
+          "attachedField": "name",
+          "max": 300
+        },
+        {
+          "name": "description",
+          "type": "editor",
+          "convertURLs": false
+        },
+        {
+          "name": "categories",
+          "type": "relation",
+          "collectionRef": "$collection.product_categories",
+          "maxSelect": 20
+        },
+        {
+          "name": "sku",
+          "type": "text",
+          "max": 120
+        },
+        {
+          "name": "basePrice",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "draft",
+            "active",
+            "archived"
+          ]
+        },
+        {
+          "name": "featured",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "product_variants",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "product",
+          "type": "relation",
+          "collectionRef": "$collection.products",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 200
+        },
+        {
+          "name": "sku",
+          "type": "text",
+          "required": true,
+          "max": 120
+        },
+        {
+          "name": "price",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "stock",
+          "type": "number",
+          "min": 0,
+          "onlyInt": true
+        },
+        {
+          "name": "options",
+          "type": "json"
+        },
+        {
+          "name": "active",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "product_images",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "product",
+          "type": "relation",
+          "collectionRef": "$collection.products",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "variant",
+          "type": "relation",
+          "collectionRef": "$collection.product_variants",
+          "maxSelect": 1
+        },
+        {
+          "name": "image",
+          "type": "media",
+          "required": true,
+          "maxSelect": 1,
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif"
+          ]
+        },
+        {
+          "name": "alt",
+          "type": "text",
+          "max": 300
+        },
+        {
+          "name": "position",
+          "type": "number",
+          "min": 0,
+          "onlyInt": true
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "customers",
+      "type": "auth",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "firstName",
+          "type": "text",
+          "presentable": true,
+          "max": 120
+        },
+        {
+          "name": "lastName",
+          "type": "text",
+          "presentable": true,
+          "max": 120
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "max": 40
+        },
+        {
+          "name": "marketingOptIn",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "addresses",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "customer",
+          "type": "relation",
+          "collectionRef": "$collection.customers",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "presentable": true,
+          "max": 100
+        },
+        {
+          "name": "recipientName",
+          "type": "text",
+          "required": true,
+          "max": 240
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "max": 40
+        },
+        {
+          "name": "line1",
+          "type": "text",
+          "required": true,
+          "max": 300
+        },
+        {
+          "name": "line2",
+          "type": "text",
+          "max": 300
+        },
+        {
+          "name": "city",
+          "type": "text",
+          "required": true,
+          "max": 160
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "max": 160
+        },
+        {
+          "name": "postalCode",
+          "type": "text",
+          "required": true,
+          "max": 40
+        },
+        {
+          "name": "countryCode",
+          "type": "text",
+          "required": true,
+          "min": 2,
+          "max": 2
+        },
+        {
+          "name": "isDefault",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "carts",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "customer",
+          "type": "relation",
+          "collectionRef": "$collection.customers",
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "sessionKey",
+          "type": "text",
+          "presentable": true,
+          "max": 200
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "active",
+            "converted",
+            "abandoned"
+          ]
+        },
+        {
+          "name": "currency",
+          "type": "text",
+          "required": true,
+          "min": 3,
+          "max": 3
+        },
+        {
+          "name": "expiresAt",
+          "type": "date"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "cart_items",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "cart",
+          "type": "relation",
+          "collectionRef": "$collection.carts",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "product",
+          "type": "relation",
+          "collectionRef": "$collection.products",
+          "required": true,
+          "maxSelect": 1
+        },
+        {
+          "name": "variant",
+          "type": "relation",
+          "collectionRef": "$collection.product_variants",
+          "maxSelect": 1
+        },
+        {
+          "name": "quantity",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "onlyInt": true
+        },
+        {
+          "name": "unitPrice",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "orders",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "number",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 80
+        },
+        {
+          "name": "customer",
+          "type": "relation",
+          "collectionRef": "$collection.customers",
+          "maxSelect": 1
+        },
+        {
+          "name": "shippingAddress",
+          "type": "relation",
+          "collectionRef": "$collection.addresses",
+          "maxSelect": 1
+        },
+        {
+          "name": "billingAddress",
+          "type": "relation",
+          "collectionRef": "$collection.addresses",
+          "maxSelect": 1
+        },
+        {
+          "name": "coupon",
+          "type": "relation",
+          "collectionRef": "$collection.coupons",
+          "maxSelect": 1
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "pending",
+            "confirmed",
+            "processing",
+            "shipped",
+            "delivered",
+            "cancelled",
+            "refunded"
+          ]
+        },
+        {
+          "name": "paymentStatus",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "pending",
+            "authorized",
+            "paid",
+            "failed",
+            "refunded"
+          ]
+        },
+        {
+          "name": "currency",
+          "type": "text",
+          "required": true,
+          "min": 3,
+          "max": 3
+        },
+        {
+          "name": "subtotal",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "discountTotal",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "shippingTotal",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "taxTotal",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "total",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "max": 2000
+        },
+        {
+          "name": "placedAt",
+          "type": "date"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "order_items",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "order",
+          "type": "relation",
+          "collectionRef": "$collection.orders",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "product",
+          "type": "relation",
+          "collectionRef": "$collection.products",
+          "maxSelect": 1
+        },
+        {
+          "name": "variant",
+          "type": "relation",
+          "collectionRef": "$collection.product_variants",
+          "maxSelect": 1
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 300
+        },
+        {
+          "name": "sku",
+          "type": "text",
+          "max": 120
+        },
+        {
+          "name": "quantity",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "onlyInt": true
+        },
+        {
+          "name": "unitPrice",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "total",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "coupons",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "code",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 80
+        },
+        {
+          "name": "discountType",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "percentage",
+            "fixed"
+          ]
+        },
+        {
+          "name": "value",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "minOrderAmount",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "maxDiscount",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "usageLimit",
+          "type": "number",
+          "min": 0,
+          "onlyInt": true
+        },
+        {
+          "name": "usedCount",
+          "type": "number",
+          "min": 0,
+          "onlyInt": true
+        },
+        {
+          "name": "startsAt",
+          "type": "date"
+        },
+        {
+          "name": "endsAt",
+          "type": "date"
+        },
+        {
+          "name": "active",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "reviews",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "product",
+          "type": "relation",
+          "collectionRef": "$collection.products",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "customer",
+          "type": "relation",
+          "collectionRef": "$collection.customers",
+          "required": true,
+          "maxSelect": 1
+        },
+        {
+          "name": "rating",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "max": 5,
+          "onlyInt": true
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "presentable": true,
+          "max": 300
+        },
+        {
+          "name": "comment",
+          "type": "text",
+          "max": 5000
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "wishlists",
+      "type": "base",
+      "collectionGroup": "E-commerce",
+      "fields": [
+        {
+          "name": "customer",
+          "type": "relation",
+          "collectionRef": "$collection.customers",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 200
+        },
+        {
+          "name": "products",
+          "type": "relation",
+          "collectionRef": "$collection.products",
+          "maxSelect": 100
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    }
+  ],
+  "sampleData": []
+}

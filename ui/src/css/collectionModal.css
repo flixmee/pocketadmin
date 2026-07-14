@@ -11,6 +11,98 @@
     }
 }
 
+.collection-create-actions {
+    display: grid;
+    gap: 8px;
+}
+
+.collection-preset-import-modal {
+    .modal-content {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing);
+    }
+}
+.collection-preset-options {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto;
+    gap: var(--smSpacing);
+    align-items: end;
+}
+.collection-preset-loading {
+    display: grid;
+    min-height: 180px;
+    place-items: center;
+}
+.collection-preset-preview {
+    display: flex;
+    flex-direction: column;
+    gap: var(--smSpacing);
+}
+.collection-preset-collections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: var(--smSpacing);
+}
+.collection-preset-card {
+    min-width: 0;
+    padding: var(--smSpacing);
+    border: 1px solid var(--surfaceAlt2Color);
+    border-radius: var(--borderRadius);
+    background: var(--surfaceAlt1Color);
+    &.has-conflict {
+        border-color: var(--warningColor);
+    }
+}
+.collection-preset-card-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin-bottom: 10px;
+    strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+.collection-preset-conflict {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+}
+.collection-preset-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.collection-preset-field {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    min-width: 0;
+    padding: 3px 7px;
+    border-radius: var(--smBorderRadius);
+    background: var(--surfaceAlt2Color);
+}
+.collection-preset-relations {
+    h6 {
+        margin-bottom: 6px;
+    }
+    .list-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 700px) {
+    .collection-preset-options {
+        grid-template-columns: 1fr;
+    }
+}
+
 .collection-group-icon-field {
     display: flex;
     align-items: center;

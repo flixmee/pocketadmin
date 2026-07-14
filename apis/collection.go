@@ -33,6 +33,11 @@ func bindCollectionApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 	// @todo experimental
 	subGroup.GET("/meta/oauth2-providers", collectionListOAuth2Providers)
 	subGroup.POST("/meta/dry-run-view", collectionDryRunView)
+
+	presetsGroup := rg.Group("/collection-presets").Bind(RequireSuperuserAuth())
+	presetsGroup.GET("", collectionPresetsList)
+	presetsGroup.POST("/{preset}/preview", collectionPresetPreview)
+	presetsGroup.POST("/{preset}/import", collectionPresetImport)
 }
 
 func collectionsList(e *core.RequestEvent) error {
@@ -277,7 +282,13 @@ func collectionRenameGroup(e *core.RequestEvent) error {
 }
 
 func collectionDeleteGroup(e *core.RequestEvent) error {
-	if err := e.App.DeleteCollectionGroup(e.Request.PathValue("name")); err != nil {
+	var err error
+	if e.Request.URL.Query().Get("deleteCollections") == "true" {
+		err = e.App.DeleteCollectionGroupWithCollections(e.Request.PathValue("name"))
+	} else {
+		err = e.App.DeleteCollectionGroup(e.Request.PathValue("name"))
+	}
+	if err != nil {
 		return e.BadRequestError("Failed to delete collection group.", err)
 	}
 

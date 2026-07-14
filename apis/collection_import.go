@@ -25,9 +25,12 @@ func collectionsImport(e *core.RequestEvent) error {
 	event.RequestEvent = e
 	event.CollectionsData = form.Collections
 	event.DeleteMissing = form.DeleteMissing
+	return triggerCollectionsImport(event)
+}
 
+func triggerCollectionsImport(event *core.CollectionsImportRequestEvent) error {
 	return event.App.OnCollectionsImportRequest().Trigger(event, func(e *core.CollectionsImportRequestEvent) error {
-		importErr := e.App.ImportCollections(e.CollectionsData, form.DeleteMissing)
+		importErr := e.App.ImportCollections(e.CollectionsData, e.DeleteMissing)
 		if importErr == nil {
 			return execAfterSuccessTx(true, e.App, func() error {
 				return e.NoContent(http.StatusNoContent)

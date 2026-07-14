@@ -71,6 +71,7 @@ import "./collections/indexUpsertModal";
 import "./collections/collectionIconPickerModal";
 import "./collections/collectionGroupUpsertModal";
 import "./collections/collectionUpsertModal";
+import "./collections/collectionPresetImportModal";
 import "./collections/addCollectionFieldButton";
 import "./collections/autocomplete.utils";
 import "./collections/providerPickerModal";

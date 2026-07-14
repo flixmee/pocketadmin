@@ -1,0 +1,164 @@
+{
+  "id": "blog",
+  "name": "Blog",
+  "version": "1.0.0",
+  "description": "Categories, tags, and posts for a basic publishing workflow.",
+  "collections": [
+    {
+      "name": "categories",
+      "type": "base",
+      "collectionGroup": "Blog",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 200
+        },
+        {
+          "name": "slug",
+          "type": "slug",
+          "required": true,
+          "attachedField": "name",
+          "max": 200
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "max": 1000
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "tags",
+      "type": "base",
+      "collectionGroup": "Blog",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 200
+        },
+        {
+          "name": "slug",
+          "type": "slug",
+          "required": true,
+          "attachedField": "name",
+          "max": 200
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "posts",
+      "type": "base",
+      "collectionGroup": "Blog",
+      "fields": [
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 300
+        },
+        {
+          "name": "slug",
+          "type": "slug",
+          "required": true,
+          "attachedField": "title",
+          "max": 300
+        },
+        {
+          "name": "excerpt",
+          "type": "text",
+          "max": 1000
+        },
+        {
+          "name": "content",
+          "type": "editor",
+          "convertURLs": false
+        },
+        {
+          "name": "cover",
+          "type": "media",
+          "maxSelect": 1,
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif"
+          ]
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "draft",
+            "published",
+            "archived"
+          ]
+        },
+        {
+          "name": "publishedAt",
+          "type": "date"
+        },
+        {
+          "name": "category",
+          "type": "relation",
+          "collectionRef": "$collection.categories",
+          "maxSelect": 1
+        },
+        {
+          "name": "tags",
+          "type": "relation",
+          "collectionRef": "$collection.tags",
+          "maxSelect": 50
+        },
+        {
+          "name": "author",
+          "type": "relation",
+          "collectionRef": "$collection._superusers",
+          "maxSelect": 1
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    }
+  ],
+  "sampleData": []
+}

@@ -422,6 +422,10 @@ type App interface {
 	// DeleteCollectionGroup removes a registered collection group and clears it from all collections using it.
 	DeleteCollectionGroup(name string) error
 
+	// DeleteCollectionGroupWithCollections removes a registered collection group together with all
+	// non-system collections assigned to it.
+	DeleteCollectionGroupWithCollections(name string) error
+
 	// FindCollectionByNameOrId finds a single collection by its name (case insensitive) or id.s
 	FindCollectionByNameOrId(nameOrId string) (*Collection, error)
 

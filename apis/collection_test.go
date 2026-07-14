@@ -1,6 +1,8 @@
 package apis_test
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1768,6 +1770,40 @@ func TestCollectionGroups(t *testing.T) {
 				}
 				if collection.CollectionGroup != "" {
 					t.Fatalf("Expected empty collectionGroup, got %q", collection.CollectionGroup)
+				}
+			},
+		},
+		{
+			Name:   "delete group and child collections",
+			Method: http.MethodDelete,
+			URL:    "/api/collections/meta/groups/Content?deleteCollections=true",
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				parent := core.NewBaseCollection("group_parent")
+				parent.CollectionGroup = "Content"
+				if err := app.Save(parent); err != nil {
+					t.Fatal(err)
+				}
+
+				child := core.NewBaseCollection("group_child")
+				child.CollectionGroup = "Content"
+				child.Fields.Add(&core.RelationField{
+					Name:         "parent",
+					CollectionId: parent.Id,
+					MaxSelect:    1,
+				})
+				if err := app.Save(child); err != nil {
+					t.Fatal(err)
+				}
+			},
+			ExpectedStatus: http.StatusNoContent,
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				for _, name := range []string{"group_parent", "group_child"} {
+					if _, err := app.FindCollectionByNameOrId(name); !errors.Is(err, sql.ErrNoRows) {
+						t.Fatalf("Expected collection %q to be deleted, got %v", name, err)
+					}
 				}
 			},
 		},

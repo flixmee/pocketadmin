@@ -1135,6 +1135,84 @@ func (app *BaseApp) DeleteCollectionGroup(name string) error {
 	})
 }
 
+func (app *BaseApp) DeleteCollectionGroupWithCollections(name string) error {
+	name = normalizeCollectionGroupName(name)
+	if name == "" {
+		return nil
+	}
+
+	err := app.RunInTransaction(func(txApp App) error {
+		collections := []*Collection{}
+		if err := txApp.CollectionQuery().
+			AndWhere(dbx.HashExp{"collectionGroup": name}).
+			All(&collections); err != nil {
+			return err
+		}
+
+		groupCollectionIds := make(map[string]struct{}, len(collections))
+		groupCollectionIdList := make([]string, 0, len(collections))
+		for _, collection := range collections {
+			if collection.System {
+				return fmt.Errorf("[%s] system collections cannot be deleted", collection.Name)
+			}
+			groupCollectionIds[collection.Id] = struct{}{}
+			groupCollectionIdList = append(groupCollectionIdList, collection.Id)
+		}
+
+		// Internal references are safe because all group children are removed in this transaction,
+		// but references from outside the group remain blocking like an individual deletion.
+		for _, collection := range collections {
+			references, err := txApp.FindCollectionReferences(collection, collection.Id)
+			if err != nil {
+				return fmt.Errorf("[%s] failed to check collection references: %w", collection.Name, err)
+			}
+
+			for referencingCollection := range references {
+				if _, ok := groupCollectionIds[referencingCollection.Id]; !ok {
+					return fmt.Errorf(
+						"[%s] failed to delete due to existing relation reference in collection %s outside group %s",
+						collection.Name,
+						referencingCollection.Name,
+						name,
+					)
+				}
+			}
+		}
+
+		// Disable the per-collection checks only after external references have been ruled out.
+		// Delete views first, then validate any surviving external views after all tables are gone.
+		for pass := 0; pass < 2; pass++ {
+			for _, collection := range collections {
+				if (pass == 0) != collection.IsView() {
+					continue
+				}
+				collection.IntegrityChecks(false)
+				if err := txApp.Delete(collection); err != nil {
+					return err
+				}
+			}
+		}
+		if err := resaveViewsWithChangedFields(txApp, groupCollectionIdList...); err != nil {
+			return fmt.Errorf("failed to delete collection group %q due to an external view dependency: %w", name, err)
+		}
+
+		_, err := txApp.DB().
+			Delete(collectionGroupsTable, dbx.HashExp{"name": name}).
+			Execute()
+
+		return err
+	})
+
+	// Collection delete hooks reload the cache while the outer transaction is still active.
+	// Reload once more after the final commit or rollback to keep the shared cache consistent.
+	reloadErr := app.ReloadCachedCollections()
+	if err != nil {
+		return err
+	}
+
+	return reloadErr
+}
+
 func (c *Collection) initIdField() {
 	field, _ := c.Fields.GetByName(FieldNameId).(*TextField)
 	if field == nil {

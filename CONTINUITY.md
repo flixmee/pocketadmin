@@ -1,102 +1,164 @@
 Goal (incl. success criteria):
 
-- Add `options` to the Questions JSON Schema preset.
-- Success: Questions preset generates a nested `options` array schema, schema-driven record input can render the nested option rows, docs mention the nested options behavior, and UI checks pass.
+- Review `PocketBase_Collection_Presets_Feature_Plan.md` and implement the feature phase by phase.
+- Immediate success target: add a built-in `jobs-career` preset with companies, jobs, job categories, applicants, resumes, applications, skills, and locations; preview/import and catalog tests must pass.
 
 Constraints/Assumptions:
 
-- Follow `AGENTS.md`.
+- Follow `AGENTS.md`; keep this ledger current.
 - Existing unrelated changes may be present; do not revert them.
-- When updating the UI, refer to `UI_DOCS.md`.
-- Never introduce native HTML `<select>` elements in the admin UI. Use `app.components.select`.
-- Avoid storing ephemeral presentation state on reactive `field`/`collection` objects when local/out-of-band state is enough.
-- In reactive list editors, avoid cloning/reassigning the whole array on each keystroke for row-local edits.
-- JSON schema field UI currently lives in `ui/src/fields/json/settings.js`, `ui/src/fields/json/schemaEditorModal.js`, and `ui/src/fields/json/schemaState.js`; collection save/change detection for schema state is normalized in `ui/src/collections/collectionUpsertModal.js`.
+- Build on the existing collection import mechanism and preserve export/import compatibility.
+- Keep tests close to owning packages; standard Go verification is `go test ./...`.
+- Read `UI_DOCS.md` before UI changes; use `app.components.select`, never native `<select>`.
+- The supplied feature plan is untracked; preserve it while making review decisions explicit.
 
 Key decisions:
 
-- Implement presets inside the existing JSON Schema editor modal rather than changing backend field payloads.
-- Presets are array-of-object schemas matching repeater use cases from `docs/Repeater-Field-Use-Cases.md`.
-- Applying a preset immediately loads formatted schema and parses it back into visual state when supported.
-- Keep the preset selector visible even for visually unsupported schemas so users can switch back to a supported preset.
-- Use the exact user-requested custom JSON Schema metadata key `present_name` at the root of preset-generated schemas.
+- Implement one verified phase at a time, starting with Phase 1.
+- Put immutable embedded preset definitions and resolution logic in `core/presets`; expose superuser-only routes from `apis`.
+- A prefix token such as `blog` resolves names as `blog_<name>`; empty means no prefix.
+- Phase 1 imports are create-only and refuse name or generated-ID collisions.
+- Resolve symbolic relations only after final names and deterministic collection IDs are generated.
+- Use the existing `App.ImportCollections(..., false)` transaction for Phase 1 schema import.
+- Include the complete preset selection/preview/import UI in Phase 1.
+- Keep sample data out of Phase 1; Phase 2 must define a transaction spanning schema and sample records.
+- Use the dedicated `/api/collection-presets` route family because the originally proposed nested paths conflict with existing collection-scoped Go route patterns.
+- Model `customers` as an auth collection; keep commerce child entities normalized with symbolic relations and no Phase 2 sample data yet.
+- Put all requested ecommerce collections in the `E-commerce` collection group and retain prefix compatibility.
+- Preset image fields use `media` references to the shared `_medias` collection; omit the file-only `maxSize` option while retaining MIME restrictions.
+- Collection-group DELETE keeps its existing ungroup behavior by default; `deleteCollections=true` opts into atomic child collection deletion.
+- Bulk group deletion permits internal and cyclic group references, but blocks external relation/view dependencies and rolls back the whole operation on failure.
+- The E-commerce preset collection is named `product_categories`; the product relation field remains `categories` and targets that collection.
+- Model `applicants` as the Jobs & Career auth collection; use `applications` as the job/applicant junction and `media` references for company logos and resume documents.
+- Put all eight Jobs & Career collections in the `Jobs & Career` collection group and keep sample data empty until Phase 2 transaction design is complete.
 
 State:
   - Done:
-    - Read `CONTINUITY.md`.
-    - Replaced prior task ledger state with the JSON Schema presets goal.
-    - Read `docs/Repeater-Field-Use-Cases.md`, `UI_DOCS.md`, and the JSON schema editor/settings/state files.
-    - Added JSON Schema repeater presets in `ui/src/fields/json/schemaEditorModal.js` for common use cases from the doc, including questions, addresses, contacts, education/work, order/invoice lines, image gallery, key/value metadata, tags, FAQ, and related cases.
-    - Added a shared `app.components.select` preset picker in the visual schema editor.
-    - Added preset application logic that updates raw schema and visual editor state.
-    - Kept the preset picker available when the current schema cannot be represented visually.
-    - Added small CSS for preset option summaries in `ui/src/css/recordFields.css`.
-    - Ran `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/css/recordFields.css` from `ui/`; exited 0 with existing dprint cache permission warning.
-    - Ran `npm run build` from `ui/`; passed with existing dprint cache permission warning and Vite chunk-size warnings.
-    - Reverted generated `ui/dist/index.html` asset-reference churn from the build.
-    - Ran `git diff --check -- ui/src/fields/json/schemaEditorModal.js ui/src/css/recordFields.css CONTINUITY.md ui/dist/index.html`; passed.
-    - Read current ledger and inspected the JSON Schema editor/CSS for the 60/40 layout update.
-    - Refactored the root type control into a helper and placed it beside Presets in a `.json-schema-toolbar` row.
-    - Added CSS using `3fr 2fr` columns for a 60/40 Presets/Root type split and mobile stacking under 600px.
-    - Ran `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/css/recordFields.css` from `ui/`; exited 0 with existing dprint cache permission warning.
-    - Ran `npm run build` from `ui/`; passed with existing dprint cache permission warning and Vite chunk-size warnings.
-    - Reverted generated `ui/dist/index.html` asset-reference churn from the build.
-    - Ran `git diff --check -- ui/src/fields/json/schemaEditorModal.js ui/src/css/recordFields.css CONTINUITY.md ui/dist/index.html`; passed.
-    - Read current ledger, `docs/json-field-api.md`, and checked preset/layout identifiers in `schemaEditorModal.js` and `recordFields.css`.
-    - Added an "Admin UI schema editor" section to `docs/json-field-api.md`.
-    - Documented Visual/Raw modes, the 60/40 Presets/Root type layout, mobile stacking, preset behavior, supported preset categories, and an API headers preset schema example.
-    - Clarified that presets are admin UI helpers only and saved collections still store a plain `jsonSchema` string.
-    - Ran `git diff --check -- docs/json-field-api.md CONTINUITY.md`; passed.
-    - Read current ledger, preset implementation, schema-driven JSON input parser, and current `docs/json-field-api.md`.
-    - Added root-level `present_name` to preset-generated schemas using the preset label as the value.
-    - Updated the visual schema editor to parse and preserve `present_name` when rebuilding supported schemas.
-    - Updated the schema-driven JSON record input parser to allow root-level `present_name`.
-    - Updated `docs/json-field-api.md` to document `present_name` and include it in the preset example.
-    - Ran `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/fields/json/input.js` from `ui/`; exited 0 with existing dprint cache permission warning.
-    - Ran `npm run build` from `ui/`; passed with existing dprint cache permission warning and Vite chunk-size warnings.
-    - Reverted generated `ui/dist/index.html` asset-reference churn from the build.
-    - Ran `git diff --check -- docs/json-field-api.md ui/src/fields/json/schemaEditorModal.js ui/src/fields/json/input.js CONTINUITY.md ui/dist/index.html`; passed.
-    - Read current ledger and inspected preset select state handling in `schemaEditorModal.js`.
-    - Added mapping from root `present_name` back to `selectedPreset`.
-    - Stopped clearing `selectedPreset` immediately after choosing a preset.
-    - Cleared `selectedPreset` only for empty schemas.
-    - Ran `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js` from `ui/`; exited 0 with existing dprint cache permission warning.
-    - Ran `npm run build` from `ui/`; passed with existing dprint cache permission warning and Vite chunk-size warnings.
-    - Reverted generated `ui/dist/index.html` asset-reference churn from the build.
-    - Read current ledger, Questions preset definition, JSON schema input parser, and `docs/json-field-api.md`.
-    - Added nested `options` to the Questions preset as an array of objects with required `label` and `value` string properties.
-    - Updated `createRepeaterPreset` so preset fields can use either a simple type string or a full property schema.
-    - Updated the JSON field schema-driven input parser to allow array properties and object array items.
-    - Updated `docs/json-field-api.md` to note that Questions includes nested `options`.
-    - Ran `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/fields/json/input.js` from `ui/`; exited 0 with existing dprint cache permission warning.
-    - Ran `npm run build` from `ui/`; passed with existing dprint cache permission warning and Vite chunk-size warnings.
-    - Reverted generated `ui/dist/index.html` asset-reference churn from the build.
+    - Read the prior continuity ledger and replaced its completed, unrelated JSON-schema-preset task state.
+    - Read the supplied collection presets feature plan.
+    - Confirmed the plan proposes symbolic collection references and reuse of collection import behavior.
+    - Read the complete feature plan (including its Phase 3, Phase 4, and acceptance criteria), `UI_DOCS.md`, collection import core/API code and tests, collection model/field validation, and the Collections UI entry points.
+    - Amended the plan with authentication, prefix, conflict, response, transaction, author relation, and concrete phase decisions.
+    - Found a Go router ambiguity between the proposed nested preview/import routes and existing collection-scoped routes; moved the reviewed API contract to `/api/collection-presets`.
+    - Added embedded `core/presets/blog.json` with Categories, Tags, Posts, internal relations, and an external author relation to `_superusers`.
+    - Added `core/presets/preset.go` for catalog validation, prefix normalization, deterministic ID generation, symbolic relation resolution, conflict detection, and side-effect-free previews.
+    - Added superuser-only list, preview, and import handlers in `apis/collection_preset.go` and registered the dedicated route family.
+    - Reused the existing `CollectionsImportRequestEvent` and transactional importer through a shared API helper.
+    - Added unit and API tests for catalog loading, prefixing, relation resolution, preview immutability, conflicts, successful import, and rollback.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./core/presets` passed.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./apis -run '^TestCollectionPreset' -count=1` passed.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./apis -run '^TestCollectionsImport$' -count=1` passed.
+    - A broad sandboxed `go test ./apis` reached an unrelated `httptest` listener restriction; it will be rerun with appropriate permissions during final verification.
+    - Added `ui/src/collections/collectionPresetImportModal.js` with shared-select preset choice, prefix preview, resolved collections/fields/relationships, conflict display, guarded import, collection reload/selection, and result toast.
+    - Added the Collections sidebar `From preset` entry point and registered the modal from `ui/src/main.js`.
+    - Added responsive preset modal and sidebar action styles in `ui/src/css/collectionModal.css`.
+    - Ran dprint for the touched UI files; it completed with the existing sandbox cache warning.
+    - Ran `npm run build` from `ui/`; it passed with existing chunk-size warnings.
+    - Restored generated `ui/dist/index.html` asset references after the verification build.
+    - Fixed stale preview race handling when the prefix changes during an in-flight preview request.
+    - Reran the UI production build after the race fix; it passed, and generated `ui/dist/index.html` churn was restored again.
+    - Ran full `go test ./...` with normal cache/listener access; it failed only in unrelated existing areas: `apis.TestRecordAuthWithOTPManualRateLimiterCheck` panics in automation delay-scheduler cleanup, and `plugins/migratecmd.TestAutomigrateCollectionDelete` has stale generated-ID expectations.
+    - Reproduced both unrelated full-suite failures individually, confirming they are not caused by preset packages/routes/UI.
+    - Reran focused preset/import API tests after full-suite verification; passed.
+    - Removed the untracked `core/pb_base_app_test_data_dir/data.db` generated by the full test run.
+    - Diagnosed the reported Shablon runtime error: the modal's outer reactive callback returned an array containing nested reactive callback functions, which broke DOM replacement bookkeeping.
+    - Changed the loaded modal branch to return only concrete elements from the outer callback (`renderOptions()`, optional error element, and `renderPreview()`).
+    - Ran dprint and `npm run build` after the runtime fix; build passed with existing cache/chunk warnings.
+    - Restored generated `ui/dist/index.html` asset-reference churn after the build.
+    - Checked the in-app browser for a runnable local session; only an unauthenticated login page was available, so the authenticated preset modal could not be exercised there.
+    - Added embedded `core/presets/ecommerce.json` with the 13 requested collections in the `E-commerce` group.
+    - Modeled customers as auth; added normalized variants, images, addresses, cart items, and order items; resolved 21 symbolic relationships.
+    - Added E-commerce catalog, prefixed preview, deterministic auth/base ID, self-relation, coupon relation, full import, and collection-group assertions to preset tests.
+    - Extended API catalog assertions for the E-commerce preset.
+    - Added an E-commerce preset section to the reviewed feature plan.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./core/presets -count=1` passed, including importing all 13 collections.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./apis -run '^TestCollectionPreset' -count=1` passed.
+    - Reproduced the reported failure path in code: mounted inner reactive callbacks continue reading `data.preview.conflicts` after the prefix handler resets `data.preview` to `null`.
+    - Reworked `renderPreview()` to capture a stable preview snapshot and create concrete conflict, collection, relationship, and warning nodes without nested reactive readers.
+    - Ran dprint on `collectionPresetImportModal.js`; it passed with the existing sandbox cache warning.
+    - Ran `npm run build` from `ui/`; it passed with existing dprint cache and Vite chunk-size warnings.
+    - Restored generated `ui/dist/index.html` asset-reference churn after the build.
+    - Verified the original runtime path in the authenticated in-app browser: a loaded conflict preview was cleared by entering prefix `shop`, the neutral preview prompt rendered, and browser error logs remained empty.
+    - `git diff --check -- CONTINUITY.md ui/src/collections/collectionPresetImportModal.js ui/dist/index.html` passed.
+    - Replaced the always-visible selected preset description with the standard `ri-information-line` tooltip beside the Preset label.
+    - Kept tooltip text reactive to the selected preset and made the icon keyboard-focusable with `tabIndex: 0`.
+    - Ran `npm run build` after the tooltip update; it passed with the existing dprint cache and Vite chunk-size warnings.
+    - Restored generated `ui/dist/index.html` asset-reference churn after the tooltip build.
+    - Verified in the authenticated browser that the description is hidden by default, exposed through the info icon's tooltip description, keyboard-focusable, and produces no browser errors.
+    - Replaced the always-visible prefix naming example with a standard information tooltip beside the prefix label.
+    - Made the prefix tooltip icon keyboard-focusable and retained the example text verbatim.
+    - Ran `npm run build` after the prefix tooltip update; it passed with existing dprint cache and Vite chunk-size warnings.
+    - Restored generated `ui/dist/index.html` asset-reference churn after the build.
+    - Verified in the authenticated browser that the prefix helper is hidden by default, available from the tooltip icon, and produces no browser errors.
+    - Removed the large global danger alert from conflicting preset previews.
+    - Added warning borders and keyboard-focusable `Conflict` badges with detailed tooltips only to affected collection cards.
+    - Preserved `preview.canImport` as the import guard so any conflict continues to disable the Import preset action.
+    - Ran `npm run build` after the conflict presentation update; it passed with existing dprint cache and Vite chunk-size warnings.
+    - Restored generated `ui/dist/index.html` asset-reference churn after the build.
+    - Verified in the authenticated browser that the danger alert is absent, all three conflicting Blog cards are warned, Import remains disabled, and browser errors are empty.
+    - Changed Blog `posts.cover` and E-commerce `product_images.image` from `file` to `media`.
+    - Removed the obsolete file-only `maxSize` option from both media field definitions while retaining single-selection, required, and MIME settings.
+    - Added preview assertions that both fields use `core.FieldTypeMedia` and contain no `maxSize` property.
+    - Added import assertions that Blog cover and E-commerce product image fields materialize as `*core.MediaField` with the expected settings.
+    - Confirmed no `"type": "file"` entries remain under `core/presets`.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./core/presets -count=1` passed.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./apis -run '^TestCollectionPreset' -count=1` passed.
+    - Added `App.DeleteCollectionGroupWithCollections` and the `deleteCollections=true` group DELETE mode.
+    - Implemented transactional child deletion with external-reference preflight, internal/cyclic reference support, view-dependency validation, and post-transaction cache reload.
+    - Preserved the existing group DELETE behavior for keeping children as ungrouped collections.
+    - Replaced the sidebar's one-action confirmation with explicit `Keep collections` and `Delete all N` choices plus a permanent-deletion warning.
+    - Updated local collection, group, pinned, and active-collection state after either successful choice; API errors keep the dialog open.
+    - Added core coverage for related/cyclic group-child deletion and external-reference rollback.
+    - Added API coverage for deleting a group together with related child collections.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./core -run '^(TestRenameAndDeleteCollectionGroup|TestDeleteCollectionGroupWithCollections)$' -count=1` passed.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./apis -run '^TestCollectionGroups$' -count=1` passed.
+    - Ran `npm run build`; it passed with existing dprint cache and Vite chunk-size warnings, then restored generated `ui/dist/index.html` asset churn.
+    - Verified the live Blog removal dialog shows the correct count and both choices without executing a destructive action; browser errors were empty.
+    - Renamed the E-commerce preset collection `categories` to `product_categories` without changing Blog.
+    - Updated the product-category self relation and `products.categories` symbolic relation to `$collection.product_categories`.
+    - Updated prefixed expectations and deterministic relation IDs to `shop_product_categories`.
+    - Updated the E-commerce catalog API assertion and reviewed feature-plan terminology.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./core/presets -count=1` passed, including full E-commerce preview/import.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./apis -run '^TestCollectionPreset' -count=1` passed.
+    - Added embedded `core/presets/jobs-career.json` with companies, jobs, job categories, applicants, resumes, applications, skills, and locations.
+    - Modeled applicants as auth; resolved 12 symbolic internal relationships including job-category self-reference and applicant/job/resume application links.
+    - Used shared media references for company logos and resume documents; no legacy `file` field types were introduced.
+    - Added Jobs & Career catalog, prefixed preview, deterministic auth/base ID, relation, media, full import, and collection-group assertions.
+    - Extended API catalog and preview coverage and documented the preset in the reviewed feature plan.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./core/presets -count=1` passed, including full Jobs & Career import.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./apis -run '^TestCollectionPreset' -count=1` passed.
   - Now:
-    - Ready to run final checks and report the Questions `options` update.
+    - Jobs & Career preset request is complete and verified.
   - Next:
-    - None.
+    - Restart the running Go server so the newly embedded preset appears in the existing preset picker.
 
 Open questions (UNCONFIRMED if needed):
 
-- Whether future nested repeater presets should expand the visual editor beyond root repeated objects is UNCONFIRMED; current work adds record input parser support for the Questions `options` nested array but leaves visual editor round-tripping conservative.
-- Whether the intended key was `preset_name` instead of exact `present_name` is UNCONFIRMED; implemented exact user-requested key `present_name`.
+- Whether Phase 2 schema and sample insertion can share the existing transaction cleanly is UNCONFIRMED and must be audited before Phase 2 implementation.
+- Remote community preset transport/signing policy remains UNCONFIRMED for Phase 3.
+- Existing unrelated failures in `apis.TestRecordAuthWithOTPManualRateLimiterCheck` and `plugins/migratecmd.TestAutomigrateCollectionDelete` remain unresolved and out of scope.
+- Ecommerce sample records remain out of scope for this requested preset addition; `sampleData` stays empty.
+- Jobs & Career sample records remain out of scope for this requested preset addition; `sampleData` stays empty.
 
 Working set (files/ids/commands):
 
 - `CONTINUITY.md`
-- `docs/json-field-api.md`
-- `docs/Repeater-Field-Use-Cases.md`
+- `PocketBase_Collection_Presets_Feature_Plan.md`
 - `UI_DOCS.md`
-- `ui/src/fields/json/settings.js`
-- `ui/src/fields/json/input.js`
-- `ui/src/fields/json/schemaEditorModal.js`
-- `ui/src/fields/json/schemaState.js`
-- `ui/src/collections/collectionUpsertModal.js`
-- `ui/src/css/recordFields.css`
-- `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/css/recordFields.css`
-- `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js src/fields/json/input.js`
-- `./node_modules/.bin/dprint fmt src/fields/json/schemaEditorModal.js`
+- `core/collection_import.go`
+- `apis/collection.go`
+- `apis/collection_import.go`
+- `core/presets/`
+- `core/presets/blog.json`
+- `core/presets/ecommerce.json`
+- `core/presets/jobs-career.json`
+- `core/presets/preset.go`
+- `core/presets/preset_test.go`
+- `apis/collection_preset.go`
+- `apis/collection_preset_test.go`
+- `ui/src/collections/collectionPresetImportModal.js`
+- `ui/src/collections/collectionsSidebar.js`
+- `ui/src/main.js`
+- `ui/src/css/collectionModal.css`
 - `npm run build` from `ui/`
-- `git diff --check -- ui/src/fields/json/schemaEditorModal.js ui/src/css/recordFields.css CONTINUITY.md ui/dist/index.html`
-- `git diff --check -- docs/json-field-api.md CONTINUITY.md`
-- `git diff --check -- docs/json-field-api.md ui/src/fields/json/schemaEditorModal.js ui/src/fields/json/input.js CONTINUITY.md ui/dist/index.html`
+- `go test ./...`

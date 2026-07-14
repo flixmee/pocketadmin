@@ -1,0 +1,506 @@
+{
+  "id": "jobs-career",
+  "name": "Jobs & Career",
+  "version": "1.0.0",
+  "description": "A normalized recruitment schema for companies, job listings, applicants, resumes, applications, skills, and locations.",
+  "collections": [
+    {
+      "name": "companies",
+      "type": "base",
+      "collectionGroup": "Jobs & Career",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 240
+        },
+        {
+          "name": "slug",
+          "type": "slug",
+          "required": true,
+          "attachedField": "name",
+          "max": 240
+        },
+        {
+          "name": "description",
+          "type": "editor",
+          "convertURLs": false
+        },
+        {
+          "name": "website",
+          "type": "url"
+        },
+        {
+          "name": "logo",
+          "type": "media",
+          "maxSelect": 1,
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/svg+xml"
+          ]
+        },
+        {
+          "name": "industry",
+          "type": "text",
+          "max": 160
+        },
+        {
+          "name": "location",
+          "type": "relation",
+          "collectionRef": "$collection.locations",
+          "maxSelect": 1
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "jobs",
+      "type": "base",
+      "collectionGroup": "Jobs & Career",
+      "fields": [
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 300
+        },
+        {
+          "name": "slug",
+          "type": "slug",
+          "required": true,
+          "attachedField": "title",
+          "max": 300
+        },
+        {
+          "name": "company",
+          "type": "relation",
+          "collectionRef": "$collection.companies",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "category",
+          "type": "relation",
+          "collectionRef": "$collection.job_categories",
+          "maxSelect": 1
+        },
+        {
+          "name": "location",
+          "type": "relation",
+          "collectionRef": "$collection.locations",
+          "maxSelect": 1
+        },
+        {
+          "name": "skills",
+          "type": "relation",
+          "collectionRef": "$collection.skills",
+          "maxSelect": 50
+        },
+        {
+          "name": "employmentType",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "full_time",
+            "part_time",
+            "contract",
+            "temporary",
+            "internship"
+          ]
+        },
+        {
+          "name": "workplaceType",
+          "type": "select",
+          "maxSelect": 1,
+          "values": [
+            "onsite",
+            "hybrid",
+            "remote"
+          ]
+        },
+        {
+          "name": "description",
+          "type": "editor",
+          "required": true,
+          "convertURLs": false
+        },
+        {
+          "name": "requirements",
+          "type": "editor",
+          "convertURLs": false
+        },
+        {
+          "name": "salaryMin",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "salaryMax",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "currency",
+          "type": "text",
+          "min": 3,
+          "max": 3
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "draft",
+            "published",
+            "paused",
+            "closed"
+          ]
+        },
+        {
+          "name": "publishedAt",
+          "type": "date"
+        },
+        {
+          "name": "expiresAt",
+          "type": "date"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "job_categories",
+      "type": "base",
+      "collectionGroup": "Jobs & Career",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 200
+        },
+        {
+          "name": "slug",
+          "type": "slug",
+          "required": true,
+          "attachedField": "name",
+          "max": 200
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "max": 1000
+        },
+        {
+          "name": "parent",
+          "type": "relation",
+          "collectionRef": "$collection.job_categories",
+          "maxSelect": 1
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "applicants",
+      "type": "auth",
+      "collectionGroup": "Jobs & Career",
+      "fields": [
+        {
+          "name": "firstName",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 120
+        },
+        {
+          "name": "lastName",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 120
+        },
+        {
+          "name": "headline",
+          "type": "text",
+          "max": 240
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "max": 40
+        },
+        {
+          "name": "portfolio",
+          "type": "url"
+        },
+        {
+          "name": "location",
+          "type": "relation",
+          "collectionRef": "$collection.locations",
+          "maxSelect": 1
+        },
+        {
+          "name": "skills",
+          "type": "relation",
+          "collectionRef": "$collection.skills",
+          "maxSelect": 100
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "resumes",
+      "type": "base",
+      "collectionGroup": "Jobs & Career",
+      "fields": [
+        {
+          "name": "applicant",
+          "type": "relation",
+          "collectionRef": "$collection.applicants",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 240
+        },
+        {
+          "name": "document",
+          "type": "media",
+          "required": true,
+          "maxSelect": 1,
+          "mimeTypes": [
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          ]
+        },
+        {
+          "name": "summary",
+          "type": "editor",
+          "convertURLs": false
+        },
+        {
+          "name": "isPrimary",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "applications",
+      "type": "base",
+      "collectionGroup": "Jobs & Career",
+      "fields": [
+        {
+          "name": "job",
+          "type": "relation",
+          "collectionRef": "$collection.jobs",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "applicant",
+          "type": "relation",
+          "collectionRef": "$collection.applicants",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "resume",
+          "type": "relation",
+          "collectionRef": "$collection.resumes",
+          "maxSelect": 1
+        },
+        {
+          "name": "coverLetter",
+          "type": "editor",
+          "convertURLs": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "submitted",
+            "screening",
+            "interview",
+            "offer",
+            "hired",
+            "rejected",
+            "withdrawn"
+          ]
+        },
+        {
+          "name": "appliedAt",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "notes",
+          "type": "editor",
+          "convertURLs": false
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "skills",
+      "type": "base",
+      "collectionGroup": "Jobs & Career",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 160
+        },
+        {
+          "name": "slug",
+          "type": "slug",
+          "required": true,
+          "attachedField": "name",
+          "max": 160
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "max": 1000
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "locations",
+      "type": "base",
+      "collectionGroup": "Jobs & Career",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 240
+        },
+        {
+          "name": "city",
+          "type": "text",
+          "max": 160
+        },
+        {
+          "name": "region",
+          "type": "text",
+          "max": 160
+        },
+        {
+          "name": "country",
+          "type": "text",
+          "max": 160
+        },
+        {
+          "name": "countryCode",
+          "type": "text",
+          "min": 2,
+          "max": 2
+        },
+        {
+          "name": "remote",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    }
+  ],
+  "sampleData": []
+}
