@@ -11,6 +11,20 @@
     }
 }
 
+.collection-i18n-options-tab-content {
+    .collection-options-accordion {
+        --contentPadding: var(--smSpacing);
+    }
+    .collection-option-summary-toggle {
+        width: auto;
+        flex-shrink: 0;
+        background: transparent;
+    }
+    .collection-option-field-list .field-list-content {
+        max-height: 320px;
+    }
+}
+
 .collection-create-actions {
     display: grid;
     gap: 8px;

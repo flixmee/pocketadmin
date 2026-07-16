@@ -12,7 +12,8 @@ var _ optionsValidator = (*collectionBaseOptions)(nil)
 
 // collectionBaseOptions defines the options for the "base" type collection.
 type collectionBaseOptions struct {
-	I18n I18nCollectionOptions `form:"i18n" json:"i18n"`
+	I18n        I18nCollectionOptions `form:"i18n" json:"i18n"`
+	TableFields []string              `form:"tableFields" json:"tableFields"`
 }
 
 func (o *collectionBaseOptions) validate(cv *collectionValidator) error {

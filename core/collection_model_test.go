@@ -1736,3 +1736,28 @@ func TestCollectionSaveIndexesTableNameNormalization(t *testing.T) {
 		}
 	}
 }
+
+func TestBaseCollectionTableFieldsPersistence(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection := core.NewBaseCollection("table_fields_test")
+	field := &core.TextField{Id: "table_title", Name: "title"}
+	collection.Fields.Add(field)
+	collection.TableFields = []string{field.Id}
+
+	if err := app.Save(collection); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := app.FindCollectionByNameOrId(collection.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(reloaded.TableFields, []string{field.Id}) {
+		t.Fatalf("Expected table fields %v, got %v", []string{field.Id}, reloaded.TableFields)
+	}
+}

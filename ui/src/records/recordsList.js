@@ -253,6 +253,10 @@ window.app.components.recordsList = function(propsArg = {}) {
     }
 
     function isFieldColumnHidden(field) {
+        if (Array.isArray(props.collection?.tableFields)) {
+            return !field.primaryKey && !props.collection.tableFields.includes(field.id);
+        }
+
         if (typeof data.columnsPreferences[field.id] != "undefined") {
             return !data.columnsPreferences[field.id];
         }
@@ -769,6 +773,10 @@ function columnsDropdown(props, data) {
                                 className: "switch sm",
                                 id: () => uniqueId + field.name,
                                 checked: () => {
+                                    if (Array.isArray(props.collection?.tableFields)) {
+                                        return props.collection.tableFields.includes(field.id);
+                                    }
+
                                     if (typeof data.columnsPreferences[field.id] != "undefined") {
                                         return !!data.columnsPreferences[field.id];
                                     }
@@ -792,7 +800,7 @@ function columnsDropdown(props, data) {
 
     return t.button(
         {
-            hidden: () => props.collection?.fields.length <= 1,
+            hidden: () => props.collection?.fields.length <= 1 || Array.isArray(props.collection?.tableFields),
             type: "button",
             title: "Toggle columns",
             className: "btn sm secondary transparent circle",

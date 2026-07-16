@@ -642,7 +642,7 @@ func (m *Collection) DBExport(app App) (map[string]any, error) {
 			return nil, err
 		}
 	default:
-		if !m.I18n.Enabled {
+		if !m.I18n.Enabled && m.TableFields == nil {
 			break
 		}
 		if raw, err := types.ParseJSONRaw(m.collectionBaseOptions); err == nil {
