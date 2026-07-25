@@ -14,8 +14,8 @@ func TestList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 3 {
-		t.Fatalf("expected 3 presets, got %d", len(items))
+	if len(items) != 4 {
+		t.Fatalf("expected 4 presets, got %d", len(items))
 	}
 	if items[0].ID != "blog" || items[0].CollectionCount != 3 {
 		t.Fatalf("unexpected Blog summary: %#v", items[0])
@@ -34,6 +34,15 @@ func TestList(t *testing.T) {
 	}
 	if items[2].Collections[0] != "companies" || items[2].Collections[7] != "locations" {
 		t.Fatalf("unexpected Jobs & Career collections: %#v", items[2].Collections)
+	}
+	if items[3].ID != "task-management" || items[3].Version != "1.1.0" || items[3].CollectionCount != 11 {
+		t.Fatalf("unexpected Task Management summary: %#v", items[3])
+	}
+	if items[3].Collections[0] != "workspaces" ||
+		items[3].Collections[3] != "custom_fields" ||
+		items[3].Collections[8] != "task_custom_field_values" ||
+		items[3].Collections[10] != "task_attachments" {
+		t.Fatalf("unexpected Task Management collections: %#v", items[3].Collections)
 	}
 }
 
@@ -350,6 +359,163 @@ func TestBuildJobsCareerPreviewAndImport(t *testing.T) {
 	documentField, _ := resumes.Fields.GetByName("document").(*core.MediaField)
 	if documentField == nil || !documentField.Required || documentField.MaxSelect != 1 || len(documentField.MimeTypes) != 3 {
 		t.Fatalf("unexpected imported resume document media field: %#v", documentField)
+	}
+}
+
+func TestBuildTaskManagementPreviewAndImport(t *testing.T) {
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Cleanup()
+
+	preview, err := collectionpresets.BuildPreview(app, "task-management", "work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !preview.CanImport || len(preview.Conflicts) != 0 {
+		t.Fatalf("expected importable task-management preview, got conflicts: %#v", preview.Conflicts)
+	}
+	if len(preview.Collections) != 11 {
+		t.Fatalf("expected 11 task-management collections, got %d", len(preview.Collections))
+	}
+	if len(preview.Relationships) != 23 {
+		t.Fatalf("expected 23 task-management relationships, got %#v", preview.Relationships)
+	}
+
+	wantNames := []string{
+		"work_workspaces",
+		"work_members",
+		"work_boards",
+		"work_custom_fields",
+		"work_task_groups",
+		"work_task_statuses",
+		"work_task_tags",
+		"work_tasks",
+		"work_task_custom_field_values",
+		"work_task_updates",
+		"work_task_attachments",
+	}
+	for i, name := range wantNames {
+		if preview.Collections[i]["name"] != name {
+			t.Errorf("collection %d: expected name %q, got %q", i, name, preview.Collections[i]["name"])
+		}
+	}
+	if preview.Collections[1]["type"] != core.CollectionTypeAuth {
+		t.Fatalf("expected members to be an auth collection: %#v", preview.Collections[1])
+	}
+	if preview.Collections[1]["id"] != core.NewAuthCollection("work_members").Id {
+		t.Fatalf("unexpected members collection id: %v", preview.Collections[1]["id"])
+	}
+	for _, collection := range preview.Collections {
+		for _, rule := range []string{"listRule", "viewRule", "createRule", "updateRule", "deleteRule"} {
+			if collection[rule] != `@request.auth.id != ""` {
+				t.Fatalf("collection %q: expected authenticated %s, got %#v", collection["name"], rule, collection[rule])
+			}
+		}
+	}
+
+	workspaceOwners := findField(t, preview.Collections[0], "owners")
+	if workspaceOwners["collectionId"] != core.NewAuthCollection("work_members").Id {
+		t.Fatalf("unexpected workspace owners relation: %#v", workspaceOwners)
+	}
+	customFieldBoard := findField(t, preview.Collections[3], "board")
+	if customFieldBoard["collectionId"] != core.NewBaseCollection("work_boards").Id {
+		t.Fatalf("unexpected custom field board relation: %#v", customFieldBoard)
+	}
+	customFieldKey := findField(t, preview.Collections[3], "key")
+	if customFieldKey["pattern"] != "^[a-z0-9_]+$" {
+		t.Fatalf("unexpected custom field key: %#v", customFieldKey)
+	}
+	taskParent := findField(t, preview.Collections[7], "parent")
+	if taskParent["collectionId"] != core.NewBaseCollection("work_tasks").Id {
+		t.Fatalf("unexpected task parent relation: %#v", taskParent)
+	}
+	taskStatus := findField(t, preview.Collections[7], "status")
+	if taskStatus["collectionId"] != core.NewBaseCollection("work_task_statuses").Id {
+		t.Fatalf("unexpected task status relation: %#v", taskStatus)
+	}
+	taskBudget := findField(t, preview.Collections[7], "budget")
+	if taskBudget["type"] != core.FieldTypeNumber {
+		t.Fatalf("expected task budget to use a number field: %#v", taskBudget)
+	}
+	customValueTask := findField(t, preview.Collections[8], "task")
+	if customValueTask["collectionId"] != core.NewBaseCollection("work_tasks").Id {
+		t.Fatalf("unexpected custom field value task relation: %#v", customValueTask)
+	}
+	customValueField := findField(t, preview.Collections[8], "field")
+	if customValueField["collectionId"] != core.NewBaseCollection("work_custom_fields").Id {
+		t.Fatalf("unexpected custom field value field relation: %#v", customValueField)
+	}
+	attachmentFile := findField(t, preview.Collections[10], "file")
+	if attachmentFile["type"] != core.FieldTypeMedia {
+		t.Fatalf("expected task attachment to use a media field: %#v", attachmentFile)
+	}
+	if _, exists := attachmentFile["maxSize"]; exists {
+		t.Fatalf("media field must not contain file-only maxSize: %#v", attachmentFile)
+	}
+
+	if err := app.ImportCollections(preview.Collections, false); err != nil {
+		t.Fatalf("import task-management preset: %v", err)
+	}
+	for _, name := range wantNames {
+		collection, err := app.FindCollectionByNameOrId(name)
+		if err != nil {
+			t.Fatalf("find imported collection %q: %v", name, err)
+		}
+		if collection.CollectionGroup != "Task Management" {
+			t.Errorf("collection %q: expected Task Management group, got %q", name, collection.CollectionGroup)
+		}
+		for ruleName, rule := range map[string]*string{
+			"listRule":   collection.ListRule,
+			"viewRule":   collection.ViewRule,
+			"createRule": collection.CreateRule,
+			"updateRule": collection.UpdateRule,
+			"deleteRule": collection.DeleteRule,
+		} {
+			if rule == nil || *rule != `@request.auth.id != ""` {
+				t.Errorf("collection %q: unexpected %s: %#v", name, ruleName, rule)
+			}
+		}
+	}
+
+	tasks, err := app.FindCollectionByNameOrId("work_tasks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	members, err := app.FindCollectionByNameOrId("work_members")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignees, _ := tasks.Fields.GetByName("assignees").(*core.RelationField)
+	if assignees == nil || assignees.CollectionId != members.Id || assignees.MaxSelect != 50 {
+		t.Fatalf("unexpected imported task assignees relation: %#v", assignees)
+	}
+	attachments, err := app.FindCollectionByNameOrId("work_task_attachments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileField, _ := attachments.Fields.GetByName("file").(*core.MediaField)
+	if fileField == nil || !fileField.Required || fileField.MaxSelect != 1 || len(fileField.MimeTypes) != 11 {
+		t.Fatalf("unexpected imported task attachment media field: %#v", fileField)
+	}
+	customFields, err := app.FindCollectionByNameOrId("work_custom_fields")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(customFields.Indexes) != 1 {
+		t.Fatalf("expected custom fields unique index, got %#v", customFields.Indexes)
+	}
+	customValues, err := app.FindCollectionByNameOrId("work_task_custom_field_values")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(customValues.Indexes) != 1 {
+		t.Fatalf("expected task custom field values unique index, got %#v", customValues.Indexes)
+	}
+	valueField, _ := customValues.Fields.GetByName("field").(*core.RelationField)
+	if valueField == nil || valueField.CollectionId != customFields.Id || !valueField.CascadeDelete {
+		t.Fatalf("unexpected imported custom field value relation: %#v", valueField)
 	}
 }
 

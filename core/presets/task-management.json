@@ -1,0 +1,742 @@
+{
+  "id": "task-management",
+  "name": "Task Management",
+  "version": "1.1.0",
+  "description": "A Monday.com-style workspace for boards, groups, tasks, assignees, custom statuses and fields, budgets, timelines, updates, and attachments.",
+  "collections": [
+    {
+      "name": "workspaces",
+      "type": "base",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 200
+        },
+        {
+          "name": "slug",
+          "type": "slug",
+          "required": true,
+          "attachedField": "name",
+          "max": 200
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "max": 1000
+        },
+        {
+          "name": "owners",
+          "type": "relation",
+          "collectionRef": "$collection.members",
+          "required": true,
+          "maxSelect": 20
+        },
+        {
+          "name": "members",
+          "type": "relation",
+          "collectionRef": "$collection.members",
+          "maxSelect": 500
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "members",
+      "type": "auth",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "displayName",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 160
+        },
+        {
+          "name": "avatar",
+          "type": "media",
+          "maxSelect": 1,
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif"
+          ]
+        },
+        {
+          "name": "jobTitle",
+          "type": "text",
+          "max": 160
+        },
+        {
+          "name": "timezone",
+          "type": "text",
+          "max": 100
+        },
+        {
+          "name": "active",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "boards",
+      "type": "base",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "workspace",
+          "type": "relation",
+          "collectionRef": "$collection.workspaces",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 240
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "max": 1000
+        },
+        {
+          "name": "visibility",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "main",
+            "private",
+            "shareable"
+          ]
+        },
+        {
+          "name": "owners",
+          "type": "relation",
+          "collectionRef": "$collection.members",
+          "required": true,
+          "maxSelect": 20
+        },
+        {
+          "name": "subscribers",
+          "type": "relation",
+          "collectionRef": "$collection.members",
+          "maxSelect": 500
+        },
+        {
+          "name": "archived",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "custom_fields",
+      "type": "base",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "board",
+          "type": "relation",
+          "collectionRef": "$collection.boards",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 100
+        },
+        {
+          "name": "key",
+          "type": "text",
+          "required": true,
+          "max": 100,
+          "pattern": "^[a-z0-9_]+$",
+          "help": "Định danh nội bộ, dùng để reference trong code (vd: story_points)"
+        },
+        {
+          "name": "field_type",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "text",
+            "number",
+            "checkbox",
+            "date",
+            "select",
+            "multi_select",
+            "url",
+            "email",
+            "user"
+          ]
+        },
+        {
+          "name": "options",
+          "type": "json"
+        },
+        {
+          "name": "required",
+          "type": "bool"
+        },
+        {
+          "name": "sort_order",
+          "type": "number",
+          "onlyInt": true
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX `idx_custom_fields_board_key` ON `custom_fields` (`board`, `key`)"
+      ]
+    },
+    {
+      "name": "task_groups",
+      "type": "base",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "board",
+          "type": "relation",
+          "collectionRef": "$collection.boards",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 200
+        },
+        {
+          "name": "color",
+          "type": "text",
+          "max": 20
+        },
+        {
+          "name": "position",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "collapsed",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "task_statuses",
+      "type": "base",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "board",
+          "type": "relation",
+          "collectionRef": "$collection.boards",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 100
+        },
+        {
+          "name": "color",
+          "type": "text",
+          "max": 20
+        },
+        {
+          "name": "category",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "not_started",
+            "working_on_it",
+            "stuck",
+            "done"
+          ]
+        },
+        {
+          "name": "position",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "isDone",
+          "type": "bool"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "task_tags",
+      "type": "base",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "workspace",
+          "type": "relation",
+          "collectionRef": "$collection.workspaces",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 100
+        },
+        {
+          "name": "color",
+          "type": "text",
+          "max": 20
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "tasks",
+      "type": "base",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "board",
+          "type": "relation",
+          "collectionRef": "$collection.boards",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "group",
+          "type": "relation",
+          "collectionRef": "$collection.task_groups",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "parent",
+          "type": "relation",
+          "collectionRef": "$collection.tasks",
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "max": 500
+        },
+        {
+          "name": "description",
+          "type": "editor",
+          "convertURLs": false
+        },
+        {
+          "name": "assignees",
+          "type": "relation",
+          "collectionRef": "$collection.members",
+          "maxSelect": 50
+        },
+        {
+          "name": "status",
+          "type": "relation",
+          "collectionRef": "$collection.task_statuses",
+          "maxSelect": 1
+        },
+        {
+          "name": "priority",
+          "type": "select",
+          "maxSelect": 1,
+          "values": [
+            "low",
+            "medium",
+            "high",
+            "urgent"
+          ]
+        },
+        {
+          "name": "tags",
+          "type": "relation",
+          "collectionRef": "$collection.task_tags",
+          "maxSelect": 50
+        },
+        {
+          "name": "budget",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "currency",
+          "type": "text",
+          "min": 3,
+          "max": 3
+        },
+        {
+          "name": "startDate",
+          "type": "date"
+        },
+        {
+          "name": "dueDate",
+          "type": "date"
+        },
+        {
+          "name": "completedAt",
+          "type": "date"
+        },
+        {
+          "name": "progress",
+          "type": "number",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "name": "estimatedHours",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "position",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "createdBy",
+          "type": "relation",
+          "collectionRef": "$collection.members",
+          "maxSelect": 1
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "task_custom_field_values",
+      "type": "base",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "task",
+          "type": "relation",
+          "collectionRef": "$collection.tasks",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "field",
+          "type": "relation",
+          "collectionRef": "$collection.custom_fields",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "value_text",
+          "type": "text",
+          "help": "Dùng cho field_type: text, url, email, select"
+        },
+        {
+          "name": "value_number",
+          "type": "number"
+        },
+        {
+          "name": "value_bool",
+          "type": "bool"
+        },
+        {
+          "name": "value_date",
+          "type": "date"
+        },
+        {
+          "name": "value_json",
+          "type": "json"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX `idx_task_custom_field_values_task_field` ON `task_custom_field_values` (`task`, `field`)"
+      ]
+    },
+    {
+      "name": "task_updates",
+      "type": "base",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "task",
+          "type": "relation",
+          "collectionRef": "$collection.tasks",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "author",
+          "type": "relation",
+          "collectionRef": "$collection.members",
+          "required": true,
+          "maxSelect": 1
+        },
+        {
+          "name": "body",
+          "type": "editor",
+          "required": true,
+          "presentable": true,
+          "convertURLs": false
+        },
+        {
+          "name": "kind",
+          "type": "select",
+          "required": true,
+          "maxSelect": 1,
+          "values": [
+            "update",
+            "note",
+            "status_change"
+          ]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "onCreate": true,
+          "onUpdate": true
+        }
+      ]
+    },
+    {
+      "name": "task_attachments",
+      "type": "base",
+      "collectionGroup": "Task Management",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\"",
+      "deleteRule": "@request.auth.id != \"\"",
+      "fields": [
+        {
+          "name": "task",
+          "type": "relation",
+          "collectionRef": "$collection.tasks",
+          "required": true,
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "update",
+          "type": "relation",
+          "collectionRef": "$collection.task_updates",
+          "maxSelect": 1,
+          "cascadeDelete": true
+        },
+        {
+          "name": "file",
+          "type": "media",
+          "required": true,
+          "presentable": true,
+          "maxSelect": 1,
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "text/plain",
+            "application/zip"
+          ]
+        },
+        {
+          "name": "caption",
+          "type": "text",
+          "max": 500
+        },
+        {
+          "name": "uploadedBy",
+          "type": "relation",
+          "collectionRef": "$collection.members",
+          "maxSelect": 1
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "onCreate": true
+        }
+      ]
+    }
+  ],
+  "sampleData": []
+}

@@ -314,6 +314,33 @@ empty until the transactional sample-data work in Phase 2.
 
 ------------------------------------------------------------------------
 
+# Task Management Preset
+
+Collections:
+
+-   Workspaces
+-   Members (auth collection)
+-   Boards
+-   Custom fields
+-   Task groups
+-   Task statuses
+-   Task tags
+-   Tasks
+-   Task custom field values
+-   Task updates
+-   Task attachments
+
+The preset follows a Monday.com-style board model. Tasks belong to a board and
+group, support parent/subtask relationships, multiple assignees, board-scoped
+custom statuses, tags, priority, budget and currency, start/due/completion dates,
+progress, estimated hours, ordering, and board-scoped custom fields. Typed custom
+field values are stored separately with one value per task and field. Updates
+provide the item activity thread, and attachments use shared media references.
+Every collection API rule requires an authenticated request. Sample data remains
+empty until the transactional sample-data work in Phase 2.
+
+------------------------------------------------------------------------
+
 # Testing
 
 ## Unit
