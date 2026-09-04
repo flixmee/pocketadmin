@@ -1,53 +1,44 @@
 Goal (incl. success criteria):
 
-- Update the built-in Task Management collection preset to follow the user-supplied exported schema.
-- Success means the preset accurately represents the supplied schema, every collection rule requires `@request.auth.id != ""`, focused JSON/preset tests pass, and the completed change is committed and pushed to the current branch.
+- Fix the reported build errors caused by incompatible ozzo-validation import paths.
+- Success means the codebase uses one validation module path and the affected packages build/tests pass as far as unrelated merge conflicts allow.
 
 Constraints/Assumptions:
 
-- Follow `AGENTS.md`; preserve unrelated user changes and keep this ledger current.
-- Reuse the existing embedded collection-preset mechanism; no UI change is expected because the picker reads the API catalog dynamically.
-- Preset imports remain create-only, use deterministic collection IDs, and do not include sample data in Phase 1.
-- Treat the supplied attachment as the source schema and adapt it to the repository's preset format rather than copying runtime-only/system export fields blindly.
-- Set `listRule`, `viewRule`, `createRule`, `updateRule`, and `deleteRule` to `@request.auth.id != ""` for every collection; auth-only rules will be assessed against the same request.
-- Standard verification is `go test ./...`; focused preset tests are required for this change.
+- Follow `AGENTS.md`; preserve unrelated user changes and unresolved conflicts.
+- The repository standard is `github.com/pocketbase/ozzo-validation/v4`, which is already used throughout the existing code and required by `go.mod`.
 
 Key decisions:
 
-- Use preset ID `task-management`, display name `Task Management`, and collection group `Task Management`.
-- Preserve shared `media` fields as the preset-format equivalent of the supplied legacy `file` fields.
-- Add board-scoped `custom_fields` and typed `task_custom_field_values`, including unique board/key and task/field indexes.
-- Apply the requested auth expression to the five collection CRUD/API rules; do not apply it to the members `authRule`, because that would prevent signed-out users from logging in.
-- Bump the Task Management preset version to `1.1.0`.
+- Replace all `github.com/go-ozzo/ozzo-validation/v4` imports in the new Go files with `github.com/pocketbase/ozzo-validation/v4`; remove the now-unused duplicate module requirement/checksums.
 
 State:
   - Done:
-    - Updated `task-management.json` from 9 to 11 collections and from 20 to 23 symbolic internal relationships.
-    - Confirmed collection names and all non-system field name/type pairs match the supplied schema, with intentional `file` to `media` adaptation.
-    - Set `listRule`, `viewRule`, `createRule`, `updateRule`, and `deleteRule` on all 11 collections to `@request.auth.id != ""`.
-    - Added the custom-field unique indexes and verified a prefixed real import normalizes and creates them.
-    - Updated core/API catalog, preview, relation, rule, index, and import assertions plus feature-plan documentation.
-    - JSON parsing, Go formatting, schema comparison, and `git diff --check` passed.
-    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./core/presets -count=1` passed.
-    - `GOCACHE=/tmp/pocketadmin-go-cache go test ./apis -run '^TestCollectionPreset' -count=1` passed.
-    - Full `go test ./...` was run outside the sandbox and still failed in unrelated existing tests: API SQL/OTP behavior and migratecmd generated snapshot IDs.
+    - Inspected both merge stages and the associated base options.
+    - Resolved `core/collection_model.go` by retaining `collectionBaseOptions` and applying `json.Deterministic(true)` to the merged value.
+    - Confirmed the file parses/formats cleanly, contains no conflict markers, and passes `git diff --check`.
+    - Staged `core/collection_model.go`, so Git now considers that file resolved.
+    - Found 19 Go files importing the incompatible upstream ozzo module while the rest of the repository uses the PocketBase fork.
+    - Replaced all 19 incompatible imports with `github.com/pocketbase/ozzo-validation/v4`.
+    - Removed the unused `github.com/go-ozzo/ozzo-validation/v4` requirement and checksums.
+    - Confirmed no incompatible imports remain and `git diff --check` passes.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go build ./core` passed.
+    - `GOCACHE=/tmp/pocketadmin-go-cache go build ./...` passed; Go emitted only a non-fatal module stat-cache permission warning outside the writable workspace.
   - Now:
-    - Completed and verified Task Management preset is ready for delivery on branch `presets`.
+    - Build fix is complete.
   - Next:
-    - Restart/rebuild any running server binary so the updated embedded preset is available.
+    - Resolve the separate test/UI merge conflicts before running the full test suite.
 
 Open questions (UNCONFIRMED if needed):
 
-- None currently blocking.
+- None.
 
 Working set (files/ids/commands):
 
 - `CONTINUITY.md`
-- `core/presets/task-management.json`
-- `core/presets/preset_test.go`
-- `apis/collection_preset_test.go`
-- `PocketBase_Collection_Presets_Feature_Plan.md`
-- `/Volumes/MacOS_WD/Users/hungtrancongvinh/hungtrancongvinh/.codex/attachments/1559c3eb-eaba-4405-a9c3-8e772f47c8b2/pasted-text.txt`
-- `GOCACHE=/tmp/pocketadmin-go-cache go test ./core/presets -count=1`
-- `GOCACHE=/tmp/pocketadmin-go-cache go test ./apis -run '^TestCollectionPreset' -count=1`
-- `GOCACHE=/tmp/pocketadmin-go-cache go test ./...`
+- `core/collection_model.go`
+- Go files currently importing `github.com/go-ozzo/ozzo-validation/v4`
+- `go.mod`
+- `go.sum`
+- `GOCACHE=/tmp/pocketadmin-go-cache go build ./core`
+- `GOCACHE=/tmp/pocketadmin-go-cache go build ./...`

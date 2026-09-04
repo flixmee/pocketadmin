@@ -21,7 +21,7 @@ import (
 	"github.com/dop251/goja_nodejs/console"
 	"github.com/dop251/goja_nodejs/process"
 	"github.com/dop251/goja_nodejs/require"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
+	validation "github.com/pocketbase/ozzo-validation/v4"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/tools/filesystem"

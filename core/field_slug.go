@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	validation "github.com/go-ozzo/ozzo-validation/v4"
+	validation "github.com/pocketbase/ozzo-validation/v4"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core/validators"
 	"github.com/pocketbase/pocketbase/tools/security"
