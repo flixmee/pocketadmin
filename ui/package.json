@@ -9,7 +9,7 @@
     "dependencies": {
         "leaflet": "^1.9.4",
         "monaco-editor": "0.53.0",
-        "pocketbase": "^0.27.0"
+        "pocketbase": "^0.28.0"
     },
     "devDependencies": {
         "dprint": "^0.52.0",

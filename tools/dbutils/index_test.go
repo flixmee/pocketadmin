@@ -2,7 +2,7 @@ package dbutils_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 	"testing"
@@ -18,6 +18,16 @@ func TestParseIndex(t *testing.T) {
 		// invalid
 		{
 			`invalid`,
+			dbutils.Index{},
+		},
+		// no names
+		{
+			`create index on ()`,
+			dbutils.Index{},
+		},
+		// invalid index name
+		{
+			`create index a.b.c on ()`,
 			dbutils.Index{},
 		},
 		// simple (multiple spaces between the table and columns list)
@@ -75,7 +85,7 @@ func TestParseIndex(t *testing.T) {
 
 			resultRaw, err := json.Marshal(result)
 			if err != nil {
-				t.Fatalf("Faild to marshalize parse result: %v", err)
+				t.Fatalf("Failed to marshalize parse result: %v", err)
 			}
 
 			expectedRaw, err := json.Marshal(s.expected)
