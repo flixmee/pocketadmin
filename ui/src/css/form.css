@@ -739,6 +739,7 @@ button {
         > textarea {
             /* Place on top of each other */
             grid-area: 1 / 1 / 2 / 2;
+            scrollbar-gutter: stable; /* prevents misalignments if only one of the element happen to have an active scrollbar */
         }
     }
 
@@ -1488,6 +1489,7 @@ button {
   }
   &.pre-wrap {
     .editor-content,
+    .code-editor-content,
     .highlight-overlay {
         display: block;
         width: 100%;
@@ -1515,7 +1517,7 @@ button {
         top: 0;
         pointer-events: none;
     }
-    .editor-content {
+    .code-editor-content {
         color: transparent;
         resize: none;
         caret-color: var(--surfaceTxtHintColor);
@@ -1533,7 +1535,7 @@ button {
         padding-bottom: 9px;
     }
     &.pre-wrap {
-        .editor-content,
+        .code-editor-content,
         .highlight-overlay {
             white-space: pre-wrap;
         }

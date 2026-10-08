@@ -1,6 +1,42 @@
-## v0.40.3 (WIP)
+## v0.40.5 (WIP)
 
-- Minor UI improvements (updated dark primary btn contrast).
+- Minor improvements for the JSVM migration error handling:
+    - Included the recovered panic stack trace of `routine.SafeWrap` in the returned error (max 2KB).
+    - Wrap the individual `up`/`down` JSVM migration arguments in `routine.SafeWrap` so that in case of panic we can still print the failed js migration filename.
+
+- Updated `modernc.org/sqlite` to 1.60.0 _(minor performance improvements for queries with large text fields and/or many params)_.
+
+- Other minor fixes _(godoc typos, normalized negative jsvm pool size, extra CORS wildcard subdomain checks to prevent misuse, support `Promise` as autocomplete suggestions return, autoexpand textarea scrollbar-gutter fix, etc.)_.
+
+
+## v0.40.4
+
+- Fixed migration deadlock if a logs db write happens to run while the migration is still executing ([#7836](https://github.com/pocketbase/pocketbase/issues/7836)).
+
+- `app.ResetBootstrapState()` was soft-deprecated in favour of `app.ClearBootstrap()`.
+    _Additionally a new `app.OnBootstrapClear()` hook was added to allow clearing custom allocated `OnBootstrap` resources in case the app uses a non-standard initialization (e.g. doesn't call `Start()` or intentionally skip the `OnTerminate` hook)._
+
+- Bumped `golang.org/x/*` dependencies.
+
+
+## v0.40.3
+
+- Write the status header for JSON responses only if the fields picker succeed or has acceptable fallback.
+    _This is to allow custom response status code for failed json writes._
+
+- Fixed collection index validator to allow expressions with parenthesis in the optional `WHERE` clause.
+
+- Clamped arccosine to [-1,1] in the Harvesine formula for the `geoDistance()` filter function to workaround edge case related to float rounding errors for some coordinates.
+
+- Prevent unnecessary body chunk read if we already known that we are beyond the allowed limit.
+
+- Updated the `json` field validator to check the `encoding/json/v2` semantics and allow duplicated keys on record marshalize for compliance with old jsonv1 data.
+
+- Fixed nested cascade delete of self-referenced relation records.
+
+- Minor UI fixes (updated dark primary btn color contrast, force reload the records list if the deleted record has self-referenced cascade relation field, etc.).
+
+- Changed JSVM `$app` variable definition from TS type to interface ([#7834](https://github.com/pocketbase/pocketbase/issues/7834)).
 
 - Bumped `golang.org/x/*` dependencies to silence security scanners ([#7829](https://github.com/pocketbase/pocketbase/discussions/7829)).
 
