@@ -1,10 +1,12 @@
 import { openAutomationDryRunModal } from "./automationDryRunModal";
 import { openAutomationRunsModal } from "./automationRunsList";
 import { buildAutomationStepsPayload, normalizeAutomationEditorSteps, stepEditor } from "./stepEditor";
+import { telegramWebhookRegistration } from "./telegramWebhookRegistration";
 
 const automationTriggerOptions = [
     { value: "manual", label: "Manual" },
     { value: "webhook", label: "Webhook" },
+    { value: "telegram.message", label: "On Telegram message" },
     { value: "schedule.cron", label: "Scheduled cron" },
     { value: "record.beforeCreate", label: "Before record create" },
     { value: "record.beforeUpdate", label: "Before record update" },
@@ -63,6 +65,9 @@ export function pageAutomationUpsert(route) {
         },
         get isWebhookTrigger() {
             return data.form.triggerType === "webhook";
+        },
+        get isTelegramTrigger() {
+            return data.form.triggerType === "telegram.message";
         },
         get canSave() {
             return !data.isSaving && !!data.form.name.trim() && data.form.steps.length > 0 && data.hasChanges;
@@ -584,6 +589,14 @@ export function pageAutomationUpsert(route) {
                                         app.components.copyButton(() => webhookURL(data.automation.id)),
                                     );
                                 },
+                            ),
+                            t.div(
+                                {
+                                    className: "field",
+                                    hidden: () => !data.isTelegramTrigger,
+                                },
+                                t.label({ className: "automation-field-label" }, "Telegram webhook endpoint"),
+                                telegramWebhookRegistration(),
                             ),
                             t.div(
                                 { className: "field" },

@@ -59,6 +59,7 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 		"collectionName": payload.CollectionName,
 		"request":        payload.Request,
 		"i18n":           payload.I18n,
+		"telegram":       payload.Telegram,
 	}
 
 	return &automationExecutionContext{
@@ -72,6 +73,7 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 			"trigger":                           triggerData,
 			"request":                           payload.Request,
 			"i18n":                              payload.I18n,
+			"telegram":                          payload.Telegram,
 			"record":                            payload.Record,
 			"recordOriginal":                    payload.RecordOriginal,
 			"automation":                        automationTemplateRecordData(automation.Record),
@@ -155,6 +157,9 @@ func executeAutomationStep(ctx *automationExecutionContext, step map[string]any)
 	case AutomationStepMailSend:
 		output, err := executeAutomationMailStep(ctx, step)
 		return automationStepStatusSuccess, output, err
+	case AutomationStepTelegramSend:
+		output, err := executeAutomationTelegramStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	case AutomationStepRecordCreate:
 		output, err := executeAutomationRecordCreateStep(ctx, step)
 		return automationStepStatusSuccess, output, err
@@ -213,6 +218,20 @@ func previewAutomationStep(ctx *automationExecutionContext, step map[string]any)
 				return nil, err
 			}
 			output[key] = rendered
+		}
+	case AutomationStepTelegramSend:
+		for _, key := range []string{"chatId", "text", "parseMode"} {
+			if _, ok := step[key]; !ok {
+				continue
+			}
+			rendered, err := renderAutomationTemplateValue(step[key], ctx.TemplateData)
+			if err != nil {
+				return nil, err
+			}
+			output[key] = rendered
+		}
+		if _, ok := step["disableWebPagePreview"]; ok {
+			output["disableWebPagePreview"] = automationTelegramBool(step["disableWebPagePreview"])
 		}
 	case AutomationStepRecordCreate, AutomationStepRecordUpdate, AutomationStepRecordDelete:
 		for _, key := range []string{"collection", "id", "filter", "data"} {

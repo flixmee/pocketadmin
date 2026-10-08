@@ -1,10 +1,12 @@
 import { openAutomationDryRunModal } from "./automationDryRunModal";
 import { openAutomationRunsModal } from "./automationRunsList";
 import { buildAutomationStepsPayload, normalizeAutomationEditorSteps, stepEditor } from "./stepEditor";
+import { telegramWebhookRegistration } from "./telegramWebhookRegistration";
 
 const automationTriggerOptions = [
     { value: "manual", label: "Manual" },
     { value: "webhook", label: "Webhook" },
+    { value: "telegram.message", label: "On Telegram message" },
     { value: "schedule.cron", label: "Scheduled cron" },
     { value: "record.beforeCreate", label: "Before record create" },
     { value: "record.beforeUpdate", label: "Before record update" },
@@ -68,6 +70,9 @@ function automationUpsertModal(automation, settings) {
         },
         get isWebhookTrigger() {
             return data.form.triggerType === "webhook";
+        },
+        get isTelegramTrigger() {
+            return data.form.triggerType === "telegram.message";
         },
         get canSave() {
             return !data.isSaving && !!data.form.name.trim() && data.form.steps.length > 0 && data.hasChanges;
@@ -364,6 +369,17 @@ function automationUpsertModal(automation, settings) {
                         ", and ",
                         t.code(null, "{{request.body.*}}"),
                         ". Add a webhook response step to return custom status, headers, or body.",
+                    ),
+                ),
+                t.div(
+                    {
+                        className: "col-lg-12",
+                        hidden: () => !data.isTelegramTrigger,
+                    },
+                    t.div(
+                        { className: "field" },
+                        t.label(null, "Telegram webhook endpoint"),
+                        telegramWebhookRegistration(),
                     ),
                 ),
                 t.div(

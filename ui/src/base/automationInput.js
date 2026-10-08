@@ -48,6 +48,20 @@ const automationMappingBaseGroups = [
         triggerTypes: ["webhook"],
     },
     {
+        title: "Telegram",
+        tokens: [
+            "{{telegram.updateId}}",
+            "{{telegram.message.text}}",
+            "{{telegram.text}}",
+            "{{telegram.chat.id}}",
+            "{{telegram.chat.username}}",
+            "{{telegram.from.id}}",
+            "{{telegram.from.username}}",
+            "{{telegram.update.*}}",
+        ],
+        triggerTypes: ["telegram.message"],
+    },
+    {
         title: "i18n",
         tokens: [
             "{{i18n.collectionId}}",
