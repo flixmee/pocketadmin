@@ -78,6 +78,11 @@ window.app.store = store({
             label: "Automations",
         },
         {
+            href: "#/support",
+            icon: "ri-question-answer-line",
+            label: "Support",
+        },
+        {
             href: "#/settings",
             icon: "ri-settings-3-line",
             label: "Settings",

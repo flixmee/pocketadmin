@@ -12,8 +12,30 @@ const providerBaseURLs = {
     custom: "",
 };
 
+const providerEmbeddingModels = {
+    openai: "text-embedding-3-small",
+    gemini: "gemini-embedding-2",
+    anthropic: "",
+    custom: "",
+};
+
 export function defaultAIBaseURL(provider) {
     return providerBaseURLs[provider] || "";
+}
+
+export function defaultAIEmbeddingModel(provider) {
+    return providerEmbeddingModels[provider] || "";
+}
+
+function embeddingModelPlaceholder(provider) {
+    if (provider == "anthropic") {
+        return "Not available";
+    }
+    if (provider == "custom") {
+        return "Enter the provider embedding model";
+    }
+
+    return defaultAIEmbeddingModel(provider);
 }
 
 function isProviderDefaultBaseURL(value) {
@@ -31,11 +53,16 @@ export function aiAccordion(pageData) {
     function selectProvider(provider) {
         const ai = pageData.formSettings.ai;
         const previousProvider = ai.provider || providerOptions[0].value;
+        const nextProvider = provider || providerOptions[0].value;
         const currentBaseURL = (ai.baseURL || "").trim();
         const previousDefaultBaseURL = defaultAIBaseURL(previousProvider);
 
-        ai.provider = provider || providerOptions[0].value;
+        ai.provider = nextProvider;
         local.modelOptions = [];
+
+        if (nextProvider != previousProvider) {
+            ai.embeddingModel = defaultAIEmbeddingModel(nextProvider);
+        }
 
         if (!currentBaseURL || currentBaseURL == previousDefaultBaseURL || isProviderDefaultBaseURL(currentBaseURL)) {
             ai.baseURL = defaultAIBaseURL(ai.provider);
@@ -225,7 +252,51 @@ export function aiAccordion(pageData) {
                 ),
             ),
             t.div(
-                { className: "col-lg-12" },
+                { className: "col-lg-4" },
+                t.div(
+                    { className: "field" },
+                    t.label(
+                        { htmlFor: "ai.embeddingModel" },
+                        t.span({ className: "txt" }, "Embedding model"),
+                        t.i({
+                            className: "ri-information-line link-faded",
+                            ariaDescription: app.attrs.tooltip(
+                                "Used by Support search. Anthropic requires a custom knowledge provider for embeddings.",
+                                "right",
+                            ),
+                        }),
+                    ),
+                    t.input({
+                        id: "ai.embeddingModel",
+                        name: "ai.embeddingModel",
+                        type: "text",
+                        maxlength: 255,
+                        disabled: () =>
+                            !pageData.formSettings.ai.enabled
+                            || pageData.formSettings.ai.provider == "anthropic",
+                        value: () => pageData.formSettings.ai.embeddingModel || "",
+                        placeholder: () => embeddingModelPlaceholder(pageData.formSettings.ai.provider),
+                        oninput: (e) => (pageData.formSettings.ai.embeddingModel = e.target.value),
+                    }),
+                    () => {
+                        const provider = pageData.formSettings.ai.provider;
+                        if (provider == "anthropic") {
+                            return t.small(
+                                { className: "txt-hint" },
+                                "Anthropic doesn't provide an embedding API. Support search requires a custom knowledge provider.",
+                            );
+                        }
+                        if (provider == "custom") {
+                            return t.small(
+                                { className: "txt-hint" },
+                                "Enter the embedding model exposed by the custom OpenAI-compatible endpoint.",
+                            );
+                        }
+                    },
+                ),
+            ),
+            t.div(
+                { className: "col-lg-8" },
                 t.div(
                     { className: "field" },
                     t.label(
@@ -249,6 +320,93 @@ export function aiAccordion(pageData) {
                             local.modelOptions = [];
                         },
                     }),
+                ),
+            ),
+            t.div(
+                { className: "col-lg-12 m-t-sm" },
+                t.h6(null, "Knowledge retrieval cache"),
+                t.small(
+                    { className: "txt-hint" },
+                    "Caches recently retrieved Support chunks. Environment variables can override these values.",
+                ),
+            ),
+            t.div(
+                { className: "col-lg-4" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: "ai.knowledgeCacheTTL" }, "Cache TTL (minutes)"),
+                    t.input({
+                        id: "ai.knowledgeCacheTTL",
+                        name: "ai.knowledgeCacheTTL",
+                        type: "number",
+                        min: 1,
+                        max: 1440,
+                        step: 1,
+                        disabled: () => !pageData.formSettings.ai.enabled,
+                        value: () => pageData.formSettings.ai.knowledgeCacheTTL || 30,
+                        oninput: (e) => pageData.formSettings.ai.knowledgeCacheTTL = parseInt(e.target.value, 10),
+                    }),
+                ),
+            ),
+            t.div(
+                { className: "col-lg-4" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: "ai.knowledgeCacheSimilarity" }, "Near-match threshold"),
+                    t.input({
+                        id: "ai.knowledgeCacheSimilarity",
+                        name: "ai.knowledgeCacheSimilarity",
+                        type: "number",
+                        min: 0.5,
+                        max: 1,
+                        step: 0.01,
+                        disabled: () => !pageData.formSettings.ai.enabled,
+                        value: () => pageData.formSettings.ai.knowledgeCacheSimilarity || 0.92,
+                        oninput: (e) =>
+                            pageData.formSettings.ai.knowledgeCacheSimilarity = parseFloat(e.target.value),
+                    }),
+                ),
+            ),
+            t.div(
+                { className: "col-lg-4" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: "ai.knowledgeCacheMaxEntries" }, "Maximum entries"),
+                    t.input({
+                        id: "ai.knowledgeCacheMaxEntries",
+                        name: "ai.knowledgeCacheMaxEntries",
+                        type: "number",
+                        min: 1,
+                        max: 10000,
+                        step: 1,
+                        disabled: () => !pageData.formSettings.ai.enabled,
+                        value: () => pageData.formSettings.ai.knowledgeCacheMaxEntries || 500,
+                        oninput: (e) =>
+                            pageData.formSettings.ai.knowledgeCacheMaxEntries = parseInt(e.target.value, 10),
+                    }),
+                ),
+            ),
+            t.div(
+                { className: "col-lg-12" },
+                t.div(
+                    { className: "field" },
+                    t.input({
+                        id: "ai.knowledgeCacheAnswers",
+                        name: "ai.knowledgeCacheAnswers",
+                        type: "checkbox",
+                        className: "switch",
+                        disabled: () => !pageData.formSettings.ai.enabled,
+                        checked: () => pageData.formSettings.ai.knowledgeCacheAnswers || false,
+                        onchange: (e) => (pageData.formSettings.ai.knowledgeCacheAnswers = e.target.checked),
+                    }),
+                    t.label(
+                        { htmlFor: "ai.knowledgeCacheAnswers" },
+                        t.span({ className: "txt" }, "Reuse exact-match answers"),
+                        t.small(
+                            { className: "txt-hint" },
+                            " Disabled by default; near matches always generate a fresh answer.",
+                        ),
+                    ),
                 ),
             ),
         ),

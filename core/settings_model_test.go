@@ -89,7 +89,7 @@ func TestSettings_DBExport(t *testing.T) {
 				valueStr = string(export["value"].([]byte))
 			}
 
-			expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"smtp_host","username":"smtp_username","password":"","authMethod":"","tls":false,"localName":""},"backups":{"cron":"* * * * *","cronMaxKeep":0,"s3":{"enabled":true,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"s3_endpoint","accessKey":"","secret":"s3_secret","forcePathStyle":false},"meta":{"accentColor":"","appName":"test_app_name","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":true},"trustedProxy":{"headers":[],"useLeftmostIP":true},"batch":{"enabled":false,"maxRequests":0,"timeout":15,"maxBodySize":0},"logs":{"maxDataSize":0,"maxDays":123,"minLevel":0,"logIP":false,"logAuthId":false}}`
+			expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"smtp_host","username":"smtp_username","password":"","authMethod":"","tls":false,"localName":""},"backups":{"cron":"* * * * *","cronMaxKeep":0,"s3":{"enabled":true,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"s3_endpoint","accessKey":"","secret":"s3_secret","forcePathStyle":false},"meta":{"accentColor":"","appName":"test_app_name","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":true},"trustedProxy":{"headers":[],"useLeftmostIP":true},"batch":{"enabled":false,"maxRequests":0,"timeout":15,"maxBodySize":0},"ai":{"enabled":true,"provider":"custom","apiKey":"ai_api_key","model":"test-model","embeddingModel":"","baseURL":"https://example.com/v1","knowledgeCacheTTL":0,"knowledgeCacheSimilarity":0,"knowledgeCacheMaxEntries":0,"knowledgeCacheAnswers":false},"logs":{"maxDataSize":0,"maxDays":123,"minLevel":0,"logIP":false,"logAuthId":false}}`
 			if valueStr != expected {
 				t.Fatalf("Expected exported settings\n%s\ngot\n%s", expected, valueStr)
 			}
@@ -186,7 +186,7 @@ func TestSettingsMarshalJSON(t *testing.T) {
 	}
 	rawStr := string(raw)
 
-	expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"","username":"abc","authMethod":"","tls":false,"localName":""},"backups":{"cron":"","cronMaxKeep":0,"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false},"meta":{"accentColor":"","appName":"test123","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":false},"trustedProxy":{"headers":[],"useLeftmostIP":false},"batch":{"enabled":false,"maxRequests":0,"timeout":0,"maxBodySize":0},"logs":{"maxDataSize":0,"maxDays":0,"minLevel":0,"logIP":false,"logAuthId":false}}`
+	expected := `{"superuserIPs":[],"smtp":{"enabled":false,"port":0,"host":"","username":"abc","authMethod":"","tls":false,"localName":""},"backups":{"cron":"","cronMaxKeep":0,"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false}},"s3":{"enabled":false,"bucket":"","region":"","endpoint":"","accessKey":"","forcePathStyle":false},"meta":{"accentColor":"","appName":"test123","appURL":"","senderName":"","senderAddress":"","hideControls":false},"rateLimits":{"rules":[],"excludedIPs":[],"enabled":false},"trustedProxy":{"headers":[],"useLeftmostIP":false},"batch":{"enabled":false,"maxRequests":0,"timeout":0,"maxBodySize":0},"ai":{"enabled":false,"provider":"","model":"","embeddingModel":"","baseURL":""},"logs":{"maxDataSize":0,"maxDays":0,"minLevel":0,"logIP":false,"logAuthId":false}}`
 
 	if rawStr != expected {
 		t.Fatalf("Expected\n%v\ngot\n%v", expected, rawStr)
@@ -610,12 +610,25 @@ func TestAIConfigValidate(t *testing.T) {
 		{
 			"invalid data",
 			core.AIConfig{
-				Enabled:  true,
-				Provider: "invalid",
-				BaseURL:  "test:test:test",
-				Model:    strings.Repeat("a", 300),
+				Enabled:                  true,
+				Provider:                 "invalid",
+				BaseURL:                  "test:test:test",
+				Model:                    strings.Repeat("a", 300),
+				EmbeddingModel:           strings.Repeat("a", 300),
+				KnowledgeCacheTTL:        1441,
+				KnowledgeCacheSimilarity: 1.1,
+				KnowledgeCacheMaxEntries: 10001,
 			},
-			[]string{"provider", "apiKey", "model", "baseURL"},
+			[]string{
+				"provider",
+				"apiKey",
+				"model",
+				"embeddingModel",
+				"knowledgeCacheTTL",
+				"knowledgeCacheSimilarity",
+				"knowledgeCacheMaxEntries",
+				"baseURL",
+			},
 		},
 		{
 			"custom provider without base url",

@@ -1,5 +1,5 @@
 import { settingsSidebar } from "../settingsSidebar";
-import { aiAccordion, defaultAIBaseURL } from "./aiAccordion";
+import { aiAccordion, defaultAIBaseURL, defaultAIEmbeddingModel } from "./aiAccordion";
 import { batchAccordion } from "./batchAccordion";
 import { rateLimitAccordion, sortRules } from "./rateLimitAccordion";
 import { superuserAccordion } from "./superuserAccordion";
@@ -143,6 +143,11 @@ export function pageApplicationSettings() {
         const ai = { provider: "openai", ...(settings.ai || {}) };
         if (!ai.baseURL) {
             ai.baseURL = defaultAIBaseURL(ai.provider);
+        }
+        if (ai.provider == "anthropic") {
+            ai.embeddingModel = "";
+        } else if (!ai.embeddingModel?.trim()) {
+            ai.embeddingModel = defaultAIEmbeddingModel(ai.provider);
         }
 
         data.originalFormSettings = {

@@ -176,8 +176,13 @@ func newDefaultSettings() *Settings {
 				Timeout:     3,
 			},
 			AI: AIConfig{
-				Provider: AIProviderOpenAI,
-				BaseURL:  AIProviderOpenAIBaseURL,
+				Provider:                 AIProviderOpenAI,
+				BaseURL:                  AIProviderOpenAIBaseURL,
+				EmbeddingModel:           "text-embedding-3-small",
+				KnowledgeCacheTTL:        30,
+				KnowledgeCacheSimilarity: 0.92,
+				KnowledgeCacheMaxEntries: 500,
+				KnowledgeCacheAnswers:    false,
 			},
 			RateLimits: RateLimitsConfig{
 				Enabled: false, // @todo once tested enough enable by default for new installations
@@ -492,11 +497,16 @@ const (
 )
 
 type AIConfig struct {
-	Enabled  bool   `form:"enabled" json:"enabled"`
-	Provider string `form:"provider" json:"provider"`
-	APIKey   string `form:"apiKey" json:"apiKey,omitempty"`
-	Model    string `form:"model" json:"model"`
-	BaseURL  string `form:"baseURL" json:"baseURL"`
+	Enabled                  bool    `form:"enabled" json:"enabled"`
+	Provider                 string  `form:"provider" json:"provider"`
+	APIKey                   string  `form:"apiKey" json:"apiKey,omitempty"`
+	Model                    string  `form:"model" json:"model"`
+	EmbeddingModel           string  `form:"embeddingModel" json:"embeddingModel"`
+	BaseURL                  string  `form:"baseURL" json:"baseURL"`
+	KnowledgeCacheTTL        int     `form:"knowledgeCacheTTL" json:"knowledgeCacheTTL"`
+	KnowledgeCacheSimilarity float64 `form:"knowledgeCacheSimilarity" json:"knowledgeCacheSimilarity"`
+	KnowledgeCacheMaxEntries int     `form:"knowledgeCacheMaxEntries" json:"knowledgeCacheMaxEntries"`
+	KnowledgeCacheAnswers    bool    `form:"knowledgeCacheAnswers" json:"knowledgeCacheAnswers"`
 }
 
 // Validate makes AIConfig validatable by implementing [validation.Validatable] interface.
@@ -509,6 +519,13 @@ func (c AIConfig) Validate() error {
 		),
 		validation.Field(&c.APIKey, validation.When(c.Enabled, validation.Required)),
 		validation.Field(&c.Model, validation.Length(0, 255)),
+		validation.Field(&c.EmbeddingModel, validation.Length(0, 255)),
+		validation.Field(&c.KnowledgeCacheTTL, validation.Min(0), validation.Max(24*60)),
+		validation.Field(
+			&c.KnowledgeCacheSimilarity,
+			validation.When(c.KnowledgeCacheSimilarity != 0, validation.Min(0.5), validation.Max(1.0)),
+		),
+		validation.Field(&c.KnowledgeCacheMaxEntries, validation.Min(0), validation.Max(10000)),
 		validation.Field(
 			&c.BaseURL,
 			validation.When(c.Enabled && c.Provider == AIProviderCustom, validation.Required),

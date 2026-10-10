@@ -13,6 +13,7 @@ import { pageSQLConsole } from "@/settings/sql/pageSQLConsole";
 import { pageStorageSettings } from "@/settings/storage/pageStorageSettings";
 import { pageExportCollections } from "@/settings/sync/pageExportCollections";
 import { pageImportCollections } from "@/settings/sync/pageImportCollections";
+import { pageKnowledgeBase } from "@/support/pageKnowledgeBase";
 
 window.app = window.app || {};
 window.app.routes = window.app.routes || {};
@@ -172,6 +173,7 @@ app.routes.superuserOnly("#/logs", pageLogs);
 app.routes.superuserOnly("#/automations", pageAutomationsSettings);
 app.routes.superuserOnly("#/automations/new", pageAutomationUpsert);
 app.routes.superuserOnly("#/automations/{id}", pageAutomationUpsert);
+app.routes.superuserOnly("#/support", pageKnowledgeBase);
 app.routes.superuserOnly("#/settings", pageApplicationSettings);
 app.routes.superuserOnly("#/settings/mail", pageMailSettings);
 app.routes.superuserOnly("#/settings/storage", pageStorageSettings);

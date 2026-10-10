@@ -16126,6 +16126,7 @@ namespace core {
   provider: string
   apiKey: string
   model: string
+  embeddingModel: string
   baseURL: string
  }
  interface AIConfig {
