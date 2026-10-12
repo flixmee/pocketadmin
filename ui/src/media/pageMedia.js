@@ -1,12 +1,26 @@
+import { getMediaFileURL } from "@/media/utils";
+
 const mediasCollectionName = "_medias";
 const folderQueryKey = "folder";
 const filterQueryKey = "filter";
-const listRequestKey = "pageMedia.list";
 const viewModeStorageKey = "pbMediaViewMode";
+const perPage = 100;
+// PocketBase caps a single list request at 1000 items
+const maxPerPage = 1000;
+
+function getStoredViewMode() {
+    try {
+        return window.localStorage.getItem(viewModeStorageKey) === "grid" ? "grid" : "list";
+    } catch {
+        return "list";
+    }
+}
 
 export function pageMedia(route) {
     app.store.title = "Media";
     const uniqueId = "page_media_" + app.utils.randomString();
+    // instance scoped so that an unmounting page can't cancel the requests of its replacement
+    const listRequestKey = uniqueId + ".list";
 
     const data = store({
         currentFolderId: route.query[folderQueryKey]?.[0] || "",
@@ -14,16 +28,24 @@ export function pageMedia(route) {
         currentFolder: null,
         breadcrumbs: [],
         items: [],
+        page: 1,
+        totalItems: 0,
         bulkSelected: {},
         isLoading: false,
+        isRefreshing: false,
+        isLoadingMore: false,
         isUploading: false,
+        uploadProgress: { done: 0, total: 0 },
         isDragActive: false,
         isDeleting: {},
         isBulkDeleting: false,
         reset: 0,
-        viewMode: window.localStorage.getItem(viewModeStorageKey) || "list",
+        viewMode: getStoredViewMode(),
         get selectedItemsCount() {
             return Object.keys(data.bulkSelected).length;
+        },
+        get hasMore() {
+            return data.items.length < data.totalItems;
         },
         get collection() {
             return (
@@ -33,8 +55,9 @@ export function pageMedia(route) {
         },
     });
     let dragDepth = 0;
-    let selectClickTimeoutId = null;
     let selectionAnchorId = "";
+    // folder+search combination of the currently rendered items
+    let loadedContextKey = null;
 
     const watchers = [
         watch(
@@ -56,7 +79,9 @@ export function pageMedia(route) {
                     return;
                 }
 
-                window.localStorage.setItem(viewModeStorageKey, viewMode);
+                try {
+                    window.localStorage.setItem(viewModeStorageKey, viewMode);
+                } catch {}
             },
         ),
     ];
@@ -89,15 +114,29 @@ export function pageMedia(route) {
     };
 
     async function loadMedia() {
-        data.isLoading = true;
+        const contextKey = `${data.currentFolderId}|${data.search}`;
+        const isContextChange = contextKey !== loadedContextKey;
+
+        // show the full loader only when switching folder/search,
+        // plain refreshes (e.g. realtime events) keep the current items visible
+        data.isLoading = isContextChange || !data.items.length;
+        data.isRefreshing = true;
         app.pb.cancelRequest(listRequestKey);
+        app.pb.cancelRequest(listRequestKey + ".more");
+
+        if (isContextChange) {
+            data.page = 1;
+        }
 
         try {
             await Promise.all([loadCurrentFolder(), loadItems()]);
+            loadedContextKey = contextKey;
             data.isLoading = false;
+            data.isRefreshing = false;
         } catch (err) {
             if (!err?.isAbort) {
                 data.isLoading = false;
+                data.isRefreshing = false;
                 app.checkApiError(err);
             }
         }
@@ -148,30 +187,81 @@ export function pageMedia(route) {
         data.breadcrumbs = breadcrumbs;
     }
 
-    async function loadItems() {
-        let filter = `parent='${data.currentFolderId || ""}'`;
+    function buildItemsFilter() {
+        let filter = app.pb.filter("parent={:parent}", {
+            parent: data.currentFolderId || "",
+        });
 
         const normalizedSearch = app.utils.normalizeSearchFilter(data.search, [
             "name",
+            "mime",
         ]);
         if (normalizedSearch) {
             filter = `(${normalizedSearch}) && ${filter}`;
         }
 
+        return filter;
+    }
+
+    async function loadItems() {
+        // reload all already loaded pages at once so that a refresh
+        // doesn't collapse a previously expanded list
+        let loadPerPage = data.page * perPage;
+        if (loadPerPage > maxPerPage) {
+            data.page = 1;
+            loadPerPage = perPage;
+        }
+
         const result = await app.pb
             .collection(mediasCollectionName)
-            .getList(1, 200, {
+            .getList(1, loadPerPage, {
                 requestKey: listRequestKey,
                 sort: "-kind,name",
-                filter,
+                filter: buildItemsFilter(),
             });
 
         data.items = result.items;
+        data.totalItems = result.totalItems;
         syncSelectionWithItems();
     }
 
+    async function loadMore() {
+        if (data.isLoadingMore || data.isLoading || !data.hasMore) {
+            return;
+        }
+
+        data.isLoadingMore = true;
+
+        try {
+            const nextPage = data.page + 1;
+            const result = await app.pb
+                .collection(mediasCollectionName)
+                .getList(nextPage, perPage, {
+                    requestKey: listRequestKey + ".more",
+                    sort: "-kind,name",
+                    filter: buildItemsFilter(),
+                });
+
+            data.items = app.utils.filterDuplicatesByKey(data.items.concat(result.items));
+            data.totalItems = result.totalItems;
+            data.page = nextPage;
+            data.isLoadingMore = false;
+        } catch (err) {
+            if (!err?.isAbort) {
+                data.isLoadingMore = false;
+                app.checkApiError(err);
+            }
+        }
+    }
+
+    let refreshTimeoutId = null;
+
+    // debounced to collapse bursts of realtime events (bulk uploads/deletes)
     function refresh() {
-        data.reset = Date.now();
+        clearTimeout(refreshTimeoutId);
+        refreshTimeoutId = setTimeout(() => {
+            data.reset = Date.now();
+        }, 100);
     }
 
     function setViewMode(mode) {
@@ -237,6 +327,26 @@ export function pageMedia(route) {
         });
     }
 
+    async function copyFileURL(record) {
+        const url = getMediaFileURL(record);
+        if (!url) {
+            return;
+        }
+
+        await app.utils.copyToClipboard(new URL(url, window.location.origin).toString());
+        app.toasts.success("File URL copied to clipboard.");
+    }
+
+    async function downloadFile(record) {
+        try {
+            const token = await app.getFileToken(record.collectionId);
+            const url = app.pb.files.getURL(record, record.file, { token, download: 1 });
+            app.utils.download(url, record.name || record.file);
+        } catch (err) {
+            app.checkApiError(err);
+        }
+    }
+
     function isDeletingItem(record) {
         return !!data.isDeleting[record?.id];
     }
@@ -279,10 +389,6 @@ export function pageMedia(route) {
     }
 
     function clearSelection() {
-        if (selectClickTimeoutId) {
-            clearTimeout(selectClickTimeoutId);
-            selectClickTimeoutId = null;
-        }
         selectionAnchorId = "";
         data.bulkSelected = {};
     }
@@ -347,9 +453,17 @@ export function pageMedia(route) {
         );
     }
 
+    function hasOpenModal() {
+        return !!document.querySelector(`[data-modal-state="open"]`);
+    }
+
     function handleDocumentKeydown(event) {
+        if (isEditableTarget(event.target) || hasOpenModal()) {
+            return;
+        }
+
         if (isSelectAllShortcut(event)) {
-            if (isEditableTarget(event.target) || !data.items.length) {
+            if (!data.items.length) {
                 return;
             }
 
@@ -358,8 +472,27 @@ export function pageMedia(route) {
             return;
         }
 
-        if (event.key === "Escape" && data.selectedItemsCount) {
-            clearSelection();
+        if (!data.selectedItemsCount) {
+            return;
+        }
+
+        switch (event.key) {
+            case "Escape":
+                clearSelection();
+                break;
+            case "Enter": {
+                const selected = Object.values(data.bulkSelected);
+                if (selected.length === 1) {
+                    event.preventDefault();
+                    openItem(selected[0]);
+                }
+                break;
+            }
+            case "Delete":
+            case "Backspace":
+                event.preventDefault();
+                confirmBulkDelete();
+                break;
         }
     }
 
@@ -377,7 +510,11 @@ export function pageMedia(route) {
         formData.append("parent", parentId || "");
         formData.append("file", file);
 
-        await app.pb.collection(mediasCollectionName).create(formData);
+        await app.pb.collection(mediasCollectionName).create(formData, {
+            requestKey: null,
+        });
+
+        data.uploadProgress.done++;
     }
 
     async function uploadFiles(fileList, parentId = data.currentFolderId || "") {
@@ -385,6 +522,8 @@ export function pageMedia(route) {
         if (!files.length) {
             return { files: 0, folders: 0 };
         }
+
+        data.uploadProgress.total += files.length;
 
         for (const file of files) {
             await uploadSingleFile(file, parentId);
@@ -425,6 +564,7 @@ export function pageMedia(route) {
     async function uploadEntry(entry, parentId) {
         if (entry.isFile) {
             const file = await readEntryFile(entry);
+            data.uploadProgress.total++;
             await uploadSingleFile(file, parentId);
             return { files: 1, folders: 0 };
         }
@@ -500,7 +640,7 @@ export function pageMedia(route) {
         return app.pb.collection(mediasCollectionName).getFullList({
             requestKey: null,
             sort: "-kind,name",
-            filter: `parent='${parentId}'`,
+            filter: app.pb.filter("parent={:parent}", { parent: parentId }),
         });
     }
 
@@ -602,36 +742,197 @@ export function pageMedia(route) {
         previewFile(record);
     }
 
-    function queueItemSelect(record, event) {
+    function handleItemClick(record, event) {
         if (isDeletingItem(record) || data.isBulkDeleting) {
             return;
         }
 
         const isMultiSelect = !!(event?.ctrlKey || event?.metaKey);
-        const isRangeSelect = !!event?.shiftKey;
 
-        if (selectClickTimeoutId) {
-            clearTimeout(selectClickTimeoutId);
+        // select immediately - a follow-up dblclick opens the item anyway
+        if (event?.shiftKey) {
+            selectRangeTo(record, isMultiSelect);
+        } else if (isMultiSelect) {
+            toggleSelected(record);
+        } else {
+            selectOnly(record);
+        }
+    }
+
+    // ── Marquee (drag to select) ──
+    const marqueeThreshold = 4;
+    const marqueeIgnoreSelector = [
+        ".media-item",
+        "button",
+        "a",
+        "input",
+        "[contenteditable]",
+        ".page-header",
+        ".media-search-bar",
+        ".bulkbar-wrapper",
+        ".media-upload-progress",
+        ".page-footer",
+        ".dropdown",
+    ].join(",");
+    let marquee = null;
+
+    function toContentPoint(container, clientX, clientY) {
+        const rect = container.getBoundingClientRect();
+        return {
+            x: clientX - rect.left + container.scrollLeft,
+            y: clientY - rect.top + container.scrollTop,
+        };
+    }
+
+    function handleMarqueePointerDown(event) {
+        if (
+            event.button !== 0
+            || event.pointerType === "touch"
+            || data.isBulkDeleting
+            || !(event.target instanceof Element)
+            || event.target.closest(marqueeIgnoreSelector)
+        ) {
+            return;
         }
 
-        selectClickTimeoutId = setTimeout(() => {
-            if (isRangeSelect) {
-                selectRangeTo(record, isMultiSelect);
-            } else if (isMultiSelect) {
-                toggleSelected(record);
-            } else {
-                selectOnly(record);
+        const container = event.currentTarget;
+
+        // ignore presses on the container scrollbars
+        const containerRect = container.getBoundingClientRect();
+        if (
+            event.clientX - containerRect.left >= container.clientWidth
+            || event.clientY - containerRect.top >= container.clientHeight
+        ) {
+            return;
+        }
+
+        // prevent native text selection while dragging
+        event.preventDefault();
+        document.activeElement?.blur?.();
+
+        marquee = {
+            container,
+            pointerId: event.pointerId,
+            start: toContentPoint(container, event.clientX, event.clientY),
+            lastClientX: event.clientX,
+            lastClientY: event.clientY,
+            isActive: false,
+            additive: !!(event.ctrlKey || event.metaKey || event.shiftKey),
+            baseSelection: { ...data.bulkSelected },
+            box: null,
+        };
+
+        container.setPointerCapture?.(event.pointerId);
+        container.addEventListener("scroll", updateMarquee);
+    }
+
+    function handleMarqueePointerMove(event) {
+        if (!marquee || event.pointerId !== marquee.pointerId) {
+            return;
+        }
+
+        marquee.lastClientX = event.clientX;
+        marquee.lastClientY = event.clientY;
+        updateMarquee();
+    }
+
+    function updateMarquee() {
+        if (!marquee) {
+            return;
+        }
+
+        const { container, start } = marquee;
+        const current = toContentPoint(container, marquee.lastClientX, marquee.lastClientY);
+
+        if (
+            !marquee.isActive
+            && Math.abs(current.x - start.x) < marqueeThreshold
+            && Math.abs(current.y - start.y) < marqueeThreshold
+        ) {
+            return;
+        }
+
+        if (!marquee.isActive) {
+            marquee.isActive = true;
+            marquee.box = document.createElement("div");
+            marquee.box.className = "media-marquee";
+            container.appendChild(marquee.box);
+        }
+
+        const left = Math.min(start.x, current.x);
+        const top = Math.min(start.y, current.y);
+        const width = Math.abs(current.x - start.x);
+        const height = Math.abs(current.y - start.y);
+
+        Object.assign(marquee.box.style, {
+            left: `${left}px`,
+            top: `${top}px`,
+            width: `${width}px`,
+            height: `${height}px`,
+        });
+
+        // compare in viewport coordinates
+        const containerRect = container.getBoundingClientRect();
+        const box = {
+            left: left - container.scrollLeft + containerRect.left,
+            top: top - container.scrollTop + containerRect.top,
+        };
+        box.right = box.left + width;
+        box.bottom = box.top + height;
+
+        const itemsById = new Map(data.items.map((item) => [item.id, item]));
+        const nextSelected = marquee.additive ? { ...marquee.baseSelection } : {};
+        let lastHitId = "";
+
+        for (const el of container.querySelectorAll(".media-item[data-media-id]")) {
+            const r = el.getBoundingClientRect();
+            const intersects = r.left < box.right
+                && r.right > box.left
+                && r.top < box.bottom
+                && r.bottom > box.top;
+            if (!intersects) {
+                continue;
             }
-            selectClickTimeoutId = null;
-        }, 220);
+
+            const item = itemsById.get(el.dataset.mediaId);
+            if (item) {
+                nextSelected[item.id] = item;
+                lastHitId = item.id;
+            }
+        }
+
+        // avoid redundant reactive updates while the pointer moves
+        const nextKey = Object.keys(nextSelected).sort().join(",");
+        const currentKey = Object.keys(data.bulkSelected).sort().join(",");
+        if (nextKey !== currentKey) {
+            data.bulkSelected = nextSelected;
+        }
+        if (lastHitId) {
+            selectionAnchorId = lastHitId;
+        }
+    }
+
+    function endMarquee(event) {
+        if (!marquee || (event && event.pointerId !== marquee.pointerId)) {
+            return;
+        }
+
+        const { container, isActive, additive, box } = marquee;
+
+        container.removeEventListener("scroll", updateMarquee);
+        if (container.hasPointerCapture?.(marquee.pointerId)) {
+            container.releasePointerCapture(marquee.pointerId);
+        }
+        box?.remove();
+        marquee = null;
+
+        // plain click on an empty area clears the selection
+        if (!isActive && !additive && event?.type === "pointerup") {
+            clearSelection();
+        }
     }
 
     function handleItemDoubleClick(record) {
-        if (selectClickTimeoutId) {
-            clearTimeout(selectClickTimeoutId);
-            selectClickTimeoutId = null;
-        }
-
         if (isDeletingItem(record) || data.isBulkDeleting) {
             return;
         }
@@ -645,6 +946,7 @@ export function pageMedia(route) {
         }
 
         data.isUploading = true;
+        data.uploadProgress = { done: 0, total: 0 };
         app.store.errors = null;
 
         try {
@@ -653,13 +955,14 @@ export function pageMedia(route) {
 
             if (successMessage) {
                 app.toasts.success(successMessage);
-                refresh();
             }
         } catch (err) {
             if (!err?.isAbort) {
                 app.checkApiError(err);
             }
         } finally {
+            // refresh also on failure since part of the batch may have been uploaded
+            refresh();
             data.isUploading = false;
         }
     }
@@ -714,11 +1017,12 @@ export function pageMedia(route) {
         return t.div(
             {
                 rid: item.id,
+                "html-data-media-id": item.id,
                 className: () =>
                     `list-item highlight media-item media-item-${item.kind} media-item-${data.viewMode} ${
                         data.bulkSelected[item.id] ? "media-item-selected" : ""
                     }`,
-                onclick: (e) => queueItemSelect(item, e),
+                onclick: (e) => handleItemClick(item, e),
                 ondblclick: () => handleItemDoubleClick(item),
             },
             t.div(
@@ -802,6 +1106,45 @@ export function pageMedia(route) {
                                 },
                                 t.i({ className: "ri-eye-line", ariaHidden: true }),
                                 t.span({ className: "txt" }, "Preview"),
+                            ),
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "dropdown-item",
+                                    onclick: () => {
+                                        downloadFile(item);
+                                        el.hidePopover();
+                                    },
+                                },
+                                t.i({ className: "ri-download-line", ariaHidden: true }),
+                                t.span({ className: "txt" }, "Download"),
+                            ),
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "dropdown-item",
+                                    onclick: () => {
+                                        copyFileURL(item);
+                                        el.hidePopover();
+                                    },
+                                },
+                                t.i({ className: "ri-link", ariaHidden: true }),
+                                t.span({ className: "txt" }, "Copy URL"),
+                            ),
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "dropdown-item",
+                                    disabled: () => isDeletingItem(item),
+                                    onclick: () => {
+                                        app.modals.openMediaFolderUpsert(item, "", {
+                                            onsave: () => refresh(),
+                                        });
+                                        el.hidePopover();
+                                    },
+                                },
+                                t.i({ className: "ri-edit-line", ariaHidden: true }),
+                                t.span({ className: "txt" }, "Rename"),
                             ),
                             t.button(
                                 {
@@ -898,20 +1241,23 @@ export function pageMedia(route) {
         );
     }
 
+    function openUploadModal() {
+        app.modals.openMediaUpload({
+            parentId: data.currentFolderId || "",
+            oncomplete: ({ uploaded }) => {
+                if (uploaded) {
+                    refresh();
+                }
+            },
+        });
+    }
+
     function renderDropCard() {
         return t.button(
             {
                 type: "button",
                 className: () => `media-drop-card ${data.viewMode === "list" ? "media-drop-card-list" : ""}`,
-                onclick: () =>
-                    app.modals.openMediaUpload({
-                        parentId: data.currentFolderId || "",
-                        oncomplete: ({ uploaded }) => {
-                            if (uploaded) {
-                                refresh();
-                            }
-                        },
-                    }),
+                onclick: () => openUploadModal(),
             },
             t.i({ className: "ri-upload-cloud-2-line", ariaHidden: true }),
             t.span(null, "Drop files here"),
@@ -934,9 +1280,9 @@ export function pageMedia(route) {
             },
             onunmount: () => {
                 app.pb.cancelRequest(listRequestKey);
-                if (selectClickTimeoutId) {
-                    clearTimeout(selectClickTimeoutId);
-                }
+                app.pb.cancelRequest(listRequestKey + ".more");
+                clearTimeout(refreshTimeoutId);
+                endMarquee();
                 watchers.forEach((w) => w?.unwatch());
                 for (let event in documentEvents) {
                     document.removeEventListener(event, documentEvents[event]);
@@ -951,6 +1297,10 @@ export function pageMedia(route) {
                 ondragover: handleDragOver,
                 ondragleave: handleDragLeave,
                 ondrop: handleDrop,
+                onpointerdown: handleMarqueePointerDown,
+                onpointermove: handleMarqueePointerMove,
+                onpointerup: endMarquee,
+                onpointercancel: endMarquee,
             },
             t.header(
                 { className: "page-header compact flex-nowrap media-shell-header" },
@@ -989,7 +1339,7 @@ export function pageMedia(route) {
                         ),
                     ),
                     app.components.refreshButton({
-                        className: "btn outline secondary circle rotate-btn media-refresh-btn",
+                        className: () => `btn outline secondary circle rotate-btn media-refresh-btn ${data.isRefreshing && !data.isLoading ? "media-refreshing" : ""}`,
                         onclick: () => refresh(),
                     }),
                 ),
@@ -1014,16 +1364,8 @@ export function pageMedia(route) {
                         {
                             type: "button",
                             className: "btn media-btn-upload",
-                            disabled: () => data.isBulkDeleting,
-                            onclick: () =>
-                                app.modals.openMediaUpload({
-                                    parentId: data.currentFolderId || "",
-                                    oncomplete: ({ uploaded }) => {
-                                        if (uploaded) {
-                                            refresh();
-                                        }
-                                    },
-                                }),
+                            disabled: () => data.isBulkDeleting || data.isUploading,
+                            onclick: () => openUploadModal(),
                         },
                         t.i({ className: "ri-upload-cloud-line", ariaHidden: true }),
                         t.span({ className: "txt" }, "Upload files"),
@@ -1035,7 +1377,7 @@ export function pageMedia(route) {
                 t.i({ className: "ri-search-line media-search-icon", ariaHidden: true }),
                 app.components.searchbar({
                     className: "media-searchbar",
-                    placeholder: "Search media by name, type, or size\u2026",
+                    placeholder: "Search by name or mime type (or a filter, e.g. size>1000000)\u2026",
                     value: () => data.search,
                     onsubmit: (value) => (data.search = value),
                 }),
@@ -1067,13 +1409,53 @@ export function pageMedia(route) {
                 }
 
                 if (!data.items.length) {
+                    if (data.search) {
+                        return t.div(
+                            { className: "media-empty block txt-center p-base" },
+                            t.div({ className: "media-empty-eyebrow" }, "No results"),
+                            t.h6({ className: "txt" }, `Nothing matches "${data.search}" in this folder.`),
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "btn sm outline secondary m-t-sm",
+                                    onclick: () => (data.search = ""),
+                                },
+                                t.span({ className: "txt" }, "Clear search"),
+                            ),
+                        );
+                    }
+
                     return t.div(
                         { className: "media-empty block txt-center p-base" },
                         t.div({ className: "media-empty-eyebrow" }, "No items"),
                         t.h6({ className: "txt" }, "This folder is empty."),
                         t.p(
                             { className: "txt-hint" },
-                            "Upload files or create a new folder to populate this view.",
+                            "Drop files or folders anywhere on this page, or use the buttons below.",
+                        ),
+                        t.div(
+                            { className: "media-empty-actions" },
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "btn sm outline",
+                                    onclick: () =>
+                                        app.modals.openMediaFolderUpsert(null, data.currentFolderId, {
+                                            onsave: () => refresh(),
+                                        }),
+                                },
+                                t.i({ className: "ri-folder-add-line", ariaHidden: true }),
+                                t.span({ className: "txt" }, "New folder"),
+                            ),
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: "btn sm",
+                                    onclick: () => openUploadModal(),
+                                },
+                                t.i({ className: "ri-upload-cloud-line", ariaHidden: true }),
+                                t.span({ className: "txt" }, "Upload files"),
+                            ),
                         ),
                     );
                 }
@@ -1119,6 +1501,26 @@ export function pageMedia(route) {
                     );
                 }
 
+                if (data.hasMore) {
+                    sections.push(
+                        t.div(
+                            { className: "media-load-more" },
+                            t.button(
+                                {
+                                    type: "button",
+                                    className: () => `btn sm outline secondary ${data.isLoadingMore ? "loading" : ""}`,
+                                    disabled: () => data.isLoadingMore,
+                                    onclick: () => loadMore(),
+                                },
+                                t.span(
+                                    { className: "txt" },
+                                    () => `Load more (${data.totalItems - data.items.length} remaining)`,
+                                ),
+                            ),
+                        ),
+                    );
+                }
+
                 return t.div({ className: "media-sections" }, ...sections);
             },
             t.div(
@@ -1134,6 +1536,29 @@ export function pageMedia(route) {
                         data.currentFolder?.name
                             ? `Upload into ${data.currentFolder.name}.`
                             : "Upload into the root media folder."),
+                ),
+            ),
+            t.div(
+                {
+                    className: "media-upload-progress",
+                    hidden: () => !data.isUploading,
+                    role: "status",
+                },
+                t.span({ className: "loader sm" }),
+                t.span({ className: "txt" }, () =>
+                    data.uploadProgress.total
+                        ? `Uploading ${Math.min(data.uploadProgress.done + 1, data.uploadProgress.total)} of ${data.uploadProgress.total}\u2026`
+                        : "Preparing upload\u2026"),
+                t.div(
+                    { className: "media-upload-progress-bar" },
+                    t.div({
+                        className: "media-upload-progress-fill",
+                        style: () => `width: ${
+                            data.uploadProgress.total
+                                ? Math.round((data.uploadProgress.done / data.uploadProgress.total) * 100)
+                                : 0
+                        }%`,
+                    }),
                 ),
             ),
             t.div(
@@ -1171,7 +1596,10 @@ export function pageMedia(route) {
             ),
             t.footer(
                 { className: "page-footer" },
-                t.span({ className: "txt" }, () => `Items: ${data.items.length}`),
+                t.span({ className: "txt" }, () =>
+                    data.hasMore
+                        ? `Items: ${data.items.length} of ${data.totalItems}`
+                        : `Items: ${data.totalItems}`),
                 app.components.credits(),
             ),
         ),

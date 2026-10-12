@@ -23,8 +23,14 @@ function mediaFolderUpsertModal(record, parentId, modalSettings) {
             const initialName = record?.name || "";
             return data.name.trim() !== initialName.trim();
         },
+        get isFile() {
+            return record?.kind === "file";
+        },
         get title() {
-            return record?.id ? "Rename folder" : "New folder";
+            if (!record?.id) {
+                return "New folder";
+            }
+            return data.isFile ? "Rename file" : "Rename folder";
         },
         get submitLabel() {
             return record?.id ? "Save changes" : "Create folder";
@@ -55,7 +61,11 @@ function mediaFolderUpsertModal(record, parentId, modalSettings) {
             }
 
             modalSettings.onsave?.(saved, !record?.id);
-            app.toasts.success(record?.id ? "Folder renamed." : "Folder created.");
+            app.toasts.success(
+                record?.id
+                    ? `${data.isFile ? "File" : "Folder"} renamed.`
+                    : "Folder created.",
+            );
             app.modals.close(modal, true);
         } catch (err) {
             if (!err?.isAbort) {
@@ -88,7 +98,7 @@ function mediaFolderUpsertModal(record, parentId, modalSettings) {
             },
             t.field(
                 { className: "field" },
-                t.label({ htmlFor: "media-folder-name" }, "Folder name"),
+                t.label({ htmlFor: "media-folder-name" }, () => data.isFile ? "File name" : "Folder name"),
                 t.input({
                     id: "media-folder-name",
                     type: "text",
