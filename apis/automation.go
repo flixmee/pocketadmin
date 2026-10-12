@@ -34,7 +34,6 @@ var automationAllowedFields = []string{
 // bindAutomationApi registers the automation api endpoints.
 func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
 	bindAutomationWebhookRoutes(rg)
-	rg.POST("/automation-webhooks/{id}", automationWebhook).Bind(SkipSuccessActivityLog())
 	rg.POST("/automation-telegram/{token}", automationTelegramWebhook).Bind(SkipSuccessActivityLog())
 	rg.POST("/automation-resume/{token}", automationResumeByToken).Bind(SkipSuccessActivityLog())
 
