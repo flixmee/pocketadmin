@@ -670,25 +670,16 @@ export function pageAutomationUpsert(route) {
                                 () => fieldError(app.store.errors?.notes),
                             ),
                             t.div(
-                                { className: "automation-workflow-toggle-row" },
-                                t.div(
-                                    { className: "automation-workflow-toggle-copy" },
-                                    t.label(
-                                        {
-                                            htmlFor: formId + "_notifyOnCompletion",
-                                            className: "automation-field-label",
-                                        },
-                                        "Notify admins",
-                                    ),
-                                ),
+                                { className: "field automation-workflow-toggle-row" },
                                 t.input({
                                     id: formId + "_notifyOnCompletion",
                                     name: "notifyOnCompletion",
                                     type: "checkbox",
-                                    className: "switch",
+                                    className: "switch sm",
                                     checked: () => data.form.notifyOnCompletion,
                                     onchange: (e) => (data.form.notifyOnCompletion = e.target.checked),
                                 }),
+                                t.label({ htmlFor: formId + "_notifyOnCompletion" }, "Notify admins on completion"),
                             ),
                         ),
                         t.button(

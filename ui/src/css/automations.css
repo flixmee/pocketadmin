@@ -1286,6 +1286,7 @@
 .ti-zoom-out { --ti-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 0 0-14 0M21 21l-6-6M7 10h6'/%3E%3C/svg%3E"); }
 .ti-focus-centered { --ti-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 12h6M12 9v6'/%3E%3C/svg%3E"); }
 .ti-lock { --ti-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zM8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E"); }
+.ti-send { --ti-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 14L21 3M21 3l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1z'/%3E%3C/svg%3E"); }
 .ti-arrow-ramp-right { --ti-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 21v-9a5 5 0 0 1 5-5h8M16 3l4 4-4 4'/%3E%3C/svg%3E"); }
 
 .automation-workflow-builder {
@@ -1508,6 +1509,8 @@
     padding: 12px;
     border: 0.5px solid var(--color-border-muted);
     border-radius: 8px;
+    display: flex;
+    flex-direction: column;
     background: var(--color-background-primary);
     box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
     transition: transform 180ms ease;
@@ -1519,7 +1522,16 @@
 
 .automation-workflow-info-fields {
     display: grid;
-    gap: 10px;
+    align-content: start;
+    gap: 12px;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: -12px;
+    padding: 12px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surfaceAlt4Color) transparent;
     transition: opacity 120ms ease;
 }
 
@@ -1547,21 +1559,42 @@
     text-transform: none;
 }
 
-.automation-workflow-info-panel input:not(.switch),
+.automation-workflow-info-panel input:not([type="checkbox"]),
 .automation-workflow-info-panel textarea,
 .automation-workflow-info-panel .input.select {
     min-width: 0;
     min-height: 30px;
-    border-width: 0.5px;
-    border-color: var(--color-border-muted);
-    background: var(--inputColor);
     color: var(--color-text-primary);
     font-size: 12px;
 }
 
 .automation-workflow-info-panel textarea {
     min-height: 64px;
+    line-height: 1.4;
     resize: vertical;
+}
+
+.automation-workflow-info-panel .field:not(:has(input[type="checkbox"])) {
+    border: 1px solid transparent;
+    transition:
+        background var(--animationSpeed),
+        border-color var(--animationSpeed);
+}
+
+.automation-workflow-info-panel .field:not(:has(input[type="checkbox"])):focus-within {
+    border-color: var(--color-border-strong);
+}
+
+.automation-workflow-info-panel .field > .automation-field-label {
+    padding: 8px 10px 0;
+    margin: 0;
+    min-height: 0;
+    font-weight: 600;
+}
+
+.automation-workflow-info-panel .field > input,
+.automation-workflow-info-panel .field > textarea {
+    padding: 6px 10px 8px;
 }
 
 .automation-workflow-info-panel .input.select {
@@ -1608,12 +1641,17 @@
     white-space: nowrap;
 }
 
-.automation-workflow-toggle-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+.automation-workflow-info-panel .automation-workflow-toggle-row {
     min-height: 30px;
+    padding: 4px 0 0;
+    border-top: 1px solid var(--color-border-muted);
+    border-radius: 0;
+}
+
+.automation-workflow-info-panel .automation-workflow-toggle-row label {
+    padding-top: 10px;
+    font-size: 12px;
+    color: var(--color-text-primary);
 }
 
 .automation-workflow-info-toggle {
@@ -1907,9 +1945,182 @@
     box-shadow: none;
 }
 
-.automation-flow-drawer-portal .automation-palette-icon-wrap {
-    border: 0.5px solid var(--surfaceAlt2Color);
+/* ── "Add action" drawer ── */
+.automation-flow-drawer-portal .automation-flow-action-drawer {
+    gap: 0;
+    padding: 20px 0 0;
+    overflow: hidden;
+}
+
+.automation-flow-action-drawer .automation-flow-action-drawer-header {
+    margin: 0;
+    padding: 0 16px 12px 20px;
+}
+
+.automation-flow-action-drawer .automation-flow-action-drawer-header .txt-bold {
+    font-size: var(--lgFontSize);
+}
+
+.automation-flow-action-search {
+    position: relative;
+    margin: 0 16px 8px 20px;
+}
+
+.automation-flow-action-search i {
+    position: absolute;
+    top: 50%;
+    left: 11px;
+    transform: translateY(-50%);
+    color: var(--surfaceTxtHintColor);
+    font-size: 15px;
+    pointer-events: none;
+}
+
+.automation-flow-action-search input {
+    display: block;
+    width: 100%;
+    height: 36px;
+    padding: 0 12px 0 34px;
+    outline: 0;
+    border: 1px solid transparent;
+    border-radius: var(--borderRadius);
+    background: var(--inputColor);
+    color: var(--surfaceTxtColor);
+    font-size: var(--smFontSize);
+    transition:
+        background var(--animationSpeed),
+        border-color var(--animationSpeed);
+}
+
+.automation-flow-action-search input::placeholder {
+    color: var(--surfaceTxtDisabledColor);
+}
+
+.automation-flow-action-search input:focus {
+    background: var(--inputFocusColor);
+    border-color: var(--color-border-strong);
+}
+
+.automation-flow-action-drawer .automation-builder-palette-actions {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 4px 12px 20px 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surfaceAlt4Color) transparent;
+}
+
+.automation-flow-action-drawer .automation-builder-palette-actions-inner {
+    gap: 14px;
+}
+
+.automation-flow-action-empty {
+    padding: 24px 8px;
+    text-align: center;
+    font-size: var(--smFontSize);
+    color: var(--surfaceTxtHintColor);
+}
+
+.automation-palette-group {
+    --groupColor: #6366f1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.automation-palette-group.tone-data { --groupColor: #0ea5e9; }
+.automation-palette-group.tone-messaging { --groupColor: #10b981; }
+.automation-palette-group.tone-integration { --groupColor: #f59e0b; }
+.automation-palette-group.tone-wait { --groupColor: #f97316; }
+.automation-palette-group.tone-ai { --groupColor: #d946ef; }
+.automation-palette-group.tone-output { --groupColor: #64748b; }
+.automation-palette-group.tone-other { --groupColor: var(--surfaceTxtHintColor); }
+
+.automation-palette-group-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--surfaceTxtHintColor);
+}
+
+.automation-palette-group-count {
+    min-width: 18px;
+    padding: 1px 5px;
+    border-radius: 9999px;
+    background: var(--surfaceAlt2Color);
+    font-size: 10px;
+    letter-spacing: 0;
+    text-align: center;
+}
+
+.automation-flow-action-drawer .automation-builder-palette-action {
+    position: relative;
+    gap: 10px;
+    padding: 7px 8px;
+    border-color: transparent;
+    border-radius: 8px;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background var(--animationSpeed),
+        border-color var(--animationSpeed);
+}
+
+.automation-flow-action-drawer .automation-builder-palette-action:hover,
+.automation-flow-action-drawer .automation-builder-palette-action:focus-visible {
+    outline: 0;
+    border-color: var(--color-border-muted);
+    background: var(--surfaceAlt2Color);
     box-shadow: none;
+    transform: none;
+}
+
+.automation-flow-action-drawer .automation-builder-palette-action .content {
+    min-width: 0;
+}
+
+.automation-flow-action-drawer .automation-node-title {
+    font-size: var(--smFontSize);
+    font-weight: 600;
+}
+
+.automation-flow-action-drawer .automation-node-meta {
+    margin-top: 2px;
+    overflow: hidden;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.automation-flow-drawer-portal .automation-palette-icon-wrap {
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--groupColor) 14%, transparent);
+    color: var(--groupColor);
+    box-shadow: none;
+    font-size: 16px;
+}
+
+.automation-palette-add-icon {
+    margin-left: auto;
+    color: var(--surfaceTxtHintColor);
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity var(--animationSpeed);
+}
+
+.automation-builder-palette-action:hover .automation-palette-add-icon,
+.automation-builder-palette-action:focus-visible .automation-palette-add-icon {
+    opacity: 1;
 }
 
 @media (max-width: 900px) {
@@ -2447,8 +2658,14 @@
     flex-direction: column;
     gap: 6px;
     padding: 8px;
-    border: 1px solid var(--surfaceAlt3Color);
+    border: 1px solid var(--color-border-muted);
     border-radius: var(--borderRadius);
+    background: var(--color-background-secondary);
+    transition: border-color var(--animationSpeed);
+}
+
+.automation-manual-input-row:focus-within {
+    border-color: var(--color-border-strong);
 }
 
 .automation-manual-input-row-head,
@@ -2459,14 +2676,61 @@
     min-width: 0;
 }
 
-.automation-manual-input-row-head input {
-    flex: 1 1 auto;
+.automation-manual-input-row > input,
+.automation-manual-input-row-head > input {
+    display: block;
+    width: 100%;
+    height: 30px;
     min-width: 0;
+    padding: 0 9px;
+    outline: 0;
+    border: 1px solid transparent;
+    border-radius: var(--borderRadius);
+    background: var(--inputColor);
+    color: var(--color-text-primary);
+    font-size: 12px;
+    line-height: 1;
+    transition:
+        background var(--animationSpeed),
+        border-color var(--animationSpeed);
+}
+
+.automation-manual-input-row > input::placeholder,
+.automation-manual-input-row-head > input::placeholder {
+    color: var(--surfaceTxtDisabledColor);
+}
+
+.automation-manual-input-row > input:focus,
+.automation-manual-input-row-head > input:focus {
+    background: var(--inputFocusColor);
+    border-color: var(--color-border-strong);
+}
+
+.automation-manual-input-row-head > input {
+    flex: 1 1 auto;
+    font-family: var(--monospaceFontFamily);
+    font-weight: 600;
+}
+
+.automation-manual-input-row-head .btn {
+    flex: 0 0 auto;
 }
 
 .automation-manual-input-row-meta .automation-manual-input-type {
     flex: 1 1 auto;
     min-width: 0;
+    min-height: 30px;
+    border: 1px solid transparent;
+    border-radius: var(--borderRadius);
+    background: var(--inputColor);
+    transition:
+        background var(--animationSpeed),
+        border-color var(--animationSpeed);
+}
+
+.automation-manual-input-row-meta .automation-manual-input-type:focus-within {
+    background: var(--inputFocusColor);
+    border-color: var(--color-border-strong);
 }
 
 .automation-manual-input-row-meta .automation-manual-input-required {
@@ -2479,8 +2743,24 @@
     white-space: nowrap;
 }
 
+.automation-manual-input-row-meta .automation-manual-input-required label {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+.automation-manual-input-row-meta .automation-manual-input-required input:checked ~ label {
+    color: var(--color-text-primary);
+}
+
 .automation-manual-input-add {
     align-self: flex-start;
+}
+
+.automation-manual-inputs > .automation-field-desc {
+    padding: 10px;
+    border: 1px dashed var(--color-border-muted);
+    border-radius: var(--borderRadius);
+    color: var(--color-text-secondary);
 }
 
 .automation-workflow-info-block {

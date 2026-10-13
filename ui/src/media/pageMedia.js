@@ -1339,7 +1339,10 @@ export function pageMedia(route) {
                         ),
                     ),
                     app.components.refreshButton({
-                        className: () => `btn outline secondary circle rotate-btn media-refresh-btn ${data.isRefreshing && !data.isLoading ? "media-refreshing" : ""}`,
+                        className: () =>
+                            `btn outline secondary circle rotate-btn media-refresh-btn ${
+                                data.isRefreshing && !data.isLoading ? "media-refreshing" : ""
+                            }`,
                         onclick: () => refresh(),
                     }),
                 ),
@@ -1547,17 +1550,20 @@ export function pageMedia(route) {
                 t.span({ className: "loader sm" }),
                 t.span({ className: "txt" }, () =>
                     data.uploadProgress.total
-                        ? `Uploading ${Math.min(data.uploadProgress.done + 1, data.uploadProgress.total)} of ${data.uploadProgress.total}\u2026`
+                        ? `Uploading ${
+                            Math.min(data.uploadProgress.done + 1, data.uploadProgress.total)
+                        } of ${data.uploadProgress.total}\u2026`
                         : "Preparing upload\u2026"),
                 t.div(
                     { className: "media-upload-progress-bar" },
                     t.div({
                         className: "media-upload-progress-fill",
-                        style: () => `width: ${
-                            data.uploadProgress.total
-                                ? Math.round((data.uploadProgress.done / data.uploadProgress.total) * 100)
-                                : 0
-                        }%`,
+                        style: () =>
+                            `width: ${
+                                data.uploadProgress.total
+                                    ? Math.round((data.uploadProgress.done / data.uploadProgress.total) * 100)
+                                    : 0
+                            }%`,
                     }),
                 ),
             ),

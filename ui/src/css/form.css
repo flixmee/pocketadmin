@@ -1443,7 +1443,7 @@ button {
     position: relative;
     width: 100%;
   }
-  .editor-content,
+  .code-editor-content,
   .highlight-overlay {
     display: block;
     width: 100%;
@@ -1471,13 +1471,14 @@ button {
     top: 0;
     pointer-events: none;
   }
-  .editor-content {
+  .code-editor-content {
     color: transparent;
     resize: none;
     caret-color: var(--surfaceTxtHintColor);
     &:empty::before {
       content: attr(data-placeholder);
       color: var(--surfaceTxtDisabledColor);
+      white-space: normal;
     }
   }
 
@@ -1488,57 +1489,9 @@ button {
     padding-bottom: 9px;
   }
   &.pre-wrap {
-    .editor-content,
     .code-editor-content,
     .highlight-overlay {
-        display: block;
-        width: 100%;
-        min-height: 100%;
-        outline: 0;
-        border: 0;
-        margin: 0;
-        padding: 0;
-        tab-size: 4;
-        hyphens: none;
-        white-space: pre;
-        word-spacing: normal;
-        word-break: normal;
-        word-wrap: normal;
-        text-align: left;
-        font-weight: normal;
-        letter-spacing: normal;
-        font-size: 0.96rem;
-        line-height: 1.5;
-        font-family: var(--monospaceFontFamily);
-    }
-    .highlight-overlay {
-        position: absolute;
-        left: 0;
-        top: 0;
-        pointer-events: none;
-    }
-    .code-editor-content {
-        color: transparent;
-        resize: none;
-        caret-color: var(--surfaceTxtHintColor);
-        &:empty::before {
-            content: attr(data-placeholder);
-            color: var(--surfaceTxtDisabledColor);
-            white-space: normal;
-        }
-    }
-
-    &.single-line {
-        align-items: center;
-        min-height: 0;
-        padding-top: 9px;
-        padding-bottom: 9px;
-    }
-    &.pre-wrap {
-        .code-editor-content,
-        .highlight-overlay {
-            white-space: pre-wrap;
-        }
+      white-space: pre-wrap;
     }
   }
   &.mini {

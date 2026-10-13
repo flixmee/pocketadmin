@@ -39,7 +39,9 @@ export function buildManualInputsPayload(rows) {
         const name = String(row.name || "").trim();
         if (!manualInputNamePattern.test(name)) {
             throw new Error(
-                `Input ${index + 1}: name must start with a letter or underscore and contain only letters, digits and underscores.`,
+                `Input ${
+                    index + 1
+                }: name must start with a letter or underscore and contain only letters, digits and underscores.`,
             );
         }
         if (seen.has(name)) {
@@ -195,6 +197,7 @@ export function manualInputsEditor({ rows, idPrefix = "manual_input" }) {
                                 t.input({
                                     id: `${idPrefix}_${row.__id}_required`,
                                     type: "checkbox",
+                                    className: "sm",
                                     checked: () => row.required,
                                     onchange: (e) => (row.required = e.target.checked),
                                 }),

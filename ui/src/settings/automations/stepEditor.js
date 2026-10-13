@@ -7,32 +7,152 @@ import { responseStepForm } from "./responseStepForm";
 import { telegramStepForm } from "./telegramStepForm";
 
 const stepTypeOptions = [
-    { value: "condition", label: "Condition", icon: "ti ti-git-merge", category: "control" },
-    { value: "code", label: "Code", icon: "ti ti-code", category: "control" },
-    { value: "automation.call", label: "Call automation", icon: "ti ti-arrow-ramp-right", category: "control" },
-    { value: "http", label: "HTTP request", icon: "ti ti-world", category: "integration" },
-    { value: "mail.send", label: "Send mail", icon: "ti ti-mail", category: "communication" },
-    { value: "telegram.send", label: "Send Telegram", icon: "ti ti-brand-telegram", category: "communication" },
-    { value: "record.create", label: "Create record", icon: "ti ti-database-plus", category: "record" },
-    { value: "record.update", label: "Update record", icon: "ti ti-edit", category: "record" },
-    { value: "record.delete", label: "Delete record", icon: "ti ti-trash", category: "record" },
+    {
+        value: "condition",
+        label: "Condition",
+        icon: "ti ti-git-merge",
+        category: "control",
+        description: "Branch the flow on a true/false check",
+    },
+    {
+        value: "code",
+        label: "Code",
+        icon: "ti ti-code",
+        category: "control",
+        description: "Run a custom JavaScript snippet",
+    },
+    {
+        value: "automation.call",
+        label: "Call automation",
+        icon: "ti ti-arrow-ramp-right",
+        category: "control",
+        description: "Run another manual automation",
+    },
+    {
+        value: "http",
+        label: "HTTP request",
+        icon: "ti ti-world",
+        category: "integration",
+        description: "Send a request to an external API",
+    },
+    {
+        value: "mail.send",
+        label: "Send mail",
+        icon: "ti ti-mail",
+        category: "communication",
+        description: "Send an email message",
+    },
+    {
+        value: "telegram.send",
+        label: "Send Telegram",
+        icon: "ti ti-send",
+        category: "communication",
+        description: "Send a message to a Telegram chat",
+    },
+    {
+        value: "record.create",
+        label: "Create record",
+        icon: "ti ti-database-plus",
+        category: "record",
+        description: "Insert a new record into a collection",
+    },
+    {
+        value: "record.update",
+        label: "Update record",
+        icon: "ti ti-edit",
+        category: "record",
+        description: "Change fields of existing records",
+    },
+    {
+        value: "record.delete",
+        label: "Delete record",
+        icon: "ti ti-trash",
+        category: "record",
+        description: "Remove records from a collection",
+    },
     {
         value: "response",
         label: "Return response",
         icon: "ti ti-arrow-back-up",
         category: "webhook",
+        description: "Return data to the webhook or caller",
         // manual automations return the response body to their caller
         triggerTypes: ["webhook", "manual"],
     },
-    { value: "capability", label: "Capability", icon: "ti ti-puzzle", category: "capability" },
-    { value: "wait.delay", label: "Wait delay", icon: "ti ti-clock", category: "wait" },
-    { value: "wait.webhook", label: "Wait webhook", icon: "ti ti-webhook", category: "wait" },
-    { value: "wait.event", label: "Wait event", icon: "ti ti-radar", category: "wait" },
-    { value: "wait.approval", label: "Wait approval", icon: "ti ti-user-check", category: "approval" },
-    { value: "ai.extract", label: "AI extract", icon: "ti ti-sparkles", category: "ai" },
-    { value: "ai.classify", label: "AI classify", icon: "ti ti-sparkles", category: "ai" },
-    { value: "ai.generate", label: "AI generate", icon: "ti ti-wand", category: "ai" },
-    { value: "ai.summarize", label: "AI summarize", icon: "ti ti-file-text", category: "ai" },
+    {
+        value: "capability",
+        label: "Capability",
+        icon: "ti ti-puzzle",
+        category: "capability",
+        description: "Use a registered capability",
+    },
+    {
+        value: "wait.delay",
+        label: "Wait delay",
+        icon: "ti ti-clock",
+        category: "wait",
+        description: "Pause for a fixed duration",
+    },
+    {
+        value: "wait.webhook",
+        label: "Wait webhook",
+        icon: "ti ti-webhook",
+        category: "wait",
+        description: "Pause until a webhook is called",
+    },
+    {
+        value: "wait.event",
+        label: "Wait event",
+        icon: "ti ti-radar",
+        category: "wait",
+        description: "Pause until an event is emitted",
+    },
+    {
+        value: "wait.approval",
+        label: "Wait approval",
+        icon: "ti ti-user-check",
+        category: "approval",
+        description: "Pause until an admin approves",
+    },
+    {
+        value: "ai.extract",
+        label: "AI extract",
+        icon: "ti ti-sparkles",
+        category: "ai",
+        description: "Pull structured data from text",
+    },
+    {
+        value: "ai.classify",
+        label: "AI classify",
+        icon: "ti ti-sparkles",
+        category: "ai",
+        description: "Label input with one of your categories",
+    },
+    {
+        value: "ai.generate",
+        label: "AI generate",
+        icon: "ti ti-wand",
+        category: "ai",
+        description: "Generate text or JSON with AI",
+    },
+    {
+        value: "ai.summarize",
+        label: "AI summarize",
+        icon: "ti ti-file-text",
+        category: "ai",
+        description: "Condense long text into a summary",
+    },
+];
+
+// groups shown in the "Add action" drawer, keyed by stepTypeOptions category
+const stepPaletteGroups = [
+    { label: "Logic", tone: "logic", categories: ["control"] },
+    { label: "Records", tone: "data", categories: ["record"] },
+    { label: "Messaging", tone: "messaging", categories: ["communication"] },
+    { label: "Integrations", tone: "integration", categories: ["integration", "capability"] },
+    { label: "Wait & approval", tone: "wait", categories: ["wait", "approval"] },
+    { label: "AI", tone: "ai", categories: ["ai"] },
+    { label: "Output", tone: "output", categories: ["webhook"] },
 ];
 
 const valueTypeOptions = [
@@ -800,6 +920,7 @@ function renderVisualBuilder(options) {
     const positions = {};
     const local = store({
         actionsOpen: false,
+        actionsQuery: "",
         addContext: null,
     });
 
@@ -888,6 +1009,7 @@ function renderVisualBuilder(options) {
 
     function openFlowAddContext(context = {}) {
         local.addContext = normalizeFlowAddContext(context);
+        local.actionsQuery = "";
         local.actionsOpen = true;
     }
 
@@ -992,8 +1114,8 @@ function renderVisualBuilder(options) {
                             openFlowAddContext({ nodeId, handleId });
                         },
                         onSourcePlaceholderClick: ({ nodeId, handleId }) => {
-                            const context = normalizeFlowAddContext({ nodeId, handleId });
-                            options.addStep("condition", context.index, context.path);
+                            // let the user pick the step type; it's inserted after this node on select
+                            openFlowAddContext({ nodeId, handleId });
                         },
                         onNodesDelete: deleteFlowNodes,
                         onEdgeDrop: handleFlowEdgeDrop,
@@ -1032,6 +1154,7 @@ function renderVisualBuilder(options) {
                     className: "btn automation-flow-add-node-btn",
                     onclick: () => {
                         local.addContext = null;
+                        local.actionsQuery = "";
                         local.actionsOpen = true;
                     },
                 },
@@ -1093,29 +1216,77 @@ function renderFlowActionDrawer(options, addStep, getTriggerType, local) {
                     ),
                 ),
                 t.div(
+                    { className: "automation-flow-action-search" },
+                    t.i({ className: "ri-search-line", ariaHidden: true }),
+                    t.input({
+                        type: "search",
+                        placeholder: "Search actions...",
+                        ariaLabel: "Search actions",
+                        value: () => local.actionsQuery,
+                        oninput: (e) => (local.actionsQuery = e.target.value),
+                        onkeydown: (e) => {
+                            if (e.key !== "Enter") {
+                                return;
+                            }
+                            e.preventDefault();
+                            const first = groupedPaletteOptions(getTriggerType(), local.actionsQuery)[0]?.options[0];
+                            if (first) {
+                                addStep(first.value);
+                            }
+                        },
+                    }),
+                ),
+                t.div(
                     { className: "automation-builder-palette-actions" },
-                    () =>
-                        t.div(
+                    () => {
+                        const groups = groupedPaletteOptions(getTriggerType(), local.actionsQuery);
+                        if (!groups.length) {
+                            return t.div(
+                                { className: "automation-flow-action-empty" },
+                                `No actions match "${local.actionsQuery.trim()}".`,
+                            );
+                        }
+
+                        return t.div(
                             { className: "automation-builder-palette-actions-inner" },
-                            ...stepTypeAddOptions(getTriggerType()).map((option) =>
-                                t.button(
-                                    {
-                                        type: "button",
-                                        className: "automation-builder-palette-action",
-                                        onclick: () => addStep(option.value),
-                                    },
+                            ...groups.map((group) =>
+                                t.section(
+                                    { className: `automation-palette-group tone-${group.tone}` },
                                     t.div(
-                                        { className: "automation-palette-icon-wrap" },
-                                        t.i({ className: option.icon || "ti ti-plus", ariaHidden: true }),
+                                        { className: "automation-palette-group-title" },
+                                        t.span(null, group.label),
+                                        t.span({ className: "automation-palette-group-count" }, group.options.length),
                                     ),
-                                    t.div(
-                                        { className: "content block txt-left" },
-                                        t.div({ className: "automation-node-title" }, option.label),
-                                        t.div({ className: "automation-node-meta" }, option.category || "step"),
+                                    ...group.options.map((option) =>
+                                        t.button(
+                                            {
+                                                type: "button",
+                                                className: "automation-builder-palette-action",
+                                                title: option.label,
+                                                onclick: () => addStep(option.value),
+                                            },
+                                            t.div(
+                                                { className: "automation-palette-icon-wrap" },
+                                                t.i({ className: option.icon || "ti ti-plus", ariaHidden: true }),
+                                            ),
+                                            t.div(
+                                                { className: "content block txt-left" },
+                                                t.div({ className: "automation-node-title" }, option.label),
+                                                t.div(
+                                                    { className: "automation-node-meta" },
+                                                    option.description || option.category || "step",
+                                                ),
+                                            ),
+                                            t.i({
+                                                className: "ti ti-plus automation-palette-add-icon",
+                                                ariaHidden: true,
+                                            }),
+                                        )
                                     ),
                                 )
                             ),
-                        ),
+                        );
+                    },
                 ),
             ),
         );
@@ -2567,6 +2738,29 @@ function stepTypeAddOptions(triggerType) {
     return stepTypeOptions.filter((option) => !option.triggerTypes || option.triggerTypes.includes(triggerType));
 }
 
+function groupedPaletteOptions(triggerType, query = "") {
+    const needle = String(query || "").trim().toLowerCase();
+    const options = stepTypeAddOptions(triggerType).filter((option) =>
+        !needle
+        || [option.label, option.description, option.category, option.value]
+            .some((value) => String(value || "").toLowerCase().includes(needle))
+    );
+
+    const groups = stepPaletteGroups.map((group) => ({
+        ...group,
+        options: options.filter((option) => group.categories.includes(option.category)),
+    }));
+
+    // keep any step types with an unmapped category visible
+    const known = new Set(stepPaletteGroups.flatMap((group) => group.categories));
+    const other = options.filter((option) => !known.has(option.category));
+    if (other.length) {
+        groups.push({ label: "Other", tone: "other", options: other });
+    }
+
+    return groups.filter((group) => group.options.length);
+}
+
 function stepTypeSelectOptions(triggerType, selectedType) {
     const options = stepTypeAddOptions(triggerType);
     if (options.find((option) => option.value === selectedType)) {
@@ -3055,7 +3249,10 @@ function callAutomationStepForm(step, context) {
             if (!local.target.active) {
                 return t.div(
                     { className: "alert warning m-b-sm" },
-                    t.div({ className: "content" }, "The selected automation is inactive and can't be called until it is activated."),
+                    t.div(
+                        { className: "content" },
+                        "The selected automation is inactive and can't be called until it is activated.",
+                    ),
                 );
             }
 

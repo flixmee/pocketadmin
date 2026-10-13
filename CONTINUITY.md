@@ -1,3 +1,28 @@
+Goal (incl. success criteria) [2026-10-13, automations editor UI polish]:
+- Improve Automations editor page UI: consistent, polished styles for inputs/selects/checkboxes/forms in trigger panel + step drawer.
+- Success: visual QA in browser (dark+light), vite build passes, no native <select>.
+
+Constraints/Assumptions:
+- Follow AGENTS.md; CSS mostly in ui/src/css/automations.css; user's own server runs on :8090 — use scratch :8091 + vite :5174.
+- Uncommitted pre-existing changes (dprint formatting in manualInputs.js/stepEditor.js, pageMedia.js, dist/index.html) — leave alone.
+
+Key decisions:
+- Fixed app-wide code-editor overlay misalignment caused by bad merge c10d935a in ui/src/css/form.css (base rules targeted stale `.editor-content`).
+
+State:
+  - Done: scratch env (pb binary + data in scratchpad, test superuser in scratchpad/creds.txt); form.css code-editor fix verified.
+  - Done: info panel scrolls (flex column, fields overflow-y auto); Notify admins is a real `.field` switch; manual input rows restyled (compact inputs, focus borders, sm checkbox, card bg); field focus borders. Verified dark+light in browser; dprint check + vite build (scratch outDir) pass. Scratch servers stopped.
+  - Done: "Add action" drawer grouped by category (stepPaletteGroups in stepEditor.js: Logic/Records/Messaging/Integrations/Wait & approval/AI/Output, unmapped -> Other), per-step descriptions, search (Enter adds first match, reset on open), tinted icons per group, ti-send icon (ti-brand-telegram was undefined). Verified dark+light; build ok.
+  - Done: flow node "+" source placeholder now opens the Add action drawer (insert position kept) instead of inserting a Condition step; verified in browser.
+  - Now: awaiting user review. Not committed; ui/dist not rebuilt.
+  - Next: optional — rebuild ui/dist, further polish of step drawer forms if user wants.
+
+Open questions: none.
+
+Working set: ui/src/css/automations.css, ui/src/css/form.css, ui/src/settings/automations/{stepEditor,manualInputs,pageAutomationUpsert}.js
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-13, automations session]:
 - Review Automations; improve Manual trigger (typed input fields, run with input data, optional wait-for-result); add a step that calls another (manual-trigger) automation with input data, in two modes: `wait` (block, use child output) or `parallel` (fire-and-forget, returns child runId).
 - Success: go tests for core/apis automation pass incl. new tests; UI build passes; editor supports input fields, call step form, run-with-input modal.
