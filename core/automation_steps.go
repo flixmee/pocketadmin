@@ -60,6 +60,8 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 		"request":        payload.Request,
 		"i18n":           payload.I18n,
 		"telegram":       payload.Telegram,
+		"input":          automationPayloadInput(payload),
+		"caller":         payload.Caller,
 	}
 
 	return &automationExecutionContext{
@@ -74,6 +76,7 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 			"request":                           payload.Request,
 			"i18n":                              payload.I18n,
 			"telegram":                          payload.Telegram,
+			"input":                             automationPayloadInput(payload),
 			"record":                            payload.Record,
 			"recordOriginal":                    payload.RecordOriginal,
 			"automation":                        automationTemplateRecordData(automation.Record),
@@ -84,6 +87,16 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 			automationTemplateOriginalRecordKey: payload.originalRecord,
 		},
 	}
+}
+
+// automationPayloadInput returns the payload input data, defaulting to an
+// empty object so that templates and code steps can always access `input`.
+func automationPayloadInput(payload automationTriggerPayload) map[string]any {
+	if payload.Input == nil {
+		return map[string]any{}
+	}
+
+	return payload.Input
 }
 
 func (ctx *automationExecutionContext) refreshRecordTemplateData() {
@@ -172,6 +185,9 @@ func executeAutomationStep(ctx *automationExecutionContext, step map[string]any)
 	case AutomationStepResponse:
 		output, err := executeAutomationResponseStep(ctx, step)
 		return automationStepStatusSuccess, output, err
+	case AutomationStepCall:
+		output, err := executeAutomationCallStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	default:
 		return automationStepStatusFailed, nil, fmt.Errorf("unsupported automation step type %q", stepType)
 	}
@@ -255,6 +271,8 @@ func previewAutomationStep(ctx *automationExecutionContext, step map[string]any)
 			}
 			output[key] = rendered
 		}
+	case AutomationStepCall:
+		return previewAutomationCallStep(ctx, step)
 	case AutomationStepWaitDelay, AutomationStepWaitWebhook, AutomationStepWaitEvent, AutomationStepWaitApproval,
 		AutomationStepAIExtract, AutomationStepAIClassify, AutomationStepAIGenerate, AutomationStepAISummarize:
 		for _, key := range []string{"duration", "key", "assignee", "role", "model", "input", "schema", "labels"} {

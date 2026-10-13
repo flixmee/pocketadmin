@@ -431,7 +431,8 @@ func TestAutomationRun(t *testing.T) {
 
 				waitForAutomationRunsAPI(t, app, automation, 1)
 			},
-			ExpectedStatus: 204,
+			ExpectedStatus:  202,
+			ExpectedContent: []string{`"automationId":"autoapi00000005"`, `"status":"queued"`, `"runId":"`},
 		},
 	}
 

@@ -1,15 +1,31 @@
 package core
 
 import (
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 type automationDelayScheduler struct {
-	stop chan struct{}
-	wake chan struct{}
-	done chan struct{}
+	stop     chan struct{}
+	wake     chan struct{}
+	done     chan struct{}
+	stopOnce sync.Once
+}
+
+// shutdown stops the scheduler goroutine and waits for it to exit.
+//
+// It is safe to call concurrently and multiple times (e.g. from
+// overlapping terminate events) - every caller blocks until the
+// goroutine is done so that the app resources are not released
+// while it is still running.
+func (s *automationDelayScheduler) shutdown() {
+	s.stopOnce.Do(func() {
+		close(s.stop)
+	})
+	<-s.done
 }
 
 func startAutomationDelayScheduler(app App) {
@@ -77,24 +93,41 @@ func stopAutomationDelayScheduler(app App) {
 	}
 
 	value := app.Store().Get(StoreKeyAutomationDelaySchedulerStop)
-	app.Store().Remove(StoreKeyAutomationDelaySchedulerStop)
 
 	switch scheduler := value.(type) {
 	case *automationDelayScheduler:
-		if scheduler != nil && scheduler.stop != nil {
-			close(scheduler.stop)
-			if scheduler.done != nil {
-				<-scheduler.done
-			}
+		if scheduler == nil {
+			return
+		}
+		scheduler.shutdown()
+
+		// remove only if it wasn't replaced in the meantime by a newer scheduler
+		if current, _ := app.Store().Get(StoreKeyAutomationDelaySchedulerStop).(*automationDelayScheduler); current == scheduler {
+			app.Store().Remove(StoreKeyAutomationDelaySchedulerStop)
 		}
 	case chan struct{}:
+		app.Store().Remove(StoreKeyAutomationDelaySchedulerStop)
 		if scheduler != nil {
 			close(scheduler)
 		}
 	}
 }
 
-func nextAutomationDelaySchedulerWait(app App) (time.Duration, bool) {
+func nextAutomationDelaySchedulerWait(app App) (wait time.Duration, ok bool) {
+	// the db connections could be closed/reset while the goroutine is
+	// still running (e.g. on app re-bootstrap) so retry later
+	if !app.IsBootstrapped() {
+		return automationDelaySchedulerInterval, true
+	}
+
+	// a panic in a background goroutine would crash the entire process
+	defer func() {
+		if rec := recover(); rec != nil {
+			app.Logger().Error("Automation delay scheduler panicked", "error", fmt.Sprint(rec))
+			wait, ok = automationDelaySchedulerInterval, true
+		}
+	}()
+
 	if err := app.ResumeExpiredAutomationWorkflowStates(); err != nil {
 		app.Logger().Warn("Failed to resume expired automation workflow states", "error", err)
 		return automationDelaySchedulerInterval, true
@@ -110,7 +143,7 @@ func nextAutomationDelaySchedulerWait(app App) (time.Duration, bool) {
 		return 0, false
 	}
 
-	wait := next.Sub(now)
+	wait = next.Sub(now)
 	if wait <= 0 {
 		return automationDelaySchedulerInterval, true
 	}

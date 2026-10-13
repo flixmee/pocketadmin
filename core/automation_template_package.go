@@ -20,6 +20,7 @@ type WorkflowTemplatePackage struct {
 	CollectionRef        string        `json:"collectionRef,omitempty"`
 	CronExpr             string        `json:"cronExpr,omitempty"`
 	WebhookMethod        string        `json:"webhookMethod,omitempty"`
+	ManualInputs         types.JSONRaw `json:"manualInputs,omitempty"`
 	Steps                types.JSONRaw `json:"steps"`
 	RequiredCapabilities []string      `json:"requiredCapabilities,omitempty"`
 	RequiredConnectors   []string      `json:"requiredConnectors,omitempty"`
@@ -159,6 +160,9 @@ func (app *BaseApp) InstallWorkflowTemplate(templateID string, options WorkflowT
 		automation.SetWebhookMethod(pkg.WebhookMethod)
 	}
 	automation.SetSteps(pkg.Steps)
+	if strings.TrimSpace(pkg.ManualInputs.String()) != "" {
+		automation.Set("manualInputs", pkg.ManualInputs)
+	}
 	automation.SetNotes(pkg.Description)
 	if err := app.Save(automation); err != nil {
 		return nil, err
@@ -211,6 +215,7 @@ func automationTemplatePackageFromAutomation(automation *Automation, options Wor
 		CollectionRef:  automation.CollectionRef(),
 		CronExpr:       automation.CronExpr(),
 		WebhookMethod:  automationWebhookMethodForExport(automation),
+		ManualInputs:   automationManualInputsRaw(automation),
 		Steps:          automation.Steps(),
 	}
 	pkg.RequiredCapabilities = workflowTemplateStepCapabilities(automation.Steps())

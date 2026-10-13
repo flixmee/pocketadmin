@@ -1,3 +1,34 @@
+Goal (incl. success criteria) [2026-10-13, automations session]:
+- Review Automations; improve Manual trigger (typed input fields, run with input data, optional wait-for-result); add a step that calls another (manual-trigger) automation with input data, in two modes: `wait` (block, use child output) or `parallel` (fire-and-forget, returns child runId).
+- Success: go tests for core/apis automation pass incl. new tests; UI build passes; editor supports input fields, call step form, run-with-input modal.
+
+Constraints/Assumptions:
+- Follow AGENTS.md; no native <select> in UI; another session may edit concurrently — don't touch unrelated files.
+- Callable targets = automations with triggerType `manual`, must be active (DECISION, may revisit).
+
+Key decisions:
+- New `_automations.manualInputs` JSON field (migration 1785000000) = [{name,label,type(text|number|boolean|json),required,default,description}].
+- Payload gets `Input` (template root `input`, also `trigger.input`) and `Caller` (`trigger.caller`).
+- New step type `automation.call` {automation, mode: wait|parallel, input{}, continueOnError?}; depth/loop guard via existing policy MaxDepth (ParentRunId/Depth).
+- Response step allowed for manual trigger too = return value of a called automation.
+- POST /api/automations/{id}/run accepts {input, wait}; returns run summary (wait) or {runId,status:"queued"} (202).
+
+State:
+  - Done: backend (core/automation_call.go, runner/steps/validate/schema/versions/template pkg, migration 1785000000, apis /run {input,wait} -> 202/200), 8 new tests in core/automation_call_test.go pass; template root `input` whitelisted (core/automation_templates.go).
+  - Done (review fixes): delay scheduler double-close panic + goroutine querying closed DB (core/automation_delay_scheduler.go: sync.Once shutdown, IsBootstrapped guard, recover).
+  - Pre-existing failures on HEAD (not ours): TestSQLRun, TestSettings_DBExport, TestSettingsMarshalJSON, TestCollectionDBExport, TestNotifyWatcher_*; flaky TestCollectionPresetsList, TestSettingsRegisterTelegramWebhook.
+  - Done (UI): manualInputs.js (inputs editor + Run modal w/ wait toggle), call step form in stepEditor.js, Run button on page + list (manual only), autocomplete `input` group, response step allowed for manual ("Return response").
+  - Done (review fix): pageAutomationUpsert hydrated form by re-normalizing editor steps -> wait.delay reset to 1m / capability inputs lost on load+save. Now normalizes from API data; change detection compares API payloads.
+  - Verified: browser QA on scratch server (:8091/:5174, stopped) — run modal validation + result, call step form, save round-trip byte-identical; automation tests + vet + vite build green. Scratch worktree removed.
+  - Now: done; awaiting user review. Not committed.
+  - Next: user decision on commit; optional follow-ups (pre-existing failing tests, dead automationUpsertModal.js, global policy context race).
+
+Open questions: none yet.
+
+Working set: core/automation_runner.go, automation_steps.go, automation_validate.go, automation_schema.go, automation_versions.go, automation_template_package.go, new core/automation_call.go, migrations/1785000000_automation_manual_inputs.go, apis/automation.go, ui/src/settings/automations/*.
+
+---- Previous ledger ----
+
 Goal (incl. success criteria):
 - Fix startup panic from duplicate POST /api/automation-webhooks/{id} registration; verify automation routes build and tests pass.
 Constraints/Assumptions:

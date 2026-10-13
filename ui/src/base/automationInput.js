@@ -62,6 +62,16 @@ const automationMappingBaseGroups = [
         triggerTypes: ["telegram.message"],
     },
     {
+        title: "Input",
+        tokens: [
+            "{{input.*}}",
+            "{{trigger.caller.automationId}}",
+            "{{trigger.caller.automationName}}",
+            "{{trigger.caller.runId}}",
+        ],
+        triggerTypes: ["manual"],
+    },
+    {
         title: "i18n",
         tokens: [
             "{{i18n.collectionId}}",
@@ -135,6 +145,15 @@ window.app.utils.automationMappingTokenGroups = function(options = {}) {
             ...group,
             tokens: [...group.tokens],
         }));
+
+    // the automation editor registers the input fields that are currently being edited
+    if (triggerType === "manual" && typeof app.utils.automationEditorManualInputNames === "function") {
+        const inputGroup = result.find((group) => group.title === "Input");
+        const names = app.utils.automationEditorManualInputNames() || [];
+        if (inputGroup && names.length) {
+            inputGroup.tokens.unshift(...names.map((name) => `{{input.${name}}}`));
+        }
+    }
 
     const recordTokens = collectionMappingTokens("record", triggerCollectionRef);
     if (recordTokens.length) {

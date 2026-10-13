@@ -9,6 +9,7 @@ import { telegramStepForm } from "./telegramStepForm";
 const stepTypeOptions = [
     { value: "condition", label: "Condition", icon: "ti ti-git-merge", category: "control" },
     { value: "code", label: "Code", icon: "ti ti-code", category: "control" },
+    { value: "automation.call", label: "Call automation", icon: "ti ti-arrow-ramp-right", category: "control" },
     { value: "http", label: "HTTP request", icon: "ti ti-world", category: "integration" },
     { value: "mail.send", label: "Send mail", icon: "ti ti-mail", category: "communication" },
     { value: "telegram.send", label: "Send Telegram", icon: "ti ti-brand-telegram", category: "communication" },
@@ -17,10 +18,11 @@ const stepTypeOptions = [
     { value: "record.delete", label: "Delete record", icon: "ti ti-trash", category: "record" },
     {
         value: "response",
-        label: "Webhook response",
+        label: "Return response",
         icon: "ti ti-arrow-back-up",
         category: "webhook",
-        triggerTypes: ["webhook"],
+        // manual automations return the response body to their caller
+        triggerTypes: ["webhook", "manual"],
     },
     { value: "capability", label: "Capability", icon: "ti ti-puzzle", category: "capability" },
     { value: "wait.delay", label: "Wait delay", icon: "ti ti-clock", category: "wait" },
@@ -653,6 +655,8 @@ function renderStepForm(step, error, context = {}) {
             return recordStepForm({ step, error, ...context });
         case "response":
             return responseStepForm({ step, error, ...context });
+        case "automation.call":
+            return callAutomationStepForm(step, context);
         case "capability":
         case "wait.delay":
         case "wait.webhook":
@@ -2661,6 +2665,8 @@ function createEditorStep(type, rawStep = {}) {
                     ? toString(rawStep.bodyText)
                     : stringifyLooseValue(rawStep.body),
             };
+        case "automation.call":
+            return createCallAutomationStep(base, rawStep);
         case "capability":
             return createCapabilityStep(base, rawStep);
         case "wait.delay":
@@ -2769,6 +2775,8 @@ function buildStepPayload(step, index) {
             return buildRecordDeletePayload(step, index);
         case "response":
             return buildResponsePayload(step, index);
+        case "automation.call":
+            return buildCallAutomationPayload(step, index);
         case "capability":
             return buildCapabilityPayload(step, index);
         case "wait.delay":
@@ -2844,6 +2852,252 @@ function codeStepForm({ step, context = {} }) {
             " or ",
             t.code("steps[n].output"),
             ".",
+        ),
+    );
+}
+
+const callAutomationModeOptions = [
+    { value: "wait", label: "Wait for result" },
+    { value: "parallel", label: "Run in parallel" },
+];
+
+// shared between all call steps to avoid one request per rendered step
+let callableAutomationsCache = null;
+
+function loadCallableAutomations(force = false) {
+    const isFresh = callableAutomationsCache && Date.now() - callableAutomationsCache.time < 10000;
+    if (!force && isFresh) {
+        return callableAutomationsCache.promise;
+    }
+
+    const promise = app.pb
+        .send("/api/automations", { requestKey: null })
+        .then((items) => (items || []).filter((item) => item?.triggerType === "manual"))
+        .catch((err) => {
+            callableAutomationsCache = null;
+            throw err;
+        });
+
+    callableAutomationsCache = { time: Date.now(), promise };
+
+    return promise;
+}
+
+// note: accepts both the API payload and an already normalized editor step
+function createCallAutomationStep(base, rawStep = {}) {
+    return {
+        ...base,
+        automationRef: toString(rawStep.automationRef ?? rawStep.automation),
+        // display only (resolved from the loaded automations list)
+        automationName: toString(rawStep.automationName),
+        mode: rawStep.mode === "parallel" ? "parallel" : "wait",
+        continueOnError: !!rawStep.continueOnError,
+        inputRows: Array.isArray(rawStep.inputRows)
+            ? rawStep.inputRows.map((row) => ({ ...row }))
+            : objectToConfigRows(rawStep.input),
+    };
+}
+
+function buildCallAutomationPayload(step, index) {
+    const automation = toString(step.automationRef).trim();
+    if (!automation) {
+        throw new Error(`Step ${index + 1}: select the automation to call.`);
+    }
+
+    const payload = {
+        type: "automation.call",
+        automation,
+        mode: step.mode === "parallel" ? "parallel" : "wait",
+        input: configRowsToObject(step.inputRows),
+    };
+
+    if (payload.mode === "wait" && step.continueOnError) {
+        payload.continueOnError = true;
+    }
+
+    return payload;
+}
+
+function callAutomationStepForm(step, context) {
+    const local = store({
+        isLoading: false,
+        automations: [],
+        get target() {
+            return local.automations.find((item) => item.id === step.automationRef) || null;
+        },
+        get targetInputs() {
+            return Array.isArray(local.target?.manualInputs) ? local.target.manualInputs : [];
+        },
+    });
+
+    async function load(force = false) {
+        local.isLoading = true;
+        try {
+            local.automations = await loadCallableAutomations(force);
+            step.automationName = local.target?.name || "";
+        } catch (err) {
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+            }
+        }
+        local.isLoading = false;
+    }
+
+    function automationOptions() {
+        const options = local.automations.map((item) => ({
+            value: item.id,
+            label: item.active ? item.name || item.id : `${item.name || item.id} (inactive)`,
+        }));
+
+        if (step.automationRef && !options.some((option) => option.value === step.automationRef)) {
+            options.unshift({ value: step.automationRef, label: step.automationRef });
+        }
+
+        return options;
+    }
+
+    // adds a mapping row for every declared input that is not mapped yet
+    function addMissingInputRows() {
+        const existing = new Set(step.inputRows.map((row) => toString(row.key).trim()));
+        for (const input of local.targetInputs) {
+            if (!input?.name || existing.has(input.name)) {
+                continue;
+            }
+
+            const row = createConfigRow();
+            row.key = input.name;
+            row.valueType = "template";
+            step.inputRows.push(row);
+        }
+    }
+
+    function selectTarget(id) {
+        step.automationRef = id;
+        step.automationName = local.target?.name || "";
+        addMissingInputRows();
+    }
+
+    function inputHint(input) {
+        const parts = [input.type || "text"];
+        if (input.required) {
+            parts.push("required");
+        }
+        if (input.default !== undefined && input.default !== null && input.default !== "") {
+            parts.push(`default: ${typeof input.default === "string" ? input.default : JSON.stringify(input.default)}`);
+        }
+        return parts.join(", ");
+    }
+
+    return t.div(
+        {
+            className: "automation-graphical-config automation-call-step-form",
+            onmount: () => load(),
+        },
+        t.div(
+            { className: "grid" },
+            t.div(
+                { className: "col-md-7" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_automation` }, "Automation"),
+                    app.components.select({
+                        id: `${step.__id}_automation`,
+                        value: () => step.automationRef,
+                        options: automationOptions,
+                        placeholder: () => local.isLoading ? "Loading automations..." : "- Select automation -",
+                        searchThreshold: 8,
+                        onchange: (selected) => selectTarget(selected?.[0]?.value || ""),
+                    }),
+                ),
+                t.div(
+                    { className: "field-help" },
+                    () =>
+                        local.automations.length || local.isLoading
+                            ? "Only automations with a manual trigger can be called."
+                            : "No manual-trigger automations yet. Create one with a manual trigger to call it from here.",
+                ),
+            ),
+            t.div(
+                { className: "col-md-5" },
+                t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_mode` }, "Mode"),
+                    app.components.select({
+                        id: `${step.__id}_mode`,
+                        value: () => step.mode,
+                        options: callAutomationModeOptions,
+                        onchange: (selected) => (step.mode = selected?.[0]?.value === "parallel" ? "parallel" : "wait"),
+                    }),
+                ),
+            ),
+            t.div(
+                { className: "col-lg-12", hidden: () => step.mode !== "wait" },
+                t.div(
+                    { className: "field" },
+                    t.input({
+                        id: `${step.__id}_continueOnError`,
+                        type: "checkbox",
+                        checked: () => step.continueOnError,
+                        onchange: (e) => (step.continueOnError = e.target.checked),
+                    }),
+                    t.label(
+                        { htmlFor: `${step.__id}_continueOnError` },
+                        "Continue this automation if the called one fails",
+                    ),
+                ),
+            ),
+        ),
+        () => {
+            if (!local.target) {
+                return null;
+            }
+
+            if (!local.target.active) {
+                return t.div(
+                    { className: "alert warning m-b-sm" },
+                    t.div({ className: "content" }, "The selected automation is inactive and can't be called until it is activated."),
+                );
+            }
+
+            if (!local.targetInputs.length) {
+                return t.div(
+                    { className: "txt-sm txt-hint m-b-sm" },
+                    "The selected automation doesn't declare input fields. Any data you add below is still available to it as {{input.*}}.",
+                );
+            }
+
+            return t.div(
+                { className: "automation-call-inputs-hint m-b-sm" },
+                t.div({ className: "txt-sm txt-hint m-b-5" }, "Declared inputs:"),
+                t.div(
+                    { className: "flex gap-5 flex-wrap" },
+                    ...local.targetInputs.map((input) =>
+                        t.span(
+                            {
+                                className: `label ${input.required ? "warning" : ""}`,
+                                title: input.description || "",
+                            },
+                            `${input.name} (${inputHint(input)})`,
+                        )
+                    ),
+                ),
+            );
+        },
+        objectRowsEditor({
+            title: "Input data",
+            emptyText: "No input data mapped.",
+            context,
+            rows: () => step.inputRows,
+            add: () => step.inputRows.push(createConfigRow()),
+            remove: (index) => step.inputRows.splice(index, 1),
+            move: (from, to) => moveArrayItem(step.inputRows, from, to),
+        }),
+        t.div(
+            { className: "field-help" },
+            () =>
+                step.mode === "parallel"
+                    ? "The called automation starts in the background. This step only outputs its runId and status \"queued\"."
+                    : "This step waits for the called automation and outputs { runId, status, output }. The output is the body of its \"Return response\" step, or the output of its last step.",
         ),
     );
 }
@@ -3766,7 +4020,11 @@ function summarizeStep(step) {
         case "record.delete":
             return `Delete record in ${step.collection || "collection"}`;
         case "response":
-            return `Return webhook response ${step.statusCodeText || "200"}`;
+            return `Return response ${step.statusCodeText || "200"}`;
+        case "automation.call":
+            return `${step.mode === "parallel" ? "Start" : "Call"} ${step.automationName || "automation"}${
+                step.mode === "parallel" ? " in parallel" : ""
+            }`;
         case "capability":
             return step.capability ? `Run ${step.capability}` : "Choose a capability";
         case "wait.delay":
@@ -3860,6 +4118,12 @@ function clientValidateStep(step) {
         case "response":
             validateOptionalNumber(step.statusCodeText, "Response status code", messages);
             validateOptionalJSONObject(step.headersText, "Response headers", messages);
+            break;
+        case "automation.call":
+            if (!step.automationRef?.trim()) {
+                messages.push("Select the automation to call.");
+            }
+            validateConfigRows(step.inputRows, "Call input", messages);
             break;
         case "code":
             if (!step.code?.trim()) {

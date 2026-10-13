@@ -53,6 +53,7 @@ var (
 		AutomationStepAIClassify,
 		AutomationStepAIGenerate,
 		AutomationStepAISummarize,
+		AutomationStepCall,
 	}
 	automationRunStatuses = []string{
 		AutomationRunStatusQueued,
@@ -273,6 +274,10 @@ func validateAutomationRecord(app App, record *Record) error {
 				"cronExpr": validation.NewError("validation_invalid_cron", err.Error()),
 			}
 		}
+	}
+
+	if err := validateAutomationManualInputs(record.GetRaw("manualInputs")); err != nil {
+		return validation.Errors{"manualInputs": err}
 	}
 
 	if err := validateAutomationSteps(app, record); err != nil {
@@ -502,6 +507,8 @@ func validateAutomationStepDefinition(app App, automationRecord *Record, step ma
 		return validateAutomationWaitApprovalStep(step)
 	case AutomationStepAIExtract, AutomationStepAIClassify, AutomationStepAIGenerate, AutomationStepAISummarize:
 		return validateAutomationAIStep(step)
+	case AutomationStepCall:
+		return validateAutomationCallStep(app, step)
 	default:
 		return nil
 	}
@@ -798,8 +805,11 @@ func validateAutomationRecordDeleteStep(step map[string]any) error {
 }
 
 func validateAutomationResponseStep(automationRecord *Record, step map[string]any) error {
-	if strings.TrimSpace(automationRecord.GetString("triggerType")) != AutomationTriggerWebhook {
-		return validation.NewError("validation_invalid_automation_response", "Response steps require a webhook trigger.")
+	switch strings.TrimSpace(automationRecord.GetString("triggerType")) {
+	case AutomationTriggerWebhook, AutomationTriggerManual:
+		// manual automations use the response body as the value returned to their caller
+	default:
+		return validation.NewError("validation_invalid_automation_response", "Response steps require a webhook or manual trigger.")
 	}
 
 	if _, err := automationResponseStatusCode(step["statusCode"], http.StatusOK); err != nil {

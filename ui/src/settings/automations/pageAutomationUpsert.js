@@ -1,5 +1,11 @@
 import { openAutomationDryRunModal } from "./automationDryRunModal";
 import { openAutomationRunsModal } from "./automationRunsList";
+import {
+    buildManualInputsPayload,
+    manualInputsEditor,
+    normalizeManualInputRows,
+    openAutomationRunModal,
+} from "./manualInputs";
 import { buildAutomationStepsPayload, normalizeAutomationEditorSteps, stepEditor } from "./stepEditor";
 import { telegramWebhookRegistration } from "./telegramWebhookRegistration";
 
@@ -44,7 +50,7 @@ export function pageAutomationUpsert(route) {
         automation: null,
         automationTags: [],
         form: initialForm,
-        initialSerialized: JSON.stringify(initialForm),
+        initialSerialized: serializeAutomationForm(initialForm),
         get title() {
             return isNew ? "Create automation" : data.form.name || "Edit automation";
         },
@@ -52,7 +58,7 @@ export function pageAutomationUpsert(route) {
             return isNew ? "Create automation" : "Save changes";
         },
         get hasChanges() {
-            return JSON.stringify(normalizeAutomationForm(data.form)) !== data.initialSerialized;
+            return serializeAutomationForm(data.form) !== data.initialSerialized;
         },
         get isRecordTrigger() {
             return isRecordAutomationTrigger(data.form.triggerType);
@@ -69,16 +75,21 @@ export function pageAutomationUpsert(route) {
         get isTelegramTrigger() {
             return data.form.triggerType === "telegram.message";
         },
+        get isManualTrigger() {
+            return data.form.triggerType === "manual";
+        },
         get canSave() {
             return !data.isSaving && !!data.form.name.trim() && data.form.steps.length > 0 && data.hasChanges;
         },
     });
 
     function hydrateForm(automation) {
-        const nextForm = normalizeAutomationForm(automation);
         data.automation = automation;
-        data.form = cloneAutomationForm(nextForm);
-        data.initialSerialized = JSON.stringify(nextForm);
+        // note: always normalize from the API data - re-normalizing already
+        // normalized editor steps drops the config of some step types
+        // (e.g. wait delays reset to 1 minute, capability input rows are lost)
+        data.form = normalizeAutomationForm(automation);
+        data.initialSerialized = serializeAutomationForm(normalizeAutomationForm(automation));
         app.store.title = isNew ? "Create automation" : data.form.name || "Edit automation";
     }
 
@@ -302,6 +313,18 @@ export function pageAutomationUpsert(route) {
         openAutomationRunsModal(data.automation);
     }
 
+    function openRunModal() {
+        if (!data.automation?.id || data.isSaving) {
+            return;
+        }
+
+        if (data.hasChanges) {
+            app.toasts.info("Running the last saved version of this automation.");
+        }
+
+        openAutomationRunModal(data.automation);
+    }
+
     function openDryRunModal() {
         if (!data.automation?.id || data.isSaving) {
             return;
@@ -337,8 +360,16 @@ export function pageAutomationUpsert(route) {
         {
             pbEvent: "pageAutomationUpsert",
             className: "page page-automation-upsert",
-            onmount: loadPageData,
+            onmount: () => {
+                // exposes the edited input names to the template autocomplete
+                app.utils.automationEditorManualInputNames = () =>
+                    data.form.manualInputs.map((row) => row.name.trim()).filter(Boolean);
+
+                loadPageData();
+            },
             onunmount: () => {
+                delete app.utils.automationEditorManualInputNames;
+
                 if (app.store.errors) {
                     app.store.errors = null;
                 }
@@ -442,6 +473,17 @@ export function pageAutomationUpsert(route) {
                     ),
                     t.div(
                         { className: "automation-workflow-actions" },
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn secondary transparent pill",
+                                hidden: () => data.automation?.triggerType !== "manual",
+                                disabled: () => isNew || data.isSaving,
+                                onclick: openRunModal,
+                            },
+                            t.i({ className: "ti ti-bolt", ariaHidden: true }),
+                            t.span({ className: "txt" }, "Run"),
+                        ),
                         t.button(
                             {
                                 type: "button",
@@ -592,6 +634,22 @@ export function pageAutomationUpsert(route) {
                             ),
                             t.div(
                                 {
+                                    className: "automation-workflow-info-block",
+                                    hidden: () => !data.isManualTrigger,
+                                },
+                                t.label({ className: "automation-field-label" }, "Input fields"),
+                                manualInputsEditor({
+                                    rows: () => data.form.manualInputs,
+                                    idPrefix: formId + "_manualInput",
+                                }),
+                                () => fieldError(app.store.errors?.manualInputs),
+                                t.div(
+                                    { className: "txt-sm txt-hint automation-field-desc m-t-5" },
+                                    "Values are available as {{input.name}}. Other automations can call this one with the \"Call automation\" step.",
+                                ),
+                            ),
+                            t.div(
+                                {
                                     className: "field",
                                     hidden: () => !data.isTelegramTrigger,
                                 },
@@ -676,16 +734,23 @@ function normalizeAutomationForm(automation = null) {
         collectionRef: automation?.collectionRef || "",
         cronExpr: automation?.cronExpr || "",
         webhookMethod: normalizeWebhookMethod(automation?.webhookMethod),
+        manualInputs: normalizeManualInputRows(automation?.manualInputs),
         notes: automation?.notes || "",
         steps: normalizeAutomationEditorSteps(automation?.steps),
     };
 }
 
-function cloneAutomationForm(form) {
-    return {
-        ...form,
-        steps: normalizeAutomationEditorSteps(form?.steps),
-    };
+// Serializes the form for change detection.
+//
+// The API payload is used (instead of the editor state) so that
+// presentation-only properties don't produce false positives.
+function serializeAutomationForm(form) {
+    try {
+        return JSON.stringify(buildAutomationPayload(form));
+    } catch (_) {
+        // an invalid (and therefore unsaved) configuration
+        return "__invalid__" + JSON.stringify(normalizeAutomationForm(form));
+    }
 }
 
 function normalizeTag(value) {
@@ -708,6 +773,7 @@ function buildAutomationPayload(form) {
             : "",
         cronExpr: form.triggerType === "schedule.cron" ? form.cronExpr.trim() : "",
         webhookMethod: form.triggerType === "webhook" ? normalizeWebhookMethod(form.webhookMethod) : "",
+        manualInputs: form.triggerType === "manual" ? buildManualInputsPayload(form.manualInputs) : [],
         notes: form.notes.trim(),
         steps: buildAutomationStepsPayload(form.steps),
     };

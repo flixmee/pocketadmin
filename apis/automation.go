@@ -27,6 +27,7 @@ var automationAllowedFields = []string{
 	"collectionRef",
 	"cronExpr",
 	"webhookMethod",
+	"manualInputs",
 	"steps",
 	"notes",
 }
@@ -350,17 +351,29 @@ func automationRun(e *core.RequestEvent) error {
 		return automationAPIError(e, "run", err)
 	}
 
-	routine.FireAndForget(func() {
-		if err := e.App.RunAutomationManually(automation.Id); err != nil {
-			e.App.Logger().Warn(
-				"Failed to execute automation manual run",
-				"automationId", automation.Id,
-				"error", err,
-			)
+	body := core.AutomationManualRunOptions{}
+	if e.Request.ContentLength != 0 {
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Failed to load the run input.", err)
 		}
-	})
+	}
 
-	return e.NoContent(http.StatusNoContent)
+	result, err := e.App.RunAutomationManuallyWithOptions(automation.Id, body)
+	if result == nil {
+		var validationErrors validation.Errors
+		if errors.As(err, &validationErrors) {
+			return e.BadRequestError("Invalid automation input.", validationErrors)
+		}
+		return automationAPIError(e, "run", err)
+	}
+
+	// note: a failed run is still a completed request - the outcome is part of the result
+	status := http.StatusOK
+	if !body.Wait {
+		status = http.StatusAccepted
+	}
+
+	return e.JSON(status, result)
 }
 
 func automationDryRun(e *core.RequestEvent) error {

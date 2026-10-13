@@ -21,6 +21,7 @@ type automationVersionSnapshot struct {
 	CollectionRef string        `json:"collectionRef,omitempty"`
 	CronExpr      string        `json:"cronExpr,omitempty"`
 	WebhookMethod string        `json:"webhookMethod,omitempty"`
+	ManualInputs  types.JSONRaw `json:"manualInputs,omitempty"`
 	Steps         types.JSONRaw `json:"steps"`
 	Notes         string        `json:"notes,omitempty"`
 }
@@ -87,6 +88,7 @@ func automationSnapshotRaw(automation *Automation) (types.JSONRaw, error) {
 		CollectionRef: automation.CollectionRef(),
 		CronExpr:      automation.CronExpr(),
 		WebhookMethod: automationWebhookMethodForExport(automation),
+		ManualInputs:  automationManualInputsRaw(automation),
 		Steps:         automation.Steps(),
 		Notes:         automation.Notes(),
 	})
@@ -126,6 +128,9 @@ func applyAutomationVersionSnapshot(automation *Automation, raw types.JSONRaw) (
 	}
 	if strings.TrimSpace(snapshot.Steps.String()) != "" {
 		clone.SetSteps(snapshot.Steps)
+	}
+	if strings.TrimSpace(snapshot.ManualInputs.String()) != "" {
+		clone.Set("manualInputs", snapshot.ManualInputs)
 	}
 	clone.SetNotes(snapshot.Notes)
 

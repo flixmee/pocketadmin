@@ -602,6 +602,10 @@ type App interface {
 	// RunAutomationManually runs the specified automation using the manual trigger type.
 	RunAutomationManually(automationID string) error
 
+	// RunAutomationManuallyWithOptions runs the specified automation using the manual
+	// trigger type and the provided input, optionally waiting for the run to finish.
+	RunAutomationManuallyWithOptions(automationID string, options AutomationManualRunOptions) (*AutomationCallResult, error)
+
 	// RunAutomationFromRun reruns the specified stored automation run using its saved trigger payload.
 	RunAutomationFromRun(runID string) error
 

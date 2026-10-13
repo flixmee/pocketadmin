@@ -1286,6 +1286,7 @@
 .ti-zoom-out { --ti-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 0 0-14 0M21 21l-6-6M7 10h6'/%3E%3C/svg%3E"); }
 .ti-focus-centered { --ti-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 12h6M12 9v6'/%3E%3C/svg%3E"); }
 .ti-lock { --ti-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zM8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E"); }
+.ti-arrow-ramp-right { --ti-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 21v-9a5 5 0 0 1 5-5h8M16 3l4 4-4 4'/%3E%3C/svg%3E"); }
 
 .automation-workflow-builder {
     --color-background-primary: var(--surfaceColor);
@@ -2425,4 +2426,66 @@
     .al-row-name {
         max-width: 180px;
     }
+}
+
+/* ── Manual trigger input fields ── */
+.automation-manual-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.automation-manual-input-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.automation-manual-input-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--surfaceAlt3Color);
+    border-radius: var(--borderRadius);
+}
+
+.automation-manual-input-row-head,
+.automation-manual-input-row-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.automation-manual-input-row-head input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.automation-manual-input-row-meta .automation-manual-input-type {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.automation-manual-input-row-meta .automation-manual-input-required {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    width: auto;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.automation-manual-input-add {
+    align-self: flex-start;
+}
+
+.automation-workflow-info-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
 }

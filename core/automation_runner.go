@@ -24,10 +24,13 @@ type automationTriggerPayload struct {
 	Request        map[string]any `json:"request,omitempty"`
 	I18n           map[string]any `json:"i18n,omitempty"`
 	Telegram       map[string]any `json:"telegram,omitempty"`
+	Input          map[string]any `json:"input,omitempty"`
+	Caller         map[string]any `json:"caller,omitempty"`
 	Record         map[string]any `json:"record,omitempty"`
 	RecordOriginal map[string]any `json:"recordOriginal,omitempty"`
 	triggerRecord  *Record        `json:"-"`
 	originalRecord *Record        `json:"-"`
+	runId          string         `json:"-"` // optional preassigned run id
 }
 
 const storeKeyAutomationRecordTriggersSuppressed = "__automationRecordTriggersSuppressed"
@@ -249,16 +252,13 @@ func runAutomationByID(app App, automationID string, payload automationTriggerPa
 	return runAutomation(app, automation, payload)
 }
 
-// RunAutomationManually runs the specified automation using the manual trigger type.
+// RunAutomationManually runs the specified automation using the manual trigger type
+// and waits for it to complete.
+//
+// Use [BaseApp.RunAutomationManuallyWithOptions] to provide input data.
 func (app *BaseApp) RunAutomationManually(automationID string) error {
-	automation, err := app.FindAutomationById(automationID)
-	if err != nil {
-		return err
-	}
-
-	return runAutomation(app, automation, automationTriggerPayload{
-		TriggerType: AutomationTriggerManual,
-	})
+	_, err := app.RunAutomationManuallyWithOptions(automationID, AutomationManualRunOptions{Wait: true})
+	return err
 }
 
 // RunAutomationFromRun reruns the specified stored automation run using its saved trigger payload.
@@ -450,6 +450,9 @@ func runAutomationWithContext(app App, automation *Automation, payload automatio
 	}
 
 	run = NewAutomationRun(app)
+	if payload.runId != "" {
+		run.Id = payload.runId
+	}
 	run.SetAutomationRef(automation.Id)
 	run.SetTriggerType(payload.TriggerType)
 	run.SetStatus(AutomationRunStatusQueued)

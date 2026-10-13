@@ -38,7 +38,7 @@ func AutomationSchemas() AutomationSchemaCatalog {
 			AutomationTriggerScheduleCron:       simpleTriggerSchema(AutomationTriggerScheduleCron, "Schedule"),
 			AutomationTriggerWebhook:            webhookTriggerSchema(),
 			AutomationTriggerTelegramMessage:    telegramMessageTriggerSchema(),
-			AutomationTriggerManual:             simpleTriggerSchema(AutomationTriggerManual, "Manual"),
+			AutomationTriggerManual:             manualTriggerSchema(),
 			AutomationTriggerI18nMissing:        i18nTriggerSchema(AutomationTriggerI18nMissing, "Translation missing"),
 			AutomationTriggerI18nPublished:      i18nTriggerSchema(AutomationTriggerI18nPublished, "Locale published"),
 			AutomationTriggerI18nUpdated:        i18nTriggerSchema(AutomationTriggerI18nUpdated, "Translation updated"),
@@ -63,6 +63,7 @@ func AutomationSchemas() AutomationSchemaCatalog {
 			AutomationStepAIClassify:   aiStepSchema(AutomationStepAIClassify, "AI classify"),
 			AutomationStepAIGenerate:   aiStepSchema(AutomationStepAIGenerate, "AI generate"),
 			AutomationStepAISummarize:  aiStepSchema(AutomationStepAISummarize, "AI summarize"),
+			AutomationStepCall:         automationCallStepSchema(),
 		},
 		Capabilities: BuiltInAutomationCapabilities(),
 		Limits: AutomationRuntimeLimits{

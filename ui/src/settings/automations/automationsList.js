@@ -1,4 +1,5 @@
 import { openAutomationRunsModal } from "./automationRunsList";
+import { openAutomationRunModal } from "./manualInputs";
 
 const triggerLabels = {
     "manual": "Manual",
@@ -139,6 +140,14 @@ export function automationsList(propsArg = {}) {
 
     async function runAutomation(automation) {
         if (!automation?.id || data.isRunning[automation.id]) {
+            return;
+        }
+
+        // manual automations can receive input data and optionally wait for the result
+        if (automation.triggerType === "manual") {
+            openAutomationRunModal(automation, {
+                onrun: () => loadAutomations(),
+            });
             return;
         }
 
