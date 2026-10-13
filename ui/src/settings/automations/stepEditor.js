@@ -3785,23 +3785,36 @@ function valueControl(row, context = {}) {
         });
     }
 
-    if (row.valueType === "template") {
-        return app.components.automationInput({
-            singleLine: true,
-            placeholder: "{{record.field}}",
+    if (row.valueType === "number") {
+        return t.input({
+            type: "number",
+            placeholder: "Value",
             value: () => row.valueText,
-            triggerType: () => context.triggerType,
-            triggerCollectionRef: () => context.triggerCollectionRef,
-            oninput: (value) => (row.valueText = value),
+            oninput: (e) => (row.valueText = e.target.value),
         });
     }
 
-    return t.input({
-        type: row.valueType === "number" ? "number" : "text",
-        placeholder: "Value",
+    // text, json and template values are all rendered as templates,
+    // so they share the input with the `{{` data mapping autocomplete
+    return app.components.automationInput({
+        singleLine: true,
+        placeholder: valueControlPlaceholder(row.valueType),
         value: () => row.valueText,
-        oninput: (e) => (row.valueText = e.target.value),
+        triggerType: () => context.triggerType,
+        triggerCollectionRef: () => context.triggerCollectionRef,
+        oninput: (value) => (row.valueText = value),
     });
+}
+
+function valueControlPlaceholder(valueType) {
+    switch (valueType) {
+        case "template":
+            return "{{record.field}}";
+        case "json":
+            return `{"key": "{{record.id}}"}`;
+        default:
+            return "Value or {{record.field}}";
+    }
 }
 
 function removeRowButton(onclick) {
