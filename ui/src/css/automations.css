@@ -864,6 +864,53 @@
     background: var(--surfaceColor);
 }
 
+/* the row controls are not wrapped in .field so they need the field look explicitly */
+.automation-config-row > input,
+.automation-config-row > textarea,
+.automation-config-row > .input {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    margin: 0;
+    padding: 0 var(--inputPadding);
+    border: 0;
+    outline: 0;
+    border-radius: var(--inputBorderRadius);
+    background: var(--inputColor);
+    color: var(--surfaceTxtColor);
+    font-size: var(--fontSize);
+    font-family: var(--baseFontFamily);
+    line-height: 1;
+    transition: background var(--animationSpeed);
+
+    [data-color-scheme="dark"] & {
+        color-scheme: dark;
+    }
+
+    &::placeholder {
+        color: var(--surfaceTxtDisabledColor);
+    }
+
+    &:hover {
+        background: var(--inputFocusColor);
+    }
+
+    &:focus,
+    &:focus-within {
+        background: var(--inputFocusColor);
+    }
+}
+
+.automation-config-row > textarea {
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+.automation-config-row > .input.select,
+.automation-config-row > .input.code-editor {
+    padding: 0;
+}
+
 .automation-config-row.compact {
     grid-template-columns: 34px minmax(160px, 1fr) 34px;
 }
