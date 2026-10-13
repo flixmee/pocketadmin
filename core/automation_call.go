@@ -380,6 +380,10 @@ func runAutomationCall(app App, automation *Automation, payload automationTrigge
 // automationCallOutput returns the explicit response body (if a response step
 // was executed) or the output of the last executed step.
 func automationCallOutput(ctx *automationExecutionContext) any {
+	if data := automationExecutionData(ctx); data != nil {
+		return data
+	}
+
 	if ctx.WebhookResponse != nil {
 		return ctx.WebhookResponse.Body
 	}

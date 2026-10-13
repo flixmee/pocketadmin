@@ -71,6 +71,15 @@ const stepTypeOptions = [
         description: "Remove records from a collection",
     },
     {
+        value: "execution.data",
+        label: "Execution data",
+        icon: "ti ti-database-export",
+        category: "output",
+        description: "Return named values to the runner or caller",
+        // the data is returned to the manual run or the calling automation
+        triggerTypes: ["manual"],
+    },
+    {
         value: "response",
         label: "Return response",
         icon: "ti ti-arrow-back-up",
@@ -152,7 +161,7 @@ const stepPaletteGroups = [
     { label: "Integrations", tone: "integration", categories: ["integration", "capability"] },
     { label: "Wait & approval", tone: "wait", categories: ["wait", "approval"] },
     { label: "AI", tone: "ai", categories: ["ai"] },
-    { label: "Output", tone: "output", categories: ["webhook"] },
+    { label: "Output", tone: "output", categories: ["output", "webhook"] },
 ];
 
 const valueTypeOptions = [
@@ -160,6 +169,7 @@ const valueTypeOptions = [
     { value: "number", label: "Number" },
     { value: "boolean", label: "Boolean" },
     { value: "template", label: "Template" },
+    { value: "json", label: "JSON" },
 ];
 
 const schemaTypeOptions = [
@@ -777,6 +787,8 @@ function renderStepForm(step, error, context = {}) {
             return responseStepForm({ step, error, ...context });
         case "automation.call":
             return callAutomationStepForm(step, context);
+        case "execution.data":
+            return executionDataStepForm(step, context);
         case "capability":
         case "wait.delay":
         case "wait.webhook":
@@ -2861,6 +2873,13 @@ function createEditorStep(type, rawStep = {}) {
             };
         case "automation.call":
             return createCallAutomationStep(base, rawStep);
+        case "execution.data":
+            return {
+                ...base,
+                dataRows: Array.isArray(rawStep.dataRows)
+                    ? rawStep.dataRows.map((row) => ({ ...row }))
+                    : objectToConfigRows(rawStep.data),
+            };
         case "capability":
             return createCapabilityStep(base, rawStep);
         case "wait.delay":
@@ -2971,6 +2990,8 @@ function buildStepPayload(step, index) {
             return buildResponsePayload(step, index);
         case "automation.call":
             return buildCallAutomationPayload(step, index);
+        case "execution.data":
+            return buildExecutionDataPayload(step, index);
         case "capability":
             return buildCapabilityPayload(step, index);
         case "wait.delay":
@@ -3110,6 +3131,40 @@ function buildCallAutomationPayload(step, index) {
     }
 
     return payload;
+}
+
+function buildExecutionDataPayload(step, index) {
+    const data = configRowsToObject(step.dataRows);
+    if (!Object.keys(data).length) {
+        throw new Error(`Step ${index + 1}: add at least one execution data field.`);
+    }
+
+    return { type: "execution.data", data };
+}
+
+function executionDataStepForm(step, context) {
+    return t.div(
+        { className: "automation-graphical-config" },
+        objectRowsEditor({
+            title: "Data to return",
+            emptyText: "No fields yet. Add the values this automation should return.",
+            context,
+            rows: () => step.dataRows,
+            add: () => step.dataRows.push(createConfigRow()),
+            remove: (index) => step.dataRows.splice(index, 1),
+            move: (from, to) => moveArrayItem(step.dataRows, from, to),
+        }),
+        t.div(
+            { className: "field-help" },
+            "These fields are returned when the automation is run manually, and as ",
+            t.code(null, "output"),
+            " of the \"Call automation\" step that called it. The flow continues after this step; "
+                + "if several Execution data steps run, their fields are merged (later values win). "
+                + "Use a whole template such as ",
+            t.code(null, "{{steps.0.output}}"),
+            " to return an object or array as is.",
+        ),
+    );
 }
 
 function callAutomationStepForm(step, context) {
@@ -3294,7 +3349,7 @@ function callAutomationStepForm(step, context) {
             () =>
                 step.mode === "parallel"
                     ? "The called automation starts in the background. This step only outputs its runId and status \"queued\"."
-                    : "This step waits for the called automation and outputs { runId, status, output }. The output is the body of its \"Return response\" step, or the output of its last step.",
+                    : "This step waits for the called automation and outputs { runId, status, output }. The output is the data of its \"Execution data\" steps, else the body of its \"Return response\" step, else the output of its last step.",
         ),
     );
 }
@@ -4222,6 +4277,10 @@ function summarizeStep(step) {
             return `${step.mode === "parallel" ? "Start" : "Call"} ${step.automationName || "automation"}${
                 step.mode === "parallel" ? " in parallel" : ""
             }`;
+        case "execution.data": {
+            const keys = (step.dataRows || []).map((row) => toString(row.key).trim()).filter(Boolean);
+            return keys.length ? `Return ${keys.join(", ")}` : "Add fields to return";
+        }
         case "capability":
             return step.capability ? `Run ${step.capability}` : "Choose a capability";
         case "wait.delay":
@@ -4321,6 +4380,12 @@ function clientValidateStep(step) {
                 messages.push("Select the automation to call.");
             }
             validateConfigRows(step.inputRows, "Call input", messages);
+            break;
+        case "execution.data":
+            if (!(step.dataRows || []).some((row) => row.key?.trim())) {
+                messages.push("Add at least one field to return.");
+            }
+            validateConfigRows(step.dataRows, "Execution data", messages);
             break;
         case "code":
             if (!step.code?.trim()) {
@@ -4427,6 +4492,13 @@ function validateConfigRows(rows, label, messages) {
         seen.add(key);
         if (row.valueType === "number" && (!Number.isFinite(Number(row.valueText)) || row.valueText === "")) {
             messages.push(`${label} field "${key}" must be a number.`);
+        }
+        if (row.valueType === "json") {
+            try {
+                JSON.parse(row.valueText);
+            } catch (_) {
+                messages.push(`${label} field "${key}" must be valid JSON.`);
+            }
         }
     }
 }
@@ -4671,6 +4743,9 @@ function objectToConfigRows(value) {
         } else if (typeof item === "string" && item.includes("{{")) {
             row.valueType = "template";
             row.valueText = item;
+        } else if (item && typeof item === "object") {
+            row.valueType = "json";
+            row.valueText = JSON.stringify(item, null, 2);
         } else {
             row.valueType = "text";
             row.valueText = item === undefined || item === null ? "" : String(item);
@@ -4708,6 +4783,12 @@ function configRowValue(row) {
         }
         case "boolean":
             return row.valueText === "true";
+        case "json":
+            try {
+                return JSON.parse(row.valueText);
+            } catch (_) {
+                return toString(row.valueText);
+            }
         case "template":
         case "text":
         default:

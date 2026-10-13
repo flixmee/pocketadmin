@@ -54,6 +54,7 @@ var (
 		AutomationStepAIGenerate,
 		AutomationStepAISummarize,
 		AutomationStepCall,
+		AutomationStepExecutionData,
 	}
 	automationRunStatuses = []string{
 		AutomationRunStatusQueued,
@@ -509,6 +510,8 @@ func validateAutomationStepDefinition(app App, automationRecord *Record, step ma
 		return validateAutomationAIStep(step)
 	case AutomationStepCall:
 		return validateAutomationCallStep(app, step)
+	case AutomationStepExecutionData:
+		return validateAutomationExecutionDataStep(automationRecord, step)
 	default:
 		return nil
 	}

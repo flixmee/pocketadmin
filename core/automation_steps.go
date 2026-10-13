@@ -188,6 +188,9 @@ func executeAutomationStep(ctx *automationExecutionContext, step map[string]any)
 	case AutomationStepCall:
 		output, err := executeAutomationCallStep(ctx, step)
 		return automationStepStatusSuccess, output, err
+	case AutomationStepExecutionData:
+		output, err := executeAutomationExecutionDataStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	default:
 		return automationStepStatusFailed, nil, fmt.Errorf("unsupported automation step type %q", stepType)
 	}
@@ -273,6 +276,8 @@ func previewAutomationStep(ctx *automationExecutionContext, step map[string]any)
 		}
 	case AutomationStepCall:
 		return previewAutomationCallStep(ctx, step)
+	case AutomationStepExecutionData:
+		return executeAutomationExecutionDataStep(ctx, step)
 	case AutomationStepWaitDelay, AutomationStepWaitWebhook, AutomationStepWaitEvent, AutomationStepWaitApproval,
 		AutomationStepAIExtract, AutomationStepAIClassify, AutomationStepAIGenerate, AutomationStepAISummarize:
 		for _, key := range []string{"duration", "key", "assignee", "role", "model", "input", "schema", "labels"} {
