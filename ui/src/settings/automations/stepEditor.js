@@ -193,10 +193,13 @@ const branchPathSeparator = "::";
 export function stepEditor(propsArg = {}) {
     const props = store({
         steps: [],
+        // editor-only groups of unconnected steps ([{ __id, steps }])
+        detachedSteps: [],
         errors: null,
         triggerType: "",
         triggerCollectionRef: "",
         onchange: function(steps) {},
+        ondetachedchange: function(groups) {},
     });
 
     const watchers = app.utils.extendStore(props, propsArg);
@@ -249,45 +252,52 @@ export function stepEditor(propsArg = {}) {
         props.onchange?.(steps);
     }
 
-    function addStep(type, insertIndex = -1, branchPath = rootBranchPath) {
-        const nextStep = createReactiveEditorStep(type);
+    function currentWorkspace() {
+        return createWorkspace(props.steps, props.detachedSteps);
+    }
+
+    function setWorkspace(ws) {
+        props.onchange?.(ws.steps);
+        props.ondetachedchange?.(workspacePrunedGroups(ws));
+    }
+
+    // inserts the step at the specified list path/index
+    // (or as a new unconnected node with `{ detached: true }`)
+    function insertNewStep(nextStep, insertIndex = -1, branchPath = rootBranchPath, insertOptions = {}) {
         data.expandedById[nextStep.__id] = true;
         data.selectedStepId = nextStep.__id;
         data.drawerOpen = true;
         data.drawerActiveTab = "settings";
 
-        const nextSteps = [...(props.steps || [])];
-        const targetSteps = getStepListByPath(nextSteps, branchPath);
-        if (targetSteps && insertIndex >= 0 && insertIndex <= targetSteps.length) {
-            targetSteps.splice(insertIndex, 0, nextStep);
-        } else if (targetSteps) {
-            targetSteps.push(nextStep);
+        const ws = currentWorkspace();
+        if (insertOptions.detached) {
+            ws.groups.push({ __id: app.utils.randomString(), steps: [nextStep] });
         } else {
-            nextSteps.push(nextStep);
+            const targetSteps = workspaceGetList(ws, branchPath) || ws.steps;
+            if (insertIndex >= 0 && insertIndex <= targetSteps.length) {
+                targetSteps.splice(insertIndex, 0, nextStep);
+            } else {
+                targetSteps.push(nextStep);
+            }
         }
-        setSteps(nextSteps);
+        setWorkspace(ws);
         openStepEditModal(nextStep);
+    }
+
+    function addStep(type, insertIndex = -1, branchPath = rootBranchPath, insertOptions = {}) {
+        const nextStep = createReactiveEditorStep(type, insertOptions.id ? { __id: insertOptions.id } : {});
+        insertNewStep(nextStep, insertIndex, branchPath, insertOptions);
+    }
+
+    function addStepAfter(stepId, type) {
+        const location = workspaceFindLocation(currentWorkspace(), stepId);
+        addStep(type, location ? location.index + 1 : -1, location?.path || rootBranchPath);
     }
 
     function addCapabilityStep(capabilityKey, insertIndex = -1, branchPath = rootBranchPath) {
         const nextStep = createReactiveEditorStep("capability");
         nextStep.capability = capabilityKey;
-        data.expandedById[nextStep.__id] = true;
-        data.selectedStepId = nextStep.__id;
-        data.drawerOpen = true;
-        data.drawerActiveTab = "settings";
-
-        const nextSteps = [...(props.steps || [])];
-        const targetSteps = getStepListByPath(nextSteps, branchPath);
-        if (targetSteps && insertIndex >= 0 && insertIndex <= targetSteps.length) {
-            targetSteps.splice(insertIndex, 0, nextStep);
-        } else if (targetSteps) {
-            targetSteps.push(nextStep);
-        } else {
-            nextSteps.push(nextStep);
-        }
-        setSteps(nextSteps);
-        openStepEditModal(nextStep);
+        insertNewStep(nextStep, insertIndex, branchPath);
     }
 
     function removeStep(stepId) {
@@ -300,13 +310,15 @@ export function stepEditor(propsArg = {}) {
             return false;
         }
 
-        const nextSteps = removeStepsFromList([...(props.steps || [])], ids);
+        const ws = currentWorkspace();
+        ws.steps = removeStepsFromList(ws.steps, ids);
+        ws.groups.forEach((group) => (group.steps = removeStepsFromList(group.steps, ids)));
         ids.forEach((stepId) => delete data.expandedById[stepId]);
-        if (data.selectedStepId && !findStepById(nextSteps, data.selectedStepId)) {
-            data.selectedStepId = firstStepInList(nextSteps)?.__id || "";
+        if (data.selectedStepId && !workspaceFindStep(ws, data.selectedStepId)) {
+            data.selectedStepId = firstStepInList(ws.steps)?.__id || "";
             closeDrawer();
         }
-        setSteps(nextSteps);
+        setWorkspace(ws);
         return true;
     }
 
@@ -645,6 +657,7 @@ export function stepEditor(propsArg = {}) {
             },
             setDrawerActiveTab: (tab) => (data.drawerActiveTab = tab),
             addStep,
+            addStepAfter,
             removeStep,
             changeStepType,
             closeDrawer,
@@ -660,7 +673,7 @@ export function stepEditor(propsArg = {}) {
 
     function openStepEditModal(stepOrId) {
         const step = typeof stepOrId === "string"
-            ? findStepById(props.steps || [], stepOrId)
+            ? workspaceFindStep(currentWorkspace(), stepOrId)
             : stepOrId;
         if (!step) {
             return;
@@ -707,13 +720,16 @@ export function stepEditor(propsArg = {}) {
             data.mode === "visual"
                 ? renderVisualBuilder({
                     getSteps: () => props.steps || [],
+                    getDetachedGroups: () => props.detachedSteps || [],
                     getSelectedStepId: () => data.selectedStepId,
                     getTriggerType: () => props.triggerType,
                     getStepLimit: () => data.schemas?.limits?.maxSteps || 100,
                     selectStep,
                     addStep,
+                    addDetachedStep: (type, id) => addStep(type, -1, rootBranchPath, { detached: true, id }),
                     removeSteps,
                     setSteps,
+                    setWorkspace,
                 })
                 : null,
         () =>
@@ -937,6 +953,8 @@ function renderVisualBuilder(options) {
     });
 
     const getSteps = () => options.getSteps?.() || options.steps || [];
+    const getDetachedGroups = () => options.getDetachedGroups?.() || [];
+    const getWorkspace = () => createWorkspace(getSteps(), getDetachedGroups());
     const getTriggerType = () => {
         const triggerType = typeof options.getTriggerType === "function"
             ? options.getTriggerType()
@@ -952,6 +970,7 @@ function renderVisualBuilder(options) {
 
         const graph = buildAutomationFlowGraph({
             steps: getSteps(),
+            detachedGroups: getDetachedGroups(),
             triggerType: getTriggerType(),
             selectedStepId: getSelectedStepId(),
             positions,
@@ -993,11 +1012,84 @@ function renderVisualBuilder(options) {
             return false;
         }
 
-        const moved = moveStepByFlowEdge(options, getSteps(), edge);
-        if (moved) {
-            setTimeout(() => refreshGraph(true), 0);
-        }
+        applyFlowConnection(edge);
+        // the graph is rebuilt from the updated steps
         return false;
+    }
+
+    function applyFlowConnection(edge) {
+        const ws = getWorkspace();
+        if (!connectWorkspaceSteps(ws, edge)) {
+            return false;
+        }
+
+        options.setWorkspace(ws);
+        setTimeout(() => refreshGraph(), 0);
+        return true;
+    }
+
+    // keep the nodes where they currently are when they get (dis)connected
+    function rememberNodePositions(nodeIds) {
+        for (const id of nodeIds || []) {
+            const node = flow?._getNode?.(id);
+            if (node?.position) {
+                positions[id] = { ...node.position };
+            }
+        }
+    }
+
+    function disconnectFlowEdges(edges) {
+        const ws = getWorkspace();
+        let changed = false;
+
+        for (const edge of edges || []) {
+            const detachedIds = disconnectWorkspaceEdge(ws, edge);
+            if (detachedIds?.length) {
+                const movedIds = [];
+                detachedIds.forEach((id) => collectStepTreeIds(workspaceFindStep(ws, id), movedIds));
+                rememberNodePositions(movedIds);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            options.setWorkspace(ws);
+            setTimeout(() => refreshGraph(), 0);
+        }
+
+        // the graph is rebuilt from the updated steps
+        return false;
+    }
+
+    // finds a free spot for a new node, starting from the visible canvas center
+    function nextFreeNodePosition() {
+        const rect = flow?._container?.getBoundingClientRect?.();
+        let position = { x: automationColumnGap, y: automationRootY };
+        if (rect?.width && flow?._screenToCanvas) {
+            const center = flow._screenToCanvas(rect.left + rect.width / 2, rect.top + rect.height / 2);
+            position = {
+                x: Math.round(center.x - automationNodeWidth / 2),
+                y: Math.round(center.y - automationNodeHeight / 2),
+            };
+        }
+
+        const nodes = flow?.nodes || [];
+        const gap = 24;
+        const overlaps = (pos) =>
+            nodes.some((node) => {
+                const width = node.width || automationNodeWidth;
+                const height = node.height || automationNodeHeight;
+                return pos.x < node.position.x + width + gap
+                    && pos.x + automationNodeWidth + gap > node.position.x
+                    && pos.y < node.position.y + height + gap
+                    && pos.y + automationNodeHeight + gap > node.position.y;
+            });
+
+        for (let i = 0; i < 40 && overlaps(position); i++) {
+            position = { x: position.x + 40, y: position.y + 40 };
+        }
+
+        return position;
     }
 
     function addPaletteStep(type) {
@@ -1008,14 +1100,10 @@ function renderVisualBuilder(options) {
             return;
         }
 
-        const selectedStepId = getSelectedStepId();
-        const location = findStepLocation(getSteps(), selectedStepId);
-        if (location) {
-            options.addStep(type, location.index + 1, location.path);
-            local.actionsOpen = false;
-            return;
-        }
-        options.addStep(type, getSteps().length, rootBranchPath);
+        // "Add node" creates an unconnected node - connections are drawn manually
+        const id = app.utils.randomString();
+        positions[id] = nextFreeNodePosition();
+        options.addDetachedStep(type, id);
         local.actionsOpen = false;
     }
 
@@ -1036,12 +1124,13 @@ function renderVisualBuilder(options) {
 
         const sourceId = context.nodeId || context.sourceId;
         const handleId = context.handleId || context.sourceHandle;
-        const sourceStep = findStepById(getSteps(), sourceId);
+        const ws = getWorkspace();
+        const sourceStep = workspaceFindStep(ws, sourceId);
         if (sourceStep && (handleId === "true" || handleId === "false") && isBranchingStepType(sourceStep.type)) {
             return { path: branchPath(sourceId, handleId), index: 0 };
         }
 
-        const location = findStepLocation(getSteps(), sourceId || getSelectedStepId());
+        const location = workspaceFindLocation(ws, sourceId || getSelectedStepId());
         if (location) {
             return { path: location.path, index: location.index + 1 };
         }
@@ -1055,15 +1144,12 @@ function renderVisualBuilder(options) {
         if (!edge || !node) {
             return;
         }
-        const moved = moveStepByFlowEdge(options, getSteps(), {
+        applyFlowConnection({
             source: edge.source,
             sourceHandle: edge.sourceHandle,
             target: node.id,
             targetHandle: "in",
         });
-        if (moved) {
-            setTimeout(() => refreshGraph(true), 0);
-        }
     }
 
     function deleteFlowNodes(detail = {}) {
@@ -1103,7 +1189,7 @@ function renderVisualBuilder(options) {
                         minimap: false,
                         allowDblClickAdd: false,
                         allowDelete: true,
-                        allowEdgeDelete: false,
+                        allowEdgeDelete: true,
                         isNodeDeletable: (node) => !isAutomationVirtualNodeId(node?.id),
                         defaultEdgeOptions: {
                             markerEnd: false,
@@ -1130,6 +1216,8 @@ function renderVisualBuilder(options) {
                             openFlowAddContext({ nodeId, handleId });
                         },
                         onNodesDelete: deleteFlowNodes,
+                        onEdgeDelete: (edge) => disconnectFlowEdges([edge]),
+                        onEdgesDelete: (detail) => disconnectFlowEdges(detail?.edges),
                         onEdgeDrop: handleFlowEdgeDrop,
                     });
 
@@ -1139,6 +1227,7 @@ function renderVisualBuilder(options) {
                             JSON.stringify({
                                 triggerType: getTriggerType(),
                                 steps: graphStepSnapshot(getSteps()),
+                                detached: getDetachedGroups().map((group) => graphStepSnapshot(group.steps)),
                             }),
                         () => refreshGraph(),
                     );
@@ -1158,7 +1247,14 @@ function renderVisualBuilder(options) {
             },
             t.div(
                 { className: "automation-flow-step-counter" },
-                () => `${countAutomationSteps(getSteps())}/${options.getStepLimit?.() || 100} steps`,
+                () => {
+                    const detachedCount = getDetachedGroups().reduce(
+                        (total, group) => total + countAutomationSteps(group.steps),
+                        0,
+                    );
+                    const label = `${countAutomationSteps(getSteps())}/${options.getStepLimit?.() || 100} steps`;
+                    return detachedCount ? `${label} · ${detachedCount} not connected` : label;
+                },
             ),
             t.button(
                 {
@@ -1318,7 +1414,7 @@ function renderFlowActionDrawer(options, addStep, getTriggerType, local) {
     });
 }
 
-function buildAutomationFlowGraph({ steps, triggerType, selectedStepId, positions }) {
+function buildAutomationFlowGraph({ steps, detachedGroups, triggerType, selectedStepId, positions }) {
     const nodes = [
         createAutomationFlowNode({
             id: automationTriggerNodeId,
@@ -1349,11 +1445,34 @@ function buildAutomationFlowGraph({ steps, triggerType, selectedStepId, position
         selectedStepId,
     });
 
+    // unconnected groups are laid out below the connected flow (unless moved)
+    let nextGroupY = nodes.reduce((maxY, node) => Math.max(maxY, node.position.y), automationRootY)
+        + automationBranchGap;
+    for (const group of detachedGroups || []) {
+        if (!group?.steps?.length) {
+            continue;
+        }
+        layoutAutomationSequence({
+            nodes,
+            edges,
+            steps: group.steps,
+            path: detachedPath(group.__id),
+            sourceId: "",
+            sourceHandle: "",
+            startX: automationColumnGap,
+            y: nextGroupY,
+            positions,
+            selectedStepId,
+            detached: true,
+        });
+        nextGroupY += automationBranchGap;
+    }
+
     return { nodes, edges };
 }
 
 function layoutAutomationSequence(args) {
-    const { nodes, edges, steps, path, sourceId, sourceHandle, startX, y, positions, selectedStepId } = args;
+    const { nodes, edges, steps, path, sourceId, sourceHandle, startX, y, positions, selectedStepId, detached } = args;
     const safeSteps = steps || [];
 
     if (!safeSteps.length) {
@@ -1370,20 +1489,31 @@ function layoutAutomationSequence(args) {
                 id: step.__id,
                 type: "automation-step",
                 label: stepTypeLabel(step.type),
-                badge: path === rootBranchPath ? `Step ${index + 1}` : branchPathLabel(path),
+                badge: detached && isDetachedPath(path)
+                    ? "Not connected"
+                    : path === rootBranchPath
+                    ? `Step ${index + 1}`
+                    : branchPathLabel(path),
                 position: positionForNode(step.__id, { x, y }, positions),
                 data: {
                     icon: stepTypeIcon(step.type),
                     summary: summarizeStep(step),
-                    status: validation.length ? `${validation.length} issue(s)` : "Valid",
+                    status: validation.length
+                        ? `${validation.length} issue(s)`
+                        : detached
+                        ? "Not connected · won't run"
+                        : "Valid",
                     hasIssues: validation.length > 0,
                     selected: selectedStepId === step.__id,
                     stepType: step.type,
+                    detached: !!detached,
                 },
                 handles: automationStepHandles(step),
             }),
         );
-        edges.push(createAutomationFlowEdge(previousId, previousHandle, step.__id, "in"));
+        if (previousId) {
+            edges.push(createAutomationFlowEdge(previousId, previousHandle, step.__id, "in"));
+        }
 
         if (isBranchingStepType(step.type)) {
             const branches = ensureEditorBranches(step);
@@ -1400,6 +1530,7 @@ function layoutAutomationSequence(args) {
                 y: y - automationBranchGap,
                 positions,
                 selectedStepId,
+                detached,
             });
             layoutAutomationSequence({
                 nodes,
@@ -1412,6 +1543,7 @@ function layoutAutomationSequence(args) {
                 y: y + automationBranchGap,
                 positions,
                 selectedStepId,
+                detached,
             });
 
             if (!branches.true?.length) {
@@ -1478,7 +1610,7 @@ function addAutomationEmptyBranchNode(nodes, edges, step, branchKey, x, y) {
             handles: [{ id: "in", type: "target" }],
         }),
     );
-    edges.push(createAutomationFlowEdge(step.__id, branchKey, nodeId, "in", label));
+    edges.push({ ...createAutomationFlowEdge(step.__id, branchKey, nodeId, "in", label), deletable: false });
 }
 
 function createAutomationFlowNode(config) {
@@ -1555,6 +1687,7 @@ function renderAutomationFlowNodeContent(node) {
         data.hasIssues ? "has-issues" : "",
         isAIStep(data.stepType) ? "ai-step" : "",
         isBranchingStepType(data.stepType) ? "branching-step" : "",
+        data.detached ? "detached" : "",
     ].filter(Boolean).join(" ");
 
     return `
@@ -1587,92 +1720,20 @@ function renderAutomationFlowEmptyNode(node) {
     `;
 }
 
-function moveStepByFlowEdge(options, steps, edge) {
-    if (!edge?.target || edge.target === automationTriggerNodeId || isAutomationVirtualNodeId(edge.target)) {
-        return false;
-    }
-    if (!edge.source || edge.source === edge.target) {
-        return false;
+// collects the ids of the step and all of its nested branch steps
+function collectStepTreeIds(step, result = []) {
+    if (!step?.__id) {
+        return result;
     }
 
-    if (edge.source === automationTriggerNodeId) {
-        return moveStepToPath(options, steps, edge.target, rootBranchPath, 0);
-    }
-
-    const sourceStep = findStepById(steps, edge.source);
-    if (!sourceStep) {
-        return false;
-    }
-
-    if ((edge.sourceHandle === "true" || edge.sourceHandle === "false") && isBranchingStepType(sourceStep.type)) {
-        return moveStepToPath(options, steps, edge.target, branchPath(edge.source, edge.sourceHandle), 0);
-    }
-
-    const rootSteps = [...(steps || [])];
-    const movingStep = findStepById(rootSteps, edge.target);
-    if (!movingStep || stepContainsStep(movingStep, edge.source)) {
-        return false;
-    }
-    const extracted = extractStepFromList(rootSteps, edge.target);
-    if (!extracted) {
-        return false;
-    }
-
-    const sourceLocation = findStepLocation(rootSteps, edge.source);
-    if (!sourceLocation) {
-        return false;
-    }
-
-    const targetList = getStepListByPath(rootSteps, sourceLocation.path);
-    if (!targetList) {
-        return false;
-    }
-
-    targetList.splice(sourceLocation.index + 1, 0, extracted);
-    options.setSteps(rootSteps);
-    return true;
-}
-
-function moveStepToPath(options, steps, stepId, path, insertIndex) {
-    const rootSteps = [...(steps || [])];
-    const movingStep = findStepById(rootSteps, stepId);
-    const parsed = parseBranchPath(path);
-    if (!movingStep || parsed?.stepId === stepId || stepContainsStep(movingStep, parsed?.stepId)) {
-        return false;
-    }
-
-    const extracted = extractStepFromList(rootSteps, stepId);
-    if (!extracted) {
-        return false;
-    }
-
-    const targetList = getStepListByPath(rootSteps, path);
-    if (!targetList) {
-        return false;
-    }
-
-    const safeIndex = Math.max(0, Math.min(Number(insertIndex) || 0, targetList.length));
-    targetList.splice(safeIndex, 0, extracted);
-    options.setSteps(rootSteps);
-    return true;
-}
-
-function extractStepFromList(steps, stepId) {
-    for (let i = 0; i < (steps || []).length; i++) {
-        const step = steps[i];
-        if (step?.__id === stepId) {
-            return steps.splice(i, 1)[0];
-        }
-
-        for (const branchKey of ["true", "false"]) {
-            const found = extractStepFromList(step?.branches?.[branchKey], stepId);
-            if (found) {
-                return found;
-            }
+    result.push(step.__id);
+    for (const branchKey of ["true", "false"]) {
+        for (const child of step.branches?.[branchKey] || []) {
+            collectStepTreeIds(child, result);
         }
     }
 
-    return null;
+    return result;
 }
 
 function findStepLocation(steps, stepId, path = rootBranchPath) {
@@ -2288,19 +2349,240 @@ function parseBranchPath(path) {
     return { stepId: parts[1], branchKey: parts[2] };
 }
 
-function getStepListByPath(rootSteps, path) {
-    const parsed = parseBranchPath(path);
-    if (!parsed) {
-        return rootSteps;
+// ── Detached (unconnected) step groups ──
+//
+// The executed flow is the ordered `steps` tree (trigger -> steps -> branches),
+// so connections are implicit. Steps that are not connected to that flow are
+// kept in separate editor-only groups (`detachedSteps`), each being an ordered
+// sequence ({ __id, steps }). They are saved with the automation but never run.
+
+const detachedPathPrefix = "detached";
+
+function detachedPath(groupId) {
+    return [detachedPathPrefix, groupId].join(branchPathSeparator);
+}
+
+function parseDetachedPath(path) {
+    const parts = String(path || "").split(branchPathSeparator);
+    if (parts.length !== 2 || parts[0] !== detachedPathPrefix) {
+        return null;
+    }
+    return { groupId: parts[1] };
+}
+
+function isDetachedPath(path) {
+    return !!parseDetachedPath(path);
+}
+
+export function normalizeDetachedStepGroups(groups) {
+    if (typeof groups === "string" && groups.trim()) {
+        try {
+            groups = JSON.parse(groups);
+        } catch (_) {
+            groups = [];
+        }
     }
 
-    const parent = findStepById(rootSteps, parsed.stepId);
+    if (!Array.isArray(groups)) {
+        return [];
+    }
+
+    return groups
+        .map((group) => ({
+            __id: group?.__id || app.utils.randomString(),
+            // accepts both the API payload (list of steps) and editor groups
+            steps: normalizeAutomationEditorSteps(Array.isArray(group) ? group : group?.steps),
+        }))
+        .filter((group) => group.steps.length);
+}
+
+export function buildDetachedStepGroupsPayload(groups) {
+    return (groups || [])
+        .filter((group) => group?.steps?.length)
+        .map((group) =>
+            group.steps.map((step, index) => {
+                try {
+                    return buildStepPayload(step, index);
+                } catch (err) {
+                    throw new Error(
+                        `Unconnected ${stepTypeLabel(step.type)} node: ${
+                            String(err?.message || err).replace(/^Step \d+:\s*/, "")
+                        }`,
+                    );
+                }
+            })
+        );
+}
+
+function createWorkspace(steps, groups) {
+    return {
+        steps: [...(steps || [])],
+        groups: (groups || []).map((group) => ({ __id: group.__id, steps: [...(group.steps || [])] })),
+    };
+}
+
+function workspaceLists(ws) {
+    return [
+        { path: rootBranchPath, steps: ws.steps },
+        ...ws.groups.map((group) => ({ path: detachedPath(group.__id), steps: group.steps })),
+    ];
+}
+
+function workspaceFindStep(ws, stepId) {
+    for (const list of workspaceLists(ws)) {
+        const found = findStepById(list.steps, stepId);
+        if (found) {
+            return found;
+        }
+    }
+    return null;
+}
+
+function workspaceFindLocation(ws, stepId) {
+    for (const list of workspaceLists(ws)) {
+        const found = findStepLocation(list.steps, stepId, list.path);
+        if (found) {
+            return found;
+        }
+    }
+    return null;
+}
+
+// returns whether the step (or one of its ancestors) belongs to a detached group
+function workspaceIsDetached(ws, stepId) {
+    return ws.groups.some((group) => !!findStepById(group.steps, stepId));
+}
+
+function workspaceGetList(ws, path) {
+    const detached = parseDetachedPath(path);
+    if (detached) {
+        return ws.groups.find((group) => group.__id === detached.groupId)?.steps || null;
+    }
+
+    const parsed = parseBranchPath(path);
+    if (!parsed) {
+        return ws.steps;
+    }
+
+    const parent = workspaceFindStep(ws, parsed.stepId);
     if (!parent) {
         return null;
     }
 
-    const branches = ensureEditorBranches(parent);
-    return branches[parsed.branchKey] || null;
+    return ensureEditorBranches(parent)[parsed.branchKey] || null;
+}
+
+function workspacePrunedGroups(ws) {
+    return ws.groups.filter((group) => group.steps.length);
+}
+
+// Removes the step (and, with `withTail`, all steps after it in the same list)
+// and returns the removed sequence.
+function workspaceExtract(ws, stepId, withTail = false) {
+    const location = workspaceFindLocation(ws, stepId);
+    const list = location ? workspaceGetList(ws, location.path) : null;
+    if (!list) {
+        return null;
+    }
+
+    return list.splice(location.index, withTail ? list.length - location.index : 1);
+}
+
+/**
+ * Applies a new connection (source handle -> target node) to the workspace.
+ *
+ * The target is placed right after the source (or as first step of the
+ * trigger/branch). A target from a detached group is moved together with
+ * the rest of its group so that the visible connections are preserved.
+ */
+function connectWorkspaceSteps(ws, edge) {
+    if (!edge?.target || isAutomationVirtualNodeId(edge.target) || !edge.source || edge.source === edge.target) {
+        return false;
+    }
+
+    const targetLocation = workspaceFindLocation(ws, edge.target);
+    if (!targetLocation) {
+        return false;
+    }
+
+    const isSourceTrigger = edge.source === automationTriggerNodeId;
+    const sourceStep = isSourceTrigger ? null : workspaceFindStep(ws, edge.source);
+    if (!isSourceTrigger && !sourceStep) {
+        return false;
+    }
+
+    const withTail = isDetachedPath(targetLocation.path);
+    const targetList = workspaceGetList(ws, targetLocation.path);
+    const moving = withTail ? targetList.slice(targetLocation.index) : [targetList[targetLocation.index]];
+
+    // prevent cycles (connecting a step to itself through the moved sequence)
+    if (
+        !isSourceTrigger
+        && moving.some((step) => step.__id === edge.source || stepContainsStep(step, edge.source))
+    ) {
+        return false;
+    }
+
+    const extracted = workspaceExtract(ws, edge.target, withTail);
+    if (!extracted?.length) {
+        return false;
+    }
+
+    let destinationPath = rootBranchPath;
+    let destinationIndex = 0;
+    if (
+        sourceStep
+        && (edge.sourceHandle === "true" || edge.sourceHandle === "false")
+        && isBranchingStepType(sourceStep.type)
+    ) {
+        destinationPath = branchPath(edge.source, edge.sourceHandle);
+    } else if (sourceStep) {
+        const sourceLocation = workspaceFindLocation(ws, edge.source);
+        if (!sourceLocation) {
+            return false;
+        }
+        destinationPath = sourceLocation.path;
+        destinationIndex = sourceLocation.index + 1;
+    }
+
+    const destination = workspaceGetList(ws, destinationPath);
+    if (!destination) {
+        return false;
+    }
+
+    destination.splice(destinationIndex, 0, ...extracted);
+    return true;
+}
+
+/**
+ * Removes the connection to the edge target by moving the target and all
+ * steps after it into a new detached group. Steps are never deleted.
+ *
+ * Returns the ids of the detached top-level steps (or null if nothing changed).
+ */
+function disconnectWorkspaceEdge(ws, edge) {
+    if (!edge?.target || isAutomationVirtualNodeId(edge.target)) {
+        return null;
+    }
+
+    const location = workspaceFindLocation(ws, edge.target);
+    if (!location) {
+        return null;
+    }
+
+    // a detached group head has no incoming connection
+    if (isDetachedPath(location.path) && location.index === 0) {
+        return null;
+    }
+
+    const extracted = workspaceExtract(ws, edge.target, true);
+    if (!extracted?.length) {
+        return null;
+    }
+
+    ws.groups.push({ __id: app.utils.randomString(), steps: extracted });
+
+    return extracted.map((step) => step.__id);
 }
 
 function findStepById(steps, stepId) {
@@ -2444,10 +2726,7 @@ function renderStepEditModal(step, options) {
                 {
                     type: "button",
                     className: "btn secondary transparent m-r-auto",
-                    onclick: () => {
-                        const stepIndex = options.steps.findIndex((item) => item.__id === step.__id);
-                        options.addStep("condition", stepIndex + 1);
-                    },
+                    onclick: () => options.addStepAfter(step.__id, "condition"),
                 },
                 t.i({ className: "ti ti-link", ariaHidden: true }),
                 t.span({ className: "txt" }, "Connect next"),

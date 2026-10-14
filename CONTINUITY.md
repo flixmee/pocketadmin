@@ -88,3 +88,9 @@ Working set (files/ids/commands):
 - Verified: vite build ok; browser-tested search, no-results, selection, menu, rename modal, delete confirm (cancelled).
 - Done (2): marquee drag-to-select (pointer events on .page-content, data-media-id on items, Cmd/Ctrl/Shift adds to selection, empty-area click clears); browser-tested grid + list.
 - Next: user review; not committed.
+
+---- Node editor connections (2026-10-13, connect-together branch) ----
+- Done: remove connections (hover ×, or select + Delete/Backspace); "Add node" creates an unconnected node at viewport center (non-overlapping); manual connect by dragging output -> node/input.
+- Model: unconnected nodes saved in new `_automations.detachedSteps` (migration 1785000001), list of step groups, validated loosely, never executed. Editor workspace helpers in stepEditor.js (createWorkspace/connectWorkspaceSteps/disconnectWorkspaceEdge).
+- Library fixes (flowdesigner.vanilla.js): per-edge `deletable:false`; Delete key ignored when canvas container focused; connection drop target never found (pointer capture) -> now elementFromPoint + node-body drop.
+- Verified: browser QA on scratch :8091/:5174 (stopped); go automation tests + vite build green. NOT committed. User's :8090 server needs restart for migrations.

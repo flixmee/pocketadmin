@@ -281,6 +281,10 @@ func validateAutomationRecord(app App, record *Record) error {
 		return validation.Errors{"manualInputs": err}
 	}
 
+	if err := validateAutomationDetachedSteps(record.GetRaw("detachedSteps")); err != nil {
+		return validation.Errors{"detachedSteps": err}
+	}
+
 	if err := validateAutomationSteps(app, record); err != nil {
 		return err
 	}

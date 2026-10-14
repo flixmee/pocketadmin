@@ -906,9 +906,26 @@
     padding-bottom: 10px;
 }
 
-.automation-config-row > .input.select,
-.automation-config-row > .input.code-editor {
+.automation-config-row > .input.select {
     padding: 0;
+}
+
+/* single-line template editor - match the size/font of the sibling row fields */
+.automation-config-row > .input.code-editor {
+    align-items: center;
+    min-height: 38px;
+    max-height: 38px;
+    padding: 0 var(--inputPadding);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+
+    .code-editor-content,
+    .highlight-overlay {
+        font-family: var(--baseFontFamily);
+        font-size: var(--fontSize);
+        line-height: 20px;
+    }
 }
 
 .automation-config-row.compact {
@@ -2816,4 +2833,17 @@
     flex-direction: column;
     gap: 6px;
     min-width: 0;
+}
+
+/* ── Unconnected canvas nodes (saved, but not executed) ── */
+.automation-workflow-flowspace .fd-node:has(.automation-flow-node-content.detached) {
+    border-style: dashed;
+}
+
+.automation-flow-node-content.detached {
+    opacity: 0.72;
+}
+
+.automation-flow-node-content.detached .automation-flow-node-status-dot {
+    background: var(--surfaceTxtDisabledColor);
 }

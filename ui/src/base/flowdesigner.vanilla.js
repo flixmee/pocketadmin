@@ -276,38 +276,41 @@ const FlowDesigner = (function() {
                 group.appendChild(label);
             }
 
-            const deleteBtn = svgEl("g", {
+            // edges can opt-out from deletion with `deletable: false`
+            const deleteBtn = edge.deletable === false ? null : svgEl("g", {
                 class: "fd-edge-delete",
                 "data-edge-delete-id": edge.id,
                 "aria-label": "Remove connection",
                 role: "button",
                 tabindex: "0",
             });
-            deleteBtn.appendChild(svgEl("circle", { r: "10" }));
-            const deleteIcon = svgEl("text", {
-                "text-anchor": "middle",
-                "dominant-baseline": "central",
-                y: "-0.5",
-                "pointer-events": "none",
-            });
-            deleteIcon.textContent = "×";
-            deleteBtn.appendChild(deleteIcon);
-            deleteBtn.addEventListener("pointerdown", e => {
-                e.stopPropagation();
-                e.preventDefault();
-            });
-            deleteBtn.addEventListener("click", e => {
-                e.stopPropagation();
-                e.preventDefault();
-                this.flow._deleteEdgeFromControl(edge.id, e);
-            });
-            deleteBtn.addEventListener("keydown", e => {
-                if (e.key !== "Enter" && e.key !== " ") return;
-                e.stopPropagation();
-                e.preventDefault();
-                this.flow._deleteEdgeFromControl(edge.id, e);
-            });
-            group.appendChild(deleteBtn);
+            if (deleteBtn) {
+                deleteBtn.appendChild(svgEl("circle", { r: "10" }));
+                const deleteIcon = svgEl("text", {
+                    "text-anchor": "middle",
+                    "dominant-baseline": "central",
+                    y: "-0.5",
+                    "pointer-events": "none",
+                });
+                deleteIcon.textContent = "×";
+                deleteBtn.appendChild(deleteIcon);
+                deleteBtn.addEventListener("pointerdown", e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                });
+                deleteBtn.addEventListener("click", e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    this.flow._deleteEdgeFromControl(edge.id, e);
+                });
+                deleteBtn.addEventListener("keydown", e => {
+                    if (e.key !== "Enter" && e.key !== " ") return;
+                    e.stopPropagation();
+                    e.preventDefault();
+                    this.flow._deleteEdgeFromControl(edge.id, e);
+                });
+                group.appendChild(deleteBtn);
+            }
 
             this.svg.insertBefore(group, this.ghostGroup);
             this.edgeEls.set(edge.id, { group, path, hitPath, label, deleteBtn });
@@ -1389,7 +1392,7 @@ const FlowDesigner = (function() {
             }
 
             if (this._connecting) {
-                const targetHandle = e.target.closest(".fd-handle[data-handle-type=\"target\"]");
+                const targetHandle = this._findConnectionTargetHandle(e);
                 if (targetHandle) {
                     const targetNodeId = targetHandle.closest(".fd-node").dataset.nodeId;
                     const targetHandleId = targetHandle.dataset.handleId;
@@ -1450,7 +1453,8 @@ const FlowDesigner = (function() {
                 return;
             }
 
-            if (!this._root.contains(document.activeElement) && document.activeElement !== document.body) return;
+            // note: the container itself may be focusable (e.g. tabindex) and should also count
+            if (!this._container.contains(document.activeElement) && document.activeElement !== document.body) return;
 
             if ((e.key === "Delete" || e.key === "Backspace") && this._options.editable) {
                 if (this._isTextInput(document.activeElement)) return;
@@ -1541,10 +1545,29 @@ const FlowDesigner = (function() {
             this._root.classList.add("fd-root--connecting");
         }
 
+        // Resolves the target handle under the pointer.
+        //
+        // note: the pointer is captured by the root while connecting, so
+        // e.target is the root - use the actual element under the pointer.
+        // Dropping over a node body connects to its (first) target handle.
+        _findConnectionTargetHandle(e) {
+            const selector = ".fd-handle[data-handle-type=\"target\"]";
+            const el = document.elementFromPoint(e.clientX, e.clientY) || e.target;
+            if (!el || !this._root.contains(el)) return null;
+
+            const handle = el.closest(selector);
+            if (handle) return handle;
+
+            const nodeEl = el.closest(".fd-node");
+            if (!nodeEl || nodeEl.dataset.nodeId === this._connecting?.sourceNodeId) return null;
+
+            return nodeEl.querySelector(selector);
+        }
+
         _deleteEdgeFromControl(edgeId, originalEvent) {
             if (!this._options.editable || this._options.allowEdgeDelete === false) return;
             const edge = this._getEdge(edgeId);
-            if (!edge) return;
+            if (!edge || edge.deletable === false) return;
 
             if (this._options.onEdgeDelete) {
                 const result = this._options.onEdgeDelete(edge, originalEvent);
@@ -1634,7 +1657,9 @@ const FlowDesigner = (function() {
             const deletableNodes = selectedNodes.filter(node =>
                 !this._options.isNodeDeletable || this._options.isNodeDeletable(node) !== false
             );
-            const deletableEdges = this._options.allowEdgeDelete === false ? [] : selectedEdges;
+            const deletableEdges = this._options.allowEdgeDelete === false
+                ? []
+                : selectedEdges.filter(edge => edge.deletable !== false);
             const detail = {
                 nodes: deletableNodes,
                 edges: deletableEdges,

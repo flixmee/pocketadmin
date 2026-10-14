@@ -28,6 +28,7 @@ var automationAllowedFields = []string{
 	"cronExpr",
 	"webhookMethod",
 	"manualInputs",
+	"detachedSteps",
 	"steps",
 	"notes",
 }

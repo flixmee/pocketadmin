@@ -6,7 +6,13 @@ import {
     normalizeManualInputRows,
     openAutomationRunModal,
 } from "./manualInputs";
-import { buildAutomationStepsPayload, normalizeAutomationEditorSteps, stepEditor } from "./stepEditor";
+import {
+    buildAutomationStepsPayload,
+    buildDetachedStepGroupsPayload,
+    normalizeAutomationEditorSteps,
+    normalizeDetachedStepGroups,
+    stepEditor,
+} from "./stepEditor";
 import { telegramWebhookRegistration } from "./telegramWebhookRegistration";
 
 const automationTriggerOptions = [
@@ -701,11 +707,15 @@ export function pageAutomationUpsert(route) {
                         { className: "automation-builder-workspace automation-workflow-flowspace" },
                         stepEditor({
                             steps: () => data.form.steps,
+                            detachedSteps: () => data.form.detachedSteps,
                             errors: () => app.store.errors?.steps,
                             triggerType: () => data.form.triggerType,
                             triggerCollectionRef: () => data.form.collectionRef,
                             onchange: (steps) => {
                                 data.form.steps = steps;
+                            },
+                            ondetachedchange: (groups) => {
+                                data.form.detachedSteps = groups;
                             },
                         }),
                     ),
@@ -728,6 +738,7 @@ function normalizeAutomationForm(automation = null) {
         manualInputs: normalizeManualInputRows(automation?.manualInputs),
         notes: automation?.notes || "",
         steps: normalizeAutomationEditorSteps(automation?.steps),
+        detachedSteps: normalizeDetachedStepGroups(automation?.detachedSteps),
     };
 }
 
@@ -767,6 +778,8 @@ function buildAutomationPayload(form) {
         manualInputs: form.triggerType === "manual" ? buildManualInputsPayload(form.manualInputs) : [],
         notes: form.notes.trim(),
         steps: buildAutomationStepsPayload(form.steps),
+        // unconnected canvas nodes (saved but never executed)
+        detachedSteps: buildDetachedStepGroupsPayload(form.detachedSteps),
     };
 }
 
