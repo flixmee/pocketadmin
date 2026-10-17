@@ -30,6 +30,18 @@ PocketAdmin is a Go module for PocketBase. The repository contains the core libr
 - The default CLI server command is registered from `cmd/serve.go`.
 - The minimal runnable example is `examples/base/main.go`.
 
+## How to Build for test
+
+From the repository root, build the admin UI first, then build the Linux amd64 binary:
+
+```sh
+cd ui
+npm run build
+cd ../examples/base
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build
+mv base server
+```
+
 ## Working Notes
 
 - Prefer focused changes in the package that already owns the behavior.
