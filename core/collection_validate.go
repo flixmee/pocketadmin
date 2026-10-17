@@ -692,6 +692,8 @@ func (validator *collectionValidator) validateOptions() error {
 		return validator.new.collectionAuthOptions.validate(validator)
 	case CollectionTypeView:
 		return validator.new.collectionViewOptions.validate(validator)
+	case CollectionTypeBase:
+		return validator.new.collectionBaseOptions.validateTree(validator)
 	}
 
 	return nil

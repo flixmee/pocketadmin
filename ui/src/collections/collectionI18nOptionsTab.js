@@ -1,3 +1,7 @@
+import { toDeleteProp } from "@/base/fieldSettings";
+
+const treeOrderFieldName = "order";
+
 export function collectionI18nOptionsTab(data) {
     const uniqueId = "i18n_" + app.utils.randomString();
 
@@ -99,6 +103,87 @@ export function collectionI18nOptionsTab(data) {
         i18n.localizedFields = checked ? regularFields().map((field) => field.name) : [];
     }
 
+    function treeOrderField() {
+        return (data.collection.fields || []).find((field) => {
+            return !field[toDeleteProp] && field.name?.toLowerCase() == treeOrderFieldName;
+        });
+    }
+
+    function hasValidTreeOrderField() {
+        const field = treeOrderField();
+        return field?.type == "number" && field.name == treeOrderFieldName;
+    }
+
+    function addTreeOrderField() {
+        const field = {
+            id: "",
+            name: treeOrderFieldName,
+            type: "number",
+            system: false,
+            hidden: false,
+            presentable: false,
+            required: false,
+            onlyInt: true,
+            min: 0,
+        };
+
+        data.collection.fields = data.collection.fields || [];
+
+        // insert before the trailing autodate fields (same as the "New field" button)
+        const idx = data.collection.fields.findLastIndex((f) => f.type != "autodate");
+        if (idx >= 0) {
+            data.collection.fields.splice(idx + 1, 0, field);
+        } else {
+            data.collection.fields.push(field);
+        }
+    }
+
+    function confirmAddTreeOrderField(onconfirm) {
+        if (treeOrderField()) {
+            app.toasts.error(
+                `Tree mode requires a number field named "${treeOrderFieldName}". Change or rename the existing "${treeOrderField().name}" field first.`,
+            );
+            return;
+        }
+
+        app.modals.confirm(
+            t.div(
+                null,
+                t.p(
+                    null,
+                    "Tree mode requires an ",
+                    t.code(null, treeOrderFieldName),
+                    " number field to sort sibling records.",
+                ),
+                t.p(null, "Do you want to add it now?"),
+            ),
+            () => {
+                addTreeOrderField();
+                onconfirm?.();
+            },
+            null,
+            { yesButton: "Add field", noButton: "Cancel" },
+        );
+    }
+
+    function toggleTree(e) {
+        if (!e.target.checked) {
+            data.collection.use_tree = false;
+            return;
+        }
+
+        if (hasValidTreeOrderField()) {
+            data.collection.use_tree = true;
+            return;
+        }
+
+        // keep the switch off until the order field is added
+        e.target.checked = false;
+        confirmAddTreeOrderField(() => {
+            data.collection.use_tree = true;
+        });
+    }
+
     return t.div(
         {
             pbEvent: "collectionI18nOptionsTab",
@@ -114,6 +199,53 @@ export function collectionI18nOptionsTab(data) {
                 { className: "col-12" },
                 t.div(
                     { className: "section-heading" },
+                    t.strong(null, "Tree"),
+                    t.div({ className: "flex-fill" }),
+                    t.div(
+                        { className: "field" },
+                        t.input({
+                            id: uniqueId + "use_tree",
+                            name: "use_tree",
+                            type: "checkbox",
+                            className: "switch sm",
+                            checked: () => !!data.collection.use_tree,
+                            onchange: toggleTree,
+                        }),
+                        t.label({ htmlFor: uniqueId + "use_tree" }, "Use tree"),
+                    ),
+                ),
+                t.p(
+                    { className: "txt-sm txt-hint m-b-sm" },
+                    "Display the collection records as a tree. Siblings are sorted by the ",
+                    t.code(null, treeOrderFieldName),
+                    " number field.",
+                ),
+                t.div(
+                    {
+                        hidden: () => !data.collection.use_tree || hasValidTreeOrderField(),
+                        className: "alert warning flex gap-10 m-b-sm",
+                    },
+                    t.span(
+                        { className: "flex-fill" },
+                        "Missing ",
+                        t.code(null, treeOrderFieldName),
+                        " number field.",
+                    ),
+                    t.button(
+                        {
+                            type: "button",
+                            className: "btn sm outline",
+                            onclick: () => confirmAddTreeOrderField(),
+                        },
+                        t.i({ className: "ri-add-line", ariaHidden: true }),
+                        t.span({ className: "txt" }, "Add field"),
+                    ),
+                ),
+            ),
+            t.div(
+                { className: "col-12" },
+                t.div(
+                    { className: "section-heading m-t-10" },
                     t.strong(null, "Localization"),
                     t.div({ className: "flex-fill" }),
                     t.div(

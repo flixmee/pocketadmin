@@ -1,11 +1,52 @@
+Goal (incl. success criteria) [2026-10-17, use_tree option]:
+- Base collections get option `use_tree` (bool, JSON key literally `use_tree` per user). Enabling requires a number field named `order`; UI asks user to add it first.
+
+Key decisions:
+- Backend: collectionBaseOptions.UseTree + validateTree (error key `use_tree`), wired in validateOptions for base only. Existing i18n base validation is NOT wired (pre-existing) — left untouched.
+- Only `order` is required (no parent check) — per user request.
+
+State:
+  - Done: core/collection_model_base_options.go, core/collection_validate.go, 4 scenarios in collection_validate_test.go (pass). API verified by curl on scratch :8091.
+  - Done: UI Tree section in ui/src/collections/collectionI18nOptionsTab.js (switch name=use_tree; confirm "Add field" inserts order number field onlyInt min 0; warning alert if enabled but field missing). dprint + vite build pass.
+  - Failing suites match pre-existing list (TestCollectionDBExport/3_auth fails on HEAD too; logger test flaky).
+  - Now: UI not browser-verified (no browser tools); scratch pb :8091 + vite :5174 left running for user check (qa@example.com / QaPass12345!).
+  - Done: test build per AGENTS.md (ui dist + examples/base/server linux/amd64) incl. use_tree + ecommerce preset.
+  - Done: repo doc docs/collection-tree-api.md (use_tree API + UI + preset category fields); also a Claude Doc write-up (user wanted repo file instead).
+  - Next: commit on user approval (ecommerce preset + use_tree still uncommitted).
+
+Working set: core/collection_model_base_options.go, core/collection_validate.go, ui/src/collections/collectionI18nOptionsTab.js
+
+---- Previous ledger ----
+
+Goal (incl. success criteria):
+- Add How to Build instructions to AGENTS.md for the UI and Linux amd64 binary.
+Constraints/Assumptions:
+- Documentation-only; preserve unrelated work.
+Key decisions:
+- Use the existing examples/base/ directory (user referred to example/base).
+State:
+  - Done: Confirmed AGENTS.md and examples/base/main.go exist.
+  - Done: Added How to Build with npm run build followed by the Linux amd64 Go build; git diff --check passed.
+  - Now: Complete.
+  - Next: None.
+Open questions (UNCONFIRMED if needed):
+- None.
+Working set (files/ids/commands):
+- AGENTS.md, CONTINUITY.md
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-17, blog preset]:
-- Blog preset: add image, order, parent to `categories`. Success: core/presets tests pass.
+- Blog + E-commerce presets: add image, order, parent to category collections. Success: core/presets tests pass.
 
 State:
   - Done: core/presets/blog.json categories += image (media, 1, images), order (int number, min 0), parent (self relation, max 1); version 1.0.0 -> 1.1.0. Tests updated (core/presets/preset_test.go: 4 relationships, field + import asserts; apis/collection_preset_test.go version). core/presets pass; apis TestCollectionPresetsList still fails on pre-existing "Jobs \u0026 Career" escaping (fails on HEAD too).
-  - Now: awaiting user review; not committed.
+  - Done: committed 7b9d5c7f + pushed (develop).
+  - Done: ecommerce.json product_categories += image + order (parent already existed); version 1.0.0 -> 1.1.0; preset_test.go asserts added; core/presets pass.
+  - Done: test build per AGENTS.md: ui npm run build, then examples/base/server (linux/amd64, CGO_ENABLED=0) with both preset changes.
+  - Now: user testing build; ecommerce change not committed.
 
-Working set: core/presets/blog.json, core/presets/preset_test.go, apis/collection_preset_test.go
+Working set: core/presets/ecommerce.json, core/presets/blog.json, core/presets/preset_test.go, apis/collection_preset_test.go
 
 ---- Previous ledger ----
 

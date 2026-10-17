@@ -10,13 +10,38 @@ import (
 
 var _ optionsValidator = (*collectionBaseOptions)(nil)
 
+// CollectionTreeOrderFieldName is the name of the number field
+// required by base collections with enabled tree mode.
+const CollectionTreeOrderFieldName = "order"
+
 // collectionBaseOptions defines the options for the "base" type collection.
 type collectionBaseOptions struct {
 	I18n I18nCollectionOptions `form:"i18n" json:"i18n"`
+
+	// UseTree enables hierarchical (tree) presentation of the collection records.
+	// It requires a number field named [CollectionTreeOrderFieldName].
+	UseTree bool `form:"use_tree" json:"use_tree"`
 }
 
 func (o *collectionBaseOptions) validate(cv *collectionValidator) error {
 	return o.I18n.validate(cv)
+}
+
+func (o *collectionBaseOptions) validateTree(cv *collectionValidator) error {
+	if !o.UseTree {
+		return nil
+	}
+
+	if _, ok := cv.new.Fields.GetByName(CollectionTreeOrderFieldName).(*NumberField); !ok {
+		return validation.Errors{
+			"use_tree": validation.NewError(
+				"validation_tree_missing_order_field",
+				`Tree mode requires a number field named "{{.fieldName}}".`,
+			).SetParams(map[string]any{"fieldName": CollectionTreeOrderFieldName}),
+		}
+	}
+
+	return nil
 }
 
 // I18nCollectionOptions defines localization options for base collections.

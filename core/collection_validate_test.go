@@ -889,6 +889,42 @@ func TestCollectionValidate(t *testing.T) {
 			},
 			expectedErrors: []string{},
 		},
+		{
+			name: "base with use_tree and missing order field",
+			collection: func(app core.App) (*core.Collection, error) {
+				c := core.NewBaseCollection("new_tree")
+				c.UseTree = true
+				return c, nil
+			},
+			expectedErrors: []string{"use_tree"},
+		},
+		{
+			name: "base with use_tree and non-number order field",
+			collection: func(app core.App) (*core.Collection, error) {
+				c := core.NewBaseCollection("new_tree")
+				c.UseTree = true
+				c.Fields.Add(&core.TextField{Name: "order"})
+				return c, nil
+			},
+			expectedErrors: []string{"use_tree"},
+		},
+		{
+			name: "base with use_tree and number order field",
+			collection: func(app core.App) (*core.Collection, error) {
+				c := core.NewBaseCollection("new_tree")
+				c.UseTree = true
+				c.Fields.Add(&core.NumberField{Name: "order"})
+				return c, nil
+			},
+			expectedErrors: []string{},
+		},
+		{
+			name: "base without use_tree and missing order field",
+			collection: func(app core.App) (*core.Collection, error) {
+				return core.NewBaseCollection("new_tree"), nil
+			},
+			expectedErrors: []string{},
+		},
 	}
 
 	for _, s := range scenarios {
