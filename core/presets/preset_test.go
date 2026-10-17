@@ -244,6 +244,14 @@ func TestBuildEcommercePreviewAndImport(t *testing.T) {
 	if categoriesParent["collectionId"] != core.NewBaseCollection("shop_product_categories").Id {
 		t.Fatalf("unexpected product categories parent relation: %#v", categoriesParent)
 	}
+	categoriesImage := findField(t, preview.Collections[0], "image")
+	if categoriesImage["type"] != core.FieldTypeMedia {
+		t.Fatalf("expected product category image to use media field: %#v", categoriesImage)
+	}
+	categoriesOrder := findField(t, preview.Collections[0], "order")
+	if categoriesOrder["type"] != core.FieldTypeNumber || categoriesOrder["onlyInt"] != true {
+		t.Fatalf("expected product category order to be an integer number field: %#v", categoriesOrder)
+	}
 	productCategories := findField(t, preview.Collections[1], "categories")
 	if productCategories["collectionId"] != core.NewBaseCollection("shop_product_categories").Id {
 		t.Fatalf("unexpected product categories relation: %#v", productCategories)
@@ -292,6 +300,17 @@ func TestBuildEcommercePreviewAndImport(t *testing.T) {
 	imageField, _ := productImages.Fields.GetByName("image").(*core.MediaField)
 	if imageField == nil || imageField.MaxSelect != 1 || len(imageField.MimeTypes) != 4 {
 		t.Fatalf("unexpected imported product image media field: %#v", imageField)
+	}
+	importedCategories, err := app.FindCollectionByNameOrId("shop_product_categories")
+	if err != nil {
+		t.Fatal(err)
+	}
+	categoryImage, _ := importedCategories.Fields.GetByName("image").(*core.MediaField)
+	if categoryImage == nil || categoryImage.MaxSelect != 1 || len(categoryImage.MimeTypes) != 4 {
+		t.Fatalf("unexpected imported product category image media field: %#v", categoryImage)
+	}
+	if _, ok := importedCategories.Fields.GetByName("order").(*core.NumberField); !ok {
+		t.Fatalf("expected imported product category order number field")
 	}
 }
 
