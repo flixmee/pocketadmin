@@ -82,14 +82,31 @@ func TestBuildPreview(t *testing.T) {
 		}
 	}
 
-	if len(preview.Relationships) != 3 {
-		t.Fatalf("expected 3 relationships, got %#v", preview.Relationships)
+	if len(preview.Relationships) != 4 {
+		t.Fatalf("expected 4 relationships, got %#v", preview.Relationships)
 	}
 	if preview.Relationships[0].TargetCollection != "site_categories" || preview.Relationships[0].External {
-		t.Errorf("unexpected category relationship: %#v", preview.Relationships[0])
+		t.Errorf("unexpected category parent relationship: %#v", preview.Relationships[0])
 	}
-	if preview.Relationships[2].TargetCollection != core.CollectionNameSuperusers || !preview.Relationships[2].External {
-		t.Errorf("unexpected author relationship: %#v", preview.Relationships[2])
+	if preview.Relationships[1].TargetCollection != "site_categories" || preview.Relationships[1].External {
+		t.Errorf("unexpected category relationship: %#v", preview.Relationships[1])
+	}
+	if preview.Relationships[3].TargetCollection != core.CollectionNameSuperusers || !preview.Relationships[3].External {
+		t.Errorf("unexpected author relationship: %#v", preview.Relationships[3])
+	}
+
+	categories := preview.Collections[0]
+	categoryParent := findField(t, categories, "parent")
+	if categoryParent["collectionId"] != core.NewBaseCollection("site_categories").Id {
+		t.Errorf("unexpected category parent relation: %#v", categoryParent)
+	}
+	categoryImage := findField(t, categories, "image")
+	if categoryImage["type"] != core.FieldTypeMedia {
+		t.Errorf("expected category image to use media field, got %#v", categoryImage)
+	}
+	categoryOrder := findField(t, categories, "order")
+	if categoryOrder["type"] != core.FieldTypeNumber || categoryOrder["onlyInt"] != true {
+		t.Errorf("expected category order to be an integer number field, got %#v", categoryOrder)
 	}
 
 	posts := preview.Collections[2]
@@ -115,6 +132,24 @@ func TestBuildPreview(t *testing.T) {
 	}
 	if second.Collections[0]["name"] != "categories" {
 		t.Fatalf("embedded preset was mutated: %#v", second.Collections[0])
+	}
+
+	if err := app.ImportCollections(preview.Collections, false); err != nil {
+		t.Fatalf("import blog preset: %v", err)
+	}
+	importedCategories, err := app.FindCollectionByNameOrId("site_categories")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parentField, _ := importedCategories.Fields.GetByName("parent").(*core.RelationField)
+	if parentField == nil || parentField.CollectionId != importedCategories.Id || parentField.MaxSelect != 1 {
+		t.Fatalf("unexpected imported category parent relation: %#v", parentField)
+	}
+	if _, ok := importedCategories.Fields.GetByName("image").(*core.MediaField); !ok {
+		t.Fatalf("expected imported category image media field")
+	}
+	if _, ok := importedCategories.Fields.GetByName("order").(*core.NumberField); !ok {
+		t.Fatalf("expected imported category order number field")
 	}
 }
 

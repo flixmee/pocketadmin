@@ -1,3 +1,14 @@
+Goal (incl. success criteria) [2026-10-17, blog preset]:
+- Blog preset: add image, order, parent to `categories`. Success: core/presets tests pass.
+
+State:
+  - Done: core/presets/blog.json categories += image (media, 1, images), order (int number, min 0), parent (self relation, max 1); version 1.0.0 -> 1.1.0. Tests updated (core/presets/preset_test.go: 4 relationships, field + import asserts; apis/collection_preset_test.go version). core/presets pass; apis TestCollectionPresetsList still fails on pre-existing "Jobs \u0026 Career" escaping (fails on HEAD too).
+  - Now: awaiting user review; not committed.
+
+Working set: core/presets/blog.json, core/presets/preset_test.go, apis/collection_preset_test.go
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-13, automations editor UI polish]:
 - Improve Automations editor page UI: consistent, polished styles for inputs/selects/checkboxes/forms in trigger panel + step drawer.
 - Success: visual QA in browser (dark+light), vite build passes, no native <select>.

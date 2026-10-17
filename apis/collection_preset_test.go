@@ -35,7 +35,7 @@ func TestCollectionPresetsList(t *testing.T) {
 			ExpectedContent: []string{
 				`"id":"blog"`,
 				`"name":"Blog"`,
-				`"version":"1.0.0"`,
+				`"version":"1.1.0"`,
 				`"collections":["categories","tags","posts"]`,
 				`"collectionCount":3`,
 				`"id":"ecommerce"`,

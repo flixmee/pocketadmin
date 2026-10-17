@@ -1,7 +1,7 @@
 {
   "id": "blog",
   "name": "Blog",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Categories, tags, and posts for a basic publishing workflow.",
   "collections": [
     {
@@ -27,6 +27,29 @@
           "name": "description",
           "type": "text",
           "max": 1000
+        },
+        {
+          "name": "image",
+          "type": "media",
+          "maxSelect": 1,
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif"
+          ]
+        },
+        {
+          "name": "order",
+          "type": "number",
+          "onlyInt": true,
+          "min": 0
+        },
+        {
+          "name": "parent",
+          "type": "relation",
+          "collectionRef": "$collection.categories",
+          "maxSelect": 1
         },
         {
           "name": "created",
