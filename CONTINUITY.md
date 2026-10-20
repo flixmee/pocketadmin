@@ -1,3 +1,29 @@
+Goal (incl. success criteria) [2026-10-20, MCP API on branch `mcp`]:
+- MCP server endpoint so AI clients can manage records + collections; admin UI to manage MCP API keys.
+- Success: go tests for new code pass; vite build ok; UI page create/edit/delete/regenerate keys; MCP initialize/tools/list/tools/call work with key.
+
+Constraints/Assumptions:
+- Branch `mcp` (from develop after merging connect-together; develop NOT pushed yet, mcp local only).
+- No new Go deps: hand-rolled MCP Streamable HTTP (stateless JSON responses, JSON-RPC 2.0).
+- ui/dist/index.html local mod is pre-existing — leave alone.
+
+Key decisions:
+- Keys in plain internal table `_mcpKeys` (migration, like `_collection_groups`), NOT a collection (avoids collection-count test churn, never exposed via records API). Store sha256 hash + display prefix; plaintext shown once.
+- Key fields: name, permissions [collections.read, collections.write, records.read, records.write], collections allowlist (collection ids; empty = all non-system), active, expiresAt, lastUsedAt.
+- Endpoint POST /api/mcp (Authorization: Bearer <key> or X-API-Key). System collections always blocked. Key mgmt: /api/mcp/keys (superuser).
+- Tools: list_collections, get_collection, create/update/delete_collection, list_records, get_record, create/update/delete_record.
+- UI: Settings > System > "MCP" page (ui/src/settings/mcp/).
+
+State:
+  - Done: backend (core/mcp_key.go, migrations/1786000000_mcp_keys.go, apis/mcp.go, apis/mcp_tools.go, apis/mcp_test.go — 28 scenarios pass). Full apis/core failures = same 8 as clean HEAD (pre-existing).
+  - Done: UI Settings > System > MCP (ui/src/settings/mcp/{pageMcpSettings,mcpKeysList,mcpKeyUpsertModal,mcpKeyTokenModal,mcpUtils}.js, ui/src/css/mcp.css, route + nav in router.js/store.js). Browser-verified via headless Chrome on scratch :8091 (create/edit/toggle/regenerate/delete, dark+light). curl e2e of MCP ok. docs/mcp-api.md added.
+  - Not done: ui/dist not rebuilt; nothing committed (branch `mcp`); develop merge not pushed.
+  - Now: awaiting user review.
+
+Working set: core/mcp_key.go, migrations/1786000000_mcp_keys.go, apis/mcp.go, apis/mcp_tools.go, apis/mcp_test.go, ui/src/settings/mcp/*, ui/src/css/mcp.css, docs/mcp-api.md
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-20, Telegram "chat not found"]:
 - Diagnose/fix Telegram step error "Bad Request: chat not found".
 - Success: chat IDs from templates (e.g. {{telegram.chat.id}}) render as plain integers; tests pass.

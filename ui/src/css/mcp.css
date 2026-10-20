@@ -1,0 +1,131 @@
+.mcp-keys-list {
+    .mcp-key-item {
+        align-items: flex-start;
+    }
+
+    .mcp-key-icon {
+        flex-shrink: 0;
+        margin-top: 2px;
+        font-size: 1.2em;
+        color: var(--surfaceTxtHintColor);
+    }
+
+    .list-item .mcp-key-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+    }
+
+    .mcp-key-title,
+    .mcp-key-meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .mcp-key-meta {
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+
+    .mcp-key-switch {
+        margin: 0;
+    }
+}
+
+.mcp-token-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px var(--inputPadding);
+    border-radius: var(--borderRadius);
+    background: var(--surfaceAlt1Color);
+    border: 1px solid var(--surfaceAlt3Color);
+
+    .mcp-token-value {
+        flex: 1;
+        min-width: 0;
+        word-break: break-all;
+        user-select: all;
+    }
+}
+
+.mcp-connect-card {
+    padding: var(--baseSpacing);
+    border-radius: var(--borderRadius);
+    background: var(--surfaceColor);
+    border: 1px solid var(--surfaceAlt3Color);
+
+    .mcp-tools-details summary {
+        cursor: pointer;
+        color: var(--surfaceTxtHintColor);
+    }
+
+    .mcp-tools-table {
+        margin-top: 10px;
+    }
+}
+
+.mcp-section-label {
+    font-size: var(--smFontSize);
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.mcp-permissions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+
+    .field.mcp-permission {
+        margin: 0;
+        border-radius: var(--borderRadius);
+        border: 1px solid var(--surfaceAlt3Color);
+        transition:
+            border-color var(--animationSpeed),
+            background var(--animationSpeed);
+
+        &:hover {
+            background: var(--surfaceAlt1Color);
+        }
+
+        &.active {
+            border-color: var(--successColor);
+        }
+
+        label {
+            width: 100%;
+            min-height: 100%;
+            padding-top: 10px;
+            padding-right: 10px;
+            padding-bottom: 10px;
+            padding-left: calc(var(--checkboxSize) + 20px);
+            align-items: flex-start;
+            cursor: pointer;
+
+            &::before,
+            &::after {
+                top: 10px;
+                left: 10px;
+            }
+        }
+    }
+
+    .mcp-permission-content {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        line-height: 1.4;
+    }
+}
+
+@media (max-width: 600px) {
+    .mcp-permissions {
+        grid-template-columns: 1fr;
+    }
+}

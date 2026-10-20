@@ -122,6 +122,11 @@ window.app.store = store({
                 icon: "ri-translate-2",
                 label: "Locales",
             },
+            {
+                href: "#/settings/mcp",
+                icon: "ri-robot-2-line",
+                label: "MCP",
+            },
         ],
         Sync: [
             {
