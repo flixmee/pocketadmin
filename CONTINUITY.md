@@ -1,3 +1,20 @@
+Goal (incl. success criteria) [2026-10-20, Telegram "chat not found"]:
+- Diagnose/fix Telegram step error "Bad Request: chat not found".
+- Success: chat IDs from templates (e.g. {{telegram.chat.id}}) render as plain integers; tests pass.
+
+Key decisions:
+- Root cause: webhook JSON decoded to float64; fmt.Sprint renders large IDs in exponent form (-1.00123456789e+12). Fix: toString formats floats without exponent; template interpolation uses toString.
+
+State:
+  - Done: fix + core/automation_templates_test.go; core automation tests + vet pass. TestSettingsRegisterTelegramWebhook fails with or without the fix (pre-existing).
+  - Done: rebuilt examples/base/server (go build, 2026-10-20).
+  - Done: committed b3465f1e (connect-together), merged into develop; new branch `mcp` from develop.
+  - Now: done.
+
+Working set: core/automation_runner.go (toString), core/automation_templates.go, core/automation_telegram.go
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-17, use_tree option]:
 - Base collections get option `use_tree` (bool, JSON key literally `use_tree` per user). Enabling requires a number field named `order`; UI asks user to add it first.
 
