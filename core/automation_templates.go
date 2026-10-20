@@ -80,11 +80,7 @@ func renderAutomationTemplateString(value string, ctx map[string]any) (any, erro
 			return ""
 		}
 
-		if resolved == nil {
-			return ""
-		}
-
-		return fmt.Sprint(resolved)
+		return toString(resolved)
 	})
 	if renderErr != nil {
 		return nil, renderErr

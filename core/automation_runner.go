@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"strings"
 
 	"github.com/pocketbase/dbx"
@@ -949,8 +950,14 @@ func toString(value any) string {
 		return ""
 	}
 
-	if v, ok := value.(string); ok {
+	switch v := value.(type) {
+	case string:
 		return v
+	case float64:
+		// avoid exponent notation for large JSON numbers (e.g. Telegram chat IDs)
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
 	}
 
 	return fmt.Sprint(value)

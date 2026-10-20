@@ -1,3 +1,19 @@
+Goal (incl. success criteria) [2026-10-20, Telegram "chat not found"]:
+- Diagnose/fix Telegram step error "Bad Request: chat not found".
+- Success: chat IDs from templates (e.g. {{telegram.chat.id}}) render as plain integers; tests pass.
+
+Key decisions:
+- Root cause: webhook JSON decoded to float64; fmt.Sprint renders large IDs in exponent form (-1.00123456789e+12). Fix: toString formats floats without exponent; template interpolation uses toString.
+
+State:
+  - Done: fix + core/automation_templates_test.go; core automation tests + vet pass. TestSettingsRegisterTelegramWebhook fails with or without the fix (pre-existing).
+  - Done: rebuilt examples/base/server (go build, 2026-10-20).
+  - Now: awaiting user; fix not committed.
+
+Working set: core/automation_runner.go (toString), core/automation_templates.go, core/automation_telegram.go
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-13, automations editor UI polish]:
 - Improve Automations editor page UI: consistent, polished styles for inputs/selects/checkboxes/forms in trigger panel + step drawer.
 - Success: visual QA in browser (dark+light), vite build passes, no native <select>.
