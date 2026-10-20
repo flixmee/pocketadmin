@@ -2,6 +2,8 @@
 
 This document describes the Model Context Protocol (MCP) server built into PocketAdmin.
 
+For a step-by-step setup guide (creating keys, connecting Claude, Cursor and VS Code, security tips) see [mcp-guide.md](./mcp-guide.md).
+
 It covers:
 
 - the MCP endpoint and how clients authenticate

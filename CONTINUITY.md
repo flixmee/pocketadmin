@@ -17,7 +17,8 @@ Key decisions:
 State:
   - Done: backend (core/mcp_key.go, migrations/1786000000_mcp_keys.go, apis/mcp.go, apis/mcp_tools.go, apis/mcp_test.go — 28 scenarios pass). Full apis/core failures = same 8 as clean HEAD (pre-existing).
   - Done: UI Settings > System > MCP (ui/src/settings/mcp/{pageMcpSettings,mcpKeysList,mcpKeyUpsertModal,mcpKeyTokenModal,mcpUtils}.js, ui/src/css/mcp.css, route + nav in router.js/store.js). Browser-verified via headless Chrome on scratch :8091 (create/edit/toggle/regenerate/delete, dark+light). curl e2e of MCP ok. docs/mcp-api.md added.
-  - Not done: ui/dist not rebuilt; nothing committed (branch `mcp`); develop merge not pushed.
+  - Done: committed c85e570e on `mcp`, pushed (origin/mcp, tracking). Not done: ui/dist not rebuilt; local develop (merge 591d035c) not pushed.
+  - Done: user guide docs/mcp-guide.md (setup, Claude Code/Desktop, Cursor, VS Code configs, prompts, security, troubleshooting), linked from docs/mcp-api.md. Committed + pushed to origin/mcp.
   - Now: awaiting user review.
 
 Working set: core/mcp_key.go, migrations/1786000000_mcp_keys.go, apis/mcp.go, apis/mcp_tools.go, apis/mcp_test.go, ui/src/settings/mcp/*, ui/src/css/mcp.css, docs/mcp-api.md
