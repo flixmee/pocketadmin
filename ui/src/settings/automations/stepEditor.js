@@ -1,4 +1,5 @@
 import FlowDesigner from "../../base/flowdesigner.vanilla";
+import { openAIMemoryModal } from "./aiMemoryModal";
 import { conditionStepForm } from "./conditionStepForm";
 import { httpStepForm } from "./httpStepForm";
 import { mailStepForm } from "./mailStepForm";
@@ -198,6 +199,7 @@ export function stepEditor(propsArg = {}) {
         errors: null,
         triggerType: "",
         triggerCollectionRef: "",
+        automationId: "",
         onchange: function(steps) {},
         ondetachedchange: function(groups) {},
     });
@@ -652,6 +654,9 @@ export function stepEditor(propsArg = {}) {
             get triggerCollectionRef() {
                 return props.triggerCollectionRef;
             },
+            get automationId() {
+                return props.automationId;
+            },
             get drawerActiveTab() {
                 return data.drawerActiveTab;
             },
@@ -739,6 +744,7 @@ export function stepEditor(propsArg = {}) {
                     errors: props.errors,
                     triggerType: props.triggerType,
                     triggerCollectionRef: props.triggerCollectionRef,
+                    automationId: props.automationId,
                     setSteps,
                     addStep,
                     removeStep,
@@ -905,6 +911,7 @@ function renderStructuredStepList(options) {
                                 renderStepForm(step, stepError, {
                                     triggerType: options.triggerType,
                                     triggerCollectionRef: options.triggerCollectionRef,
+                                    automationId: options.automationId,
                                     schemas: options.schemas,
                                 }),
                         ),
@@ -2715,6 +2722,7 @@ function renderStepEditModal(step, options) {
                         renderStepForm(step, stepError, {
                             triggerType: options.triggerType,
                             triggerCollectionRef: options.triggerCollectionRef,
+                            automationId: options.automationId,
                             schemas: options.schemas,
                         }),
                 );
@@ -3223,6 +3231,21 @@ function createAIStep(base, rawStep = {}) {
         schemaRows: Array.isArray(rawStep.schemaRows)
             ? rawStep.schemaRows.map((row) => createSchemaRow(row))
             : schemaToRows(rawStep.schema),
+        mcpServers: Array.isArray(rawStep.mcpServers)
+            ? rawStep.mcpServers.map((row) => createMcpServerRow(row))
+            : [],
+        maxToolCalls: rawStep.maxToolCalls ? toString(rawStep.maxToolCalls) : "",
+        memoryEnabled: rawStep.memory?.enabled === true,
+        memoryKey: rawStep.memory?.key !== undefined ? stringifyLooseValue(rawStep.memory.key) : "",
+        memoryMaxMessages: rawStep.memory?.maxMessages ? toString(rawStep.memory.maxMessages) : "",
+    };
+}
+
+function createMcpServerRow(row = {}) {
+    return {
+        __id: app.utils.randomString(),
+        server: toString(row.server),
+        tools: normalizeStringArray(row.tools),
     };
 }
 
@@ -3869,8 +3892,326 @@ function aiStepForm(step, context) {
                         }),
                 })
                 : null,
+        () => (step.type === "ai.generate" ? aiMemoryEditor(step, context) : null),
+        () => (step.type === "ai.generate" ? mcpToolsEditor(step) : null),
         schemaRowsEditor(step),
         generatedConfigPreview(step),
+    );
+}
+
+function aiMemoryEditor(step, context) {
+    return t.div(
+        { className: "automation-config-section" },
+        t.div(
+            { className: "flex gap-5 flex-wrap m-b-xs" },
+            t.div({ className: "txt-bold" }, "Memory"),
+            t.div(
+                { className: "field m-0 m-l-auto" },
+                t.input({
+                    id: `${step.__id}_memoryEnabled`,
+                    type: "checkbox",
+                    className: "switch sm",
+                    checked: () => step.memoryEnabled,
+                    onchange: (e) => (step.memoryEnabled = e.target.checked),
+                }),
+                t.label({ htmlFor: `${step.__id}_memoryEnabled` }, "Remember conversations"),
+            ),
+        ),
+        () => {
+            if (!step.memoryEnabled) {
+                return t.div(
+                    { className: "txt-sm txt-hint" },
+                    "When enabled, previous messages and answers with the same session key are sent to the AI as chat history.",
+                );
+            }
+
+            return t.div(
+                null,
+                t.div(
+                    { className: "grid" },
+                    t.div(
+                        { className: "col-md-8" },
+                        t.div(
+                            { className: "field" },
+                            t.label({ htmlFor: `${step.__id}_memoryKey` }, "Session key"),
+                            app.components.automationInput({
+                                id: `${step.__id}_memoryKey`,
+                                singleLine: true,
+                                placeholder: "{{trigger.telegram.chat.id}}",
+                                value: () => step.memoryKey,
+                                triggerType: () => context.triggerType,
+                                triggerCollectionRef: () => context.triggerCollectionRef,
+                                oninput: (value) => (step.memoryKey = value),
+                            }),
+                        ),
+                    ),
+                    t.div(
+                        { className: "col-md-4" },
+                        t.div(
+                            { className: "field" },
+                            t.label({ htmlFor: `${step.__id}_memoryMax` }, "Messages to remember"),
+                            t.input({
+                                id: `${step.__id}_memoryMax`,
+                                type: "number",
+                                min: 1,
+                                max: 100,
+                                step: 1,
+                                placeholder: "20",
+                                value: () => step.memoryMaxMessages,
+                                oninput: (e) => (step.memoryMaxMessages = e.target.value),
+                            }),
+                        ),
+                    ),
+                ),
+                t.div(
+                    { className: "flex gap-10 flex-wrap m-t-xs" },
+                    t.div(
+                        { className: "field-help flex-fill" },
+                        "Each session key has its own conversation, e.g. one per Telegram chat or user. ",
+                        "Leave empty to share a single memory. Only the input and the final answer are remembered.",
+                    ),
+                    () =>
+                        context.automationId
+                            ? t.button(
+                                {
+                                    type: "button",
+                                    className: "btn sm secondary transparent",
+                                    onclick: () => openAIMemoryModal(context.automationId),
+                                },
+                                t.i({ className: "ri-history-line", ariaHidden: true }),
+                                t.span({ className: "txt" }, "Manage memory"),
+                            )
+                            : null,
+                ),
+            );
+        },
+    );
+}
+
+// shared cache of the MCP connections and their tools (loaded on demand)
+const mcpToolsCache = store({
+    servers: null,
+    tools: {},
+    toolErrors: {},
+});
+
+let mcpServersPromise = null;
+const mcpToolsPromises = {};
+const mcpToolsPending = {};
+
+// (re)loads the MCP connections list (concurrent calls share the same request)
+function loadMcpServers() {
+    if (mcpServersPromise) {
+        return mcpServersPromise;
+    }
+
+    mcpServersPromise = app.pb
+        .send("/api/mcp/servers", { requestKey: null })
+        .then((result) => {
+            mcpToolsCache.servers = result.items || [];
+        })
+        .catch((err) => {
+            mcpToolsCache.servers = mcpToolsCache.servers || [];
+            if (!err?.isAbort) {
+                app.checkApiError(err);
+            }
+        })
+        .finally(() => {
+            mcpServersPromise = null;
+        });
+
+    return mcpServersPromise;
+}
+
+function loadMcpServerTools(serverId, force = false) {
+    if (!serverId || mcpToolsPending[serverId] || (mcpToolsPromises[serverId] && !force)) {
+        return mcpToolsPromises[serverId];
+    }
+
+    mcpToolsPending[serverId] = true;
+
+    delete mcpToolsCache.toolErrors[serverId];
+
+    mcpToolsPromises[serverId] = app.pb
+        .send(`/api/mcp/servers/${encodeURIComponent(serverId)}/tools`, { requestKey: null })
+        .then((result) => {
+            mcpToolsCache.tools[serverId] = result.tools || [];
+        })
+        .catch((err) => {
+            delete mcpToolsPromises[serverId];
+            mcpToolsCache.tools[serverId] = [];
+            mcpToolsCache.toolErrors[serverId] = err?.data?.message || err?.message || "Failed to load tools.";
+        })
+        .finally(() => {
+            delete mcpToolsPending[serverId];
+        });
+
+    return mcpToolsPromises[serverId];
+}
+
+function mcpServerSelectOptions(selected) {
+    const options = (mcpToolsCache.servers || []).map((server) => ({
+        value: server.id,
+        label: server.active ? server.name : `${server.name} (disabled)`,
+    }));
+
+    if (selected && !options.some((opt) => opt.value === selected)) {
+        options.push({ value: selected, label: `Missing connection (${selected})` });
+    }
+
+    return options;
+}
+
+function mcpToolSelectOptions(row) {
+    const options = (mcpToolsCache.tools[row.server] || []).map((tool) => ({
+        value: tool.name,
+        label: tool.title && tool.title !== tool.name ? `${tool.name} - ${tool.title}` : tool.name,
+    }));
+
+    for (const name of row.tools) {
+        if (!options.some((opt) => opt.value === name)) {
+            options.push({ value: name, label: name });
+        }
+    }
+
+    return options;
+}
+
+function mcpToolsEditor(step) {
+    // always refresh when the step form is opened so that newly added
+    // connections and tools show up without a full page reload
+    loadMcpServers();
+    const refreshedTools = new Set();
+    const refreshTools = (serverId) => {
+        if (serverId && !refreshedTools.has(serverId)) {
+            refreshedTools.add(serverId);
+            loadMcpServerTools(serverId, true);
+        }
+    };
+
+    return t.div(
+        { className: "automation-config-section" },
+        t.div(
+            { className: "flex gap-5 flex-wrap m-b-xs" },
+            t.div({ className: "txt-bold" }, "MCP tools"),
+            t.button(
+                {
+                    type: "button",
+                    className: "btn sm secondary transparent m-l-auto",
+                    onclick: () => step.mcpServers.push(createMcpServerRow()),
+                },
+                t.i({ className: "ti ti-plus", ariaHidden: true }),
+                t.span({ className: "txt" }, "Add MCP server"),
+            ),
+        ),
+        () => {
+            if (!step.mcpServers.length) {
+                return t.div(
+                    { className: "txt-sm txt-hint" },
+                    "Let the AI call tools from your MCP connections while generating. ",
+                    t.a({ href: "#/settings/mcp-connections" }, "Manage MCP connections"),
+                    ".",
+                );
+            }
+
+            return t.div(
+                { className: "automation-config-rows" },
+                ...step.mcpServers.map((row, index) => {
+                    refreshTools(row.server);
+
+                    return t.div(
+                        { rid: row.__id, className: "automation-config-row automation-mcp-server-row" },
+                        app.components.select({
+                            value: () => row.server,
+                            options: () => mcpServerSelectOptions(row.server),
+                            placeholder: "- Select connection -",
+                            onchange: (selected) => {
+                                const server = selected?.[0]?.value || "";
+                                if (server !== row.server) {
+                                    row.server = server;
+                                    row.tools = [];
+                                }
+                            },
+                        }),
+                        app.components.select({
+                            max: 1000,
+                            disabled: () => !row.server,
+                            value: () => row.tools,
+                            options: () => mcpToolSelectOptions(row),
+                            placeholder: () =>
+                                mcpToolsCache.toolErrors[row.server]
+                                    ? "Failed to load tools"
+                                    : "All tools",
+                            onchange: (selected) => (row.tools = selected.map((opt) => opt.value)),
+                        }),
+                        t.button(
+                            {
+                                type: "button",
+                                className: "btn sm secondary transparent circle",
+                                ariaLabel: app.attrs.tooltip("Reload connections and tools"),
+                                onclick: () => {
+                                    loadMcpServers();
+                                    loadMcpServerTools(row.server, true);
+                                },
+                            },
+                            t.i({ className: "ri-refresh-line", ariaHidden: true }),
+                        ),
+                        removeRowButton(() => step.mcpServers.splice(index, 1)),
+                    );
+                }),
+            );
+        },
+        () =>
+            step.mcpServers.length && mcpToolsCache.servers && !mcpToolsCache.servers.length
+                ? t.div(
+                    { className: "field-help txt-warning" },
+                    "No MCP connections yet. ",
+                    t.a({ href: "#/settings/mcp-connections" }, "Create one in Settings > MCP connections"),
+                    " and reload.",
+                )
+                : null,
+        () => {
+            const errors = step.mcpServers
+                .map((row) => mcpToolsCache.toolErrors[row.server])
+                .filter(Boolean);
+            if (!errors.length) {
+                return null;
+            }
+
+            return t.div({ className: "field-help txt-danger" }, errors[0]);
+        },
+        () =>
+            step.mcpServers.length
+                ? t.div(
+                    { className: "grid m-t-xs" },
+                    t.div(
+                        { className: "col-md-4" },
+                        t.div(
+                            { className: "field" },
+                            t.label({ htmlFor: `${step.__id}_maxToolCalls` }, "Max tool calls"),
+                            t.input({
+                                id: `${step.__id}_maxToolCalls`,
+                                type: "number",
+                                min: 1,
+                                max: 50,
+                                step: 1,
+                                placeholder: "10",
+                                value: () => step.maxToolCalls,
+                                oninput: (e) => (step.maxToolCalls = e.target.value),
+                            }),
+                        ),
+                    ),
+                    t.div(
+                        { className: "col-md-8 flex" },
+                        t.div(
+                            { className: "field-help m-t-sm" },
+                            "Leave tools empty to allow all tools of the connection. Tool calls are listed in the step output (",
+                            t.code(null, "toolCalls"),
+                            ").",
+                        ),
+                    ),
+                )
+                : null,
     );
 }
 
@@ -4255,6 +4596,37 @@ function buildAIPayload(step, index) {
     const schema = schemaRowsToObject(step.schemaRows);
     if (schema) {
         payload.schema = schema;
+    }
+
+    if (step.type === "ai.generate" && step.memoryEnabled) {
+        const memory = { enabled: true };
+        if (step.memoryKey?.trim()) {
+            memory.key = step.memoryKey.trim();
+        }
+        const maxMessages = parseInt(step.memoryMaxMessages, 10);
+        if (maxMessages > 0) {
+            memory.maxMessages = maxMessages;
+        }
+        payload.memory = memory;
+    }
+
+    if (step.type === "ai.generate" && step.mcpServers?.length) {
+        payload.mcpServers = step.mcpServers.map((row) => {
+            if (!row.server) {
+                throw new Error(`Step ${index + 1}: select a connection for each MCP server.`);
+            }
+
+            const item = { server: row.server };
+            if (row.tools.length) {
+                item.tools = [...row.tools];
+            }
+            return item;
+        });
+
+        const maxToolCalls = parseInt(step.maxToolCalls, 10);
+        if (maxToolCalls > 0) {
+            payload.maxToolCalls = maxToolCalls;
+        }
     }
 
     return payload;
@@ -4762,6 +5134,22 @@ function validateGenericStepConfig(step, messages) {
             }
             if (step.type === "ai.classify" && !step.labels.some((row) => row.value?.trim())) {
                 messages.push("AI classify labels are required.");
+            }
+            if (
+                step.type === "ai.generate"
+                && step.memoryEnabled
+                && step.memoryMaxMessages
+                && !(step.memoryMaxMessages >= 1 && step.memoryMaxMessages <= 100)
+            ) {
+                messages.push("Messages to remember must be between 1 and 100.");
+            }
+            if (step.type === "ai.generate" && step.mcpServers?.some((row) => !row.server)) {
+                messages.push("Select a connection for each MCP server.");
+            }
+            if (
+                step.type === "ai.generate" && step.maxToolCalls && !(step.maxToolCalls >= 1 && step.maxToolCalls <= 50)
+            ) {
+                messages.push("Max tool calls must be between 1 and 50.");
             }
             validateSchemaRows(step.schemaRows, messages);
             break;

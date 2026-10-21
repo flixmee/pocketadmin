@@ -129,3 +129,20 @@
         grid-template-columns: 1fr;
     }
 }
+
+.mcp-header-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    .mcp-header-row {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+        gap: 8px;
+        align-items: center;
+
+        .field {
+            margin: 0;
+        }
+    }
+}

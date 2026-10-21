@@ -101,16 +101,42 @@ func aiStepSchema(key string, label string) AutomationSchema {
 		input["labels"] = arraySchema(stringSchema())
 	}
 
+	output := map[string]any{
+		"model":      stringSchema(),
+		"output":     map[string]any{},
+		"tokenUsage": objectSchema(nil),
+	}
+
+	if key == AutomationStepAIGenerate {
+		input["mcpServers"] = arraySchema(objectSchema(map[string]any{
+			"server": stringSchema(),
+			"tools":  arraySchema(stringSchema()),
+		}))
+		input["maxToolCalls"] = map[string]any{"type": "integer"}
+		input["memory"] = objectSchema(map[string]any{
+			"enabled":     map[string]any{"type": "boolean"},
+			"key":         stringSchema(),
+			"maxMessages": map[string]any{"type": "integer"},
+		})
+		output["memory"] = objectSchema(map[string]any{
+			"key":     stringSchema(),
+			"history": map[string]any{"type": "integer"},
+		})
+		output["toolCalls"] = arraySchema(objectSchema(map[string]any{
+			"server":    stringSchema(),
+			"tool":      stringSchema(),
+			"arguments": objectSchema(nil),
+			"isError":   map[string]any{"type": "boolean"},
+			"output":    stringSchema(),
+		}))
+	}
+
 	return AutomationSchema{
-		Key:         key,
-		Label:       label,
-		Category:    "ai",
-		InputSchema: objectSchema(input),
-		OutputSchema: objectSchema(map[string]any{
-			"model":      stringSchema(),
-			"output":     map[string]any{},
-			"tokenUsage": objectSchema(nil),
-		}),
+		Key:          key,
+		Label:        label,
+		Category:     "ai",
+		InputSchema:  objectSchema(input),
+		OutputSchema: objectSchema(output),
 	}
 }
 

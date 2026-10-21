@@ -4,6 +4,8 @@ This document describes the Model Context Protocol (MCP) server built into Pocke
 
 For a step-by-step setup guide (creating keys, connecting Claude, Cursor and VS Code, security tips) see [mcp-guide.md](./mcp-guide.md).
 
+To go the other way - let the **AI generate** automation step use tools from external MCP servers - see [mcp-client.md](./mcp-client.md).
+
 It covers:
 
 - the MCP endpoint and how clients authenticate

@@ -19,6 +19,22 @@ type AutomationAIRequest struct {
 	Input    any            `json:"input,omitempty"`
 	Schema   map[string]any `json:"schema,omitempty"`
 	Labels   []string       `json:"labels,omitempty"`
+
+	// Tools lists the tools the model is allowed to call (AI generate only).
+	// Tool calls are executed with CallTool, at most MaxToolCalls times.
+	Tools        []AutomationAITool     `json:"tools,omitempty"`
+	MaxToolCalls int                    `json:"maxToolCalls,omitempty"`
+	CallTool     AutomationAIToolCaller `json:"-"`
+
+	// History lists the previous conversation messages (oldest first)
+	// that are sent before the current prompt (AI generate memory).
+	History []AutomationAIMessage `json:"history,omitempty"`
+}
+
+// AutomationAIMessage is a single conversation message of the AI memory.
+type AutomationAIMessage struct {
+	Role    string `json:"role"` // "user" or "assistant"
+	Content string `json:"content"`
 }
 
 type AutomationAIResponse struct {
@@ -113,7 +129,15 @@ func (p settingsAutomationAIProvider) RunAutomationAI(req AutomationAIRequest) (
 	}
 
 	prompt := automationAIPrompt(req)
-	responseText, tokenUsage, err := callAutomationAIProvider(config.Provider, baseURL, config.APIKey, model, prompt)
+
+	var responseText string
+	var tokenUsage map[string]int
+	var err error
+	if len(req.Tools) > 0 && req.CallTool != nil {
+		responseText, tokenUsage, err = callAutomationAIProviderWithTools(config.Provider, baseURL, config.APIKey, model, prompt, req)
+	} else {
+		responseText, tokenUsage, err = callAutomationAIProvider(config.Provider, baseURL, config.APIKey, model, prompt, req.History)
+	}
 	if err != nil {
 		return AutomationAIResponse{}, err
 	}
@@ -210,24 +234,48 @@ func parseAutomationAIJSONObject(text string) (map[string]any, error) {
 	return result, nil
 }
 
-func callAutomationAIProvider(provider, baseURL, apiKey, model, prompt string) (string, map[string]int, error) {
+func callAutomationAIProvider(provider, baseURL, apiKey, model, prompt string, history []AutomationAIMessage) (string, map[string]int, error) {
 	switch provider {
 	case AIProviderGemini:
-		return callAutomationAIGemini(baseURL, apiKey, model, prompt)
+		return callAutomationAIGemini(baseURL, apiKey, model, prompt, history)
 	case AIProviderAnthropic:
-		return callAutomationAIAnthropic(baseURL, apiKey, model, prompt)
+		return callAutomationAIAnthropic(baseURL, apiKey, model, prompt, history)
 	default:
-		return callAutomationAIOpenAICompatible(baseURL, apiKey, model, prompt)
+		return callAutomationAIOpenAICompatible(baseURL, apiKey, model, prompt, history)
 	}
 }
 
-func callAutomationAIOpenAICompatible(baseURL, apiKey, model, prompt string) (string, map[string]int, error) {
+// automationAIChatMessages returns the OpenAI/Anthropic style messages list
+// with the history followed by the current prompt.
+func automationAIChatMessages(history []AutomationAIMessage, prompt string) []any {
+	messages := make([]any, 0, len(history)+1)
+	for _, m := range history {
+		messages = append(messages, map[string]any{"role": m.Role, "content": m.Content})
+	}
+
+	return append(messages, map[string]any{"role": "user", "content": prompt})
+}
+
+// automationAIGeminiContents returns the Gemini contents list
+// with the history followed by the current prompt.
+func automationAIGeminiContents(history []AutomationAIMessage, prompt string) []any {
+	contents := make([]any, 0, len(history)+1)
+	for _, m := range history {
+		role := "user"
+		if m.Role == "assistant" {
+			role = "model"
+		}
+		contents = append(contents, map[string]any{"role": role, "parts": []map[string]any{{"text": m.Content}}})
+	}
+
+	return append(contents, map[string]any{"role": "user", "parts": []map[string]any{{"text": prompt}}})
+}
+
+func callAutomationAIOpenAICompatible(baseURL, apiKey, model, prompt string, history []AutomationAIMessage) (string, map[string]int, error) {
 	endpoint := strings.TrimRight(baseURL, "/") + "/chat/completions"
 	body := map[string]any{
-		"model": model,
-		"messages": []map[string]string{
-			{"role": "user", "content": prompt},
-		},
+		"model":    model,
+		"messages": automationAIChatMessages(history, prompt),
 	}
 
 	var response struct {
@@ -257,7 +305,7 @@ func callAutomationAIOpenAICompatible(baseURL, apiKey, model, prompt string) (st
 	}, nil
 }
 
-func callAutomationAIGemini(baseURL, apiKey, model, prompt string) (string, map[string]int, error) {
+func callAutomationAIGemini(baseURL, apiKey, model, prompt string, history []AutomationAIMessage) (string, map[string]int, error) {
 	normalizedModel := strings.TrimPrefix(strings.TrimSpace(model), "models/")
 	endpoint := strings.TrimRight(baseURL, "/") + "/models/" + url.PathEscape(normalizedModel) + ":generateContent"
 	parsed, err := url.Parse(endpoint)
@@ -269,14 +317,7 @@ func callAutomationAIGemini(baseURL, apiKey, model, prompt string) (string, map[
 	parsed.RawQuery = q.Encode()
 
 	body := map[string]any{
-		"contents": []map[string]any{
-			{
-				"role": "user",
-				"parts": []map[string]string{
-					{"text": prompt},
-				},
-			},
-		},
+		"contents": automationAIGeminiContents(history, prompt),
 	}
 
 	var response struct {
@@ -308,14 +349,12 @@ func callAutomationAIGemini(baseURL, apiKey, model, prompt string) (string, map[
 	}, nil
 }
 
-func callAutomationAIAnthropic(baseURL, apiKey, model, prompt string) (string, map[string]int, error) {
+func callAutomationAIAnthropic(baseURL, apiKey, model, prompt string, history []AutomationAIMessage) (string, map[string]int, error) {
 	endpoint := strings.TrimRight(baseURL, "/") + "/messages"
 	body := map[string]any{
 		"model":      model,
 		"max_tokens": 1024,
-		"messages": []map[string]string{
-			{"role": "user", "content": prompt},
-		},
+		"messages":   automationAIChatMessages(history, prompt),
 	}
 
 	var response struct {
@@ -409,13 +448,60 @@ func executeAutomationAIStep(ctx *automationExecutionContext, step map[string]an
 		return nil, err
 	}
 
-	response, err := getAutomationAIProvider(ctx.App).RunAutomationAI(AutomationAIRequest{
+	mcpRefs, err := automationAIMCPServerRefs(step)
+	if err != nil {
+		return nil, err
+	}
+
+	req := AutomationAIRequest{
 		StepType: stepType,
 		Model:    strings.TrimSpace(toString(step["model"])),
 		Input:    input,
 		Schema:   schema,
 		Labels:   labels,
-	})
+	}
+
+	memory, err := automationAIMemoryOption(step)
+	if err != nil {
+		return nil, err
+	}
+
+	var memoryKey string
+	if memory != nil {
+		if stepType != AutomationStepAIGenerate {
+			return nil, fmt.Errorf("memory is only supported by the AI generate step")
+		}
+
+		renderedKey, err := renderAutomationTemplateValue(memory.Key, ctx.TemplateData)
+		if err != nil {
+			return nil, err
+		}
+		memoryKey = normalizeAutomationAIMemoryKey(renderedKey)
+
+		req.History, err = LoadAutomationAIMemory(ctx.App, automationAIMemoryOwner(ctx), memoryKey, memory.MaxMessages)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load the AI memory: %w", err)
+		}
+	}
+
+	var toolset *automationAIMCPToolset
+	if len(mcpRefs) > 0 {
+		if stepType != AutomationStepAIGenerate {
+			return nil, fmt.Errorf("MCP tools are only supported by the AI generate step")
+		}
+
+		toolset, err = loadAutomationAIMCPToolset(ctx.App, mcpRefs)
+		if err != nil {
+			return nil, err
+		}
+		defer toolset.Close()
+
+		req.Tools = toolset.Tools
+		req.MaxToolCalls = automationAIMaxToolCalls(step)
+		req.CallTool = toolset.Call
+	}
+
+	response, err := getAutomationAIProvider(ctx.App).RunAutomationAI(req)
 	if err != nil {
 		return nil, err
 	}
@@ -424,11 +510,52 @@ func executeAutomationAIStep(ctx *automationExecutionContext, step map[string]an
 		return nil, err
 	}
 
-	return map[string]any{
+	result := map[string]any{
 		"model":      response.Model,
 		"output":     response.Output,
 		"tokenUsage": response.TokenUsage,
-	}, nil
+	}
+	if toolset != nil {
+		result["toolCalls"] = toolset.Calls
+	}
+
+	if memory != nil {
+		// store plain text answers as is and structured outputs as JSON
+		answer := response.Output
+		if outputMap, ok := answer.(map[string]any); ok && len(schema) == 0 {
+			if text, ok := outputMap["text"].(string); ok {
+				answer = text
+			}
+		}
+
+		err := SaveAutomationAIMemoryTurn(
+			ctx.App,
+			automationAIMemoryOwner(ctx),
+			memoryKey,
+			automationAIMemoryText(input),
+			automationAIMemoryText(answer),
+			memory.MaxMessages,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to save the AI memory: %w", err)
+		}
+
+		result["memory"] = map[string]any{
+			"key":     memoryKey,
+			"history": len(req.History),
+		}
+	}
+
+	return result, nil
+}
+
+// automationAIMemoryOwner returns the id of the automation that owns the AI memory.
+func automationAIMemoryOwner(ctx *automationExecutionContext) string {
+	if ctx.Automation != nil {
+		return ctx.Automation.Id
+	}
+
+	return ""
 }
 
 func automationAIObjectField(step map[string]any, key string) (map[string]any, error) {

@@ -127,6 +127,11 @@ window.app.store = store({
                 icon: "ri-robot-2-line",
                 label: "MCP",
             },
+            {
+                href: "#/settings/mcp-connections",
+                icon: "ri-plug-line",
+                label: "MCP connections",
+            },
         ],
         Sync: [
             {

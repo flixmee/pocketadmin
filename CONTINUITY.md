@@ -1,3 +1,51 @@
+Goal (incl. success criteria) [2026-10-21, AI generate memory, branch `mcp_client`]:
+- Optional conversation memory for the "AI generate" node: when enabled, previous turns (user input + final AI answer) for the same session key are sent as chat history.
+- Success: tests pass; UI toggle/key/size + clear memory; works with and without MCP tools for OpenAI/Anthropic/Gemini.
+
+Key decisions:
+- Step option `memory: {enabled, key (template, default "default"), maxMessages (default 20, max 100)}`; only ai.generate.
+- Storage: plain table `_aiMemory` (automationId, sessionKey, role, content, created); scope = automation + rendered key; pruned to maxMessages per session after each save; deleted with the automation.
+- Only the final answer is stored (no tool calls). Dry runs don't read/write memory.
+- API: GET/DELETE /api/automations/{id}/ai-memory (?key=) for admins.
+
+State:
+  - Done: backend — core/automation_ai_memory.go (+tests), migrations/1786000002_ai_memory.go, history threaded through all provider calls (with/without tools), validation/schema, delete-with-automation hook; apis/automation_ai_memory.go (+tests). Ordering uses rowid (insertion order).
+  - Done: UI — Memory section in AI generate node (toggle, session key template, messages to remember, "Manage memory"), aiMemoryModal.js (sessions, messages, clear one/all), automationId plumbed into step forms. vite build ok.
+  - Done: e2e on scratch :8091 — enabled via UI, saved, 2 runs with fake provider: 2nd request contained 1st turn; modal showed 4 messages. No console errors.
+  - Done: docs/ai-generate-memory.md. Full suite: only the 8 pre-existing failures.
+  - Done [2026-10-21 13:49]: rebuilt ui/dist + Linux amd64 examples/base/server (includes memory).
+  - Now: awaiting user review. Not committed.
+
+---- Previous ledger ----
+
+Goal (incl. success criteria) [2026-10-21, MCP client + AI generate tools, branch `mcp_client`]:
+- Go MCP client (Streamable HTTP) + admin-managed external MCP server connections; "AI generate" automation node can use tools from selected MCP servers (agentic tool loop for OpenAI-compatible/Anthropic/Gemini).
+- Success: go tests pass for client/servers API/AI tool loop; vite build ok; UI to manage connections + pick servers/tools in AI generate step.
+
+Constraints/Assumptions:
+- No new Go deps. Keep deterministic AI provider (tests) working; dry runs preview AI steps (tools never executed in dry run).
+
+Key decisions:
+- tools/mcpclient: JSON + SSE responses, Mcp-Session-Id, pagination, notifications/initialized.
+- Connections in plain table `_mcpServers` (name, url, authToken secret [never returned, hasAuthToken], headers JSON, active). Superuser API /api/mcp/servers (+ /{id}/tools).
+- AI generate step config: `mcpServers: [{server, tools: []}]` (empty tools = all), `maxToolCalls` (default 10, max 50). Output adds `toolCalls`.
+- UI: Settings > "MCP connections" page; AI generate form gets "MCP tools" section.
+
+State:
+  - Done: backend — tools/mcpclient (+tests), core/mcp_server.go + migrations/1786000001_mcp_servers.go, apis/mcp_servers.go (+tests), core/automation_ai_tools.go (OpenAI/Anthropic/Gemini tool loops, +tests), validation/schema for mcpServers/maxToolCalls. All pass.
+  - Done: UI — Settings > "MCP connections" (ui/src/settings/mcpConnections/), nav+route, AI generate "MCP tools" section (mcpToolsEditor in stepEditor.js), CSS. vite build ok. Headless-Chrome verified (list/test/error toast/edit modal/header rows; step editor server+tool pickers, validation, generated config); no console errors.
+  - Done: e2e on scratch :8091 — connection to its own /api/mcp + fake OpenAI provider → AI generate called list_collections via MCP, success.
+  - Done: docs/mcp-client.md (+ links from mcp-guide.md, mcp-api.md). Full core/apis suite: only the 8 pre-existing failures (verified identical on clean develop worktree).
+  - Done [2026-10-21]: rebuilt ui/dist + Linux amd64 binary examples/base/server (static ELF x86-64, ~69MB) from uncommitted mcp_client work.
+  - Done [2026-10-21]: fix — AI node MCP connection dropdown stayed empty (module-level cache loaded once per session; connections added later never appeared without full reload). Now reloads connections on every step-form open, refreshes tools once per open, reload button always enabled, warning hint when no connections. Repro verified fixed in headless Chrome. Rebuilt ui/dist + Linux server binary.
+  - Now: awaiting user review. Not committed.
+
+Open questions: none.
+
+Working set: tools/mcpclient/, core/mcp_server.go, core/automation_ai*.go, apis/mcp_servers.go, ui/src/settings/mcpConnections/, ui/src/settings/automations/stepEditor.js
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-20, MCP API on branch `mcp`]:
 - MCP server endpoint so AI clients can manage records + collections; admin UI to manage MCP API keys.
 - Success: go tests for new code pass; vite build ok; UI page create/edit/delete/regenerate keys; MCP initialize/tools/list/tools/call work with key.
@@ -21,7 +69,8 @@ State:
   - Done: user guide docs/mcp-guide.md (setup, Claude Code/Desktop, Cursor, VS Code configs, prompts, security, troubleshooting), linked from docs/mcp-api.md. Committed + pushed to origin/mcp.
   - Done [2026-10-21]: MCP media upload — new perms media.read/media.write; tools list_media (folder/search) + upload_media (base64/data URI or http(s) url, auto-create folders, -N suffix on conflict, size cap = _medias.file maxSize/5MB, 30s timeout); returns `url` to set as media field value. apis/mcp_tools_media.go + apis/mcp_media_test.go (pass), UI perm options + tools table, docs updated. Not committed.
   - Done [2026-10-21]: fix "content is not valid base64" — decodeMCPContent: lenient base64 (url-safe, padding, whitespace, literal \\n, quotes, data URI incl. charset), raw `<...>` markup/non-base64 data URI stored as text, new `encoding` arg (base64|text), detailed errors (truncated / invalid char pos). list_media missing folder → empty list `exists:false` (upload already auto-creates folders). Tests pass. Not committed.
-  - Now: awaiting user review. UNCONFIRMED: exact payload the user's AI sent.
+  - Done [2026-10-21]: committed 837e278b on `mcp`, fast-forward merged into local `develop` (not pushed; develop ahead of origin), created branch `mcp_client` from develop (current).
+  - Now: on `mcp_client`, awaiting next task. UNCONFIRMED: exact payload the user's AI sent.
 
 Working set: apis/mcp_tools_media.go, apis/mcp_media_test.go, core/mcp_key.go, migrations/1786000000_mcp_keys.go, apis/mcp.go, apis/mcp_tools.go, apis/mcp_test.go, ui/src/settings/mcp/*, ui/src/css/mcp.css, docs/mcp-api.md
 

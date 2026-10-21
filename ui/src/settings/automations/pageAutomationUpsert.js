@@ -711,6 +711,7 @@ export function pageAutomationUpsert(route) {
                             errors: () => app.store.errors?.steps,
                             triggerType: () => data.form.triggerType,
                             triggerCollectionRef: () => data.form.collectionRef,
+                            automationId: () => data.automation?.id || "",
                             onchange: (steps) => {
                                 data.form.steps = steps;
                             },

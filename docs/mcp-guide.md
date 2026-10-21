@@ -4,6 +4,8 @@ This guide explains how to let AI assistants such as Claude, Cursor or VS Code (
 
 For the technical reference (protocol details, tool arguments, keys management API) see [mcp-api.md](./mcp-api.md).
 
+To go the other way - let the **AI generate** automation step use tools from external MCP servers - see [mcp-client.md](./mcp-client.md).
+
 ## What is MCP?
 
 MCP is an open standard that lets AI assistants call external tools. PocketAdmin ships with a built-in MCP server, so once an assistant is connected you can ask it in plain language to:

@@ -561,6 +561,25 @@ func validateAutomationAIStep(step map[string]any) error {
 			return validation.NewError("validation_invalid_automation_ai", "AI classify step requires labels.")
 		}
 	}
+	refs, err := automationAIMCPServerRefs(step)
+	if err != nil {
+		return validation.NewError("validation_invalid_automation_ai", err.Error()+".")
+	}
+	if len(refs) > 0 && stepType != AutomationStepAIGenerate {
+		return validation.NewError("validation_invalid_automation_ai", "MCP tools are only supported by the AI generate step.")
+	}
+	memory, err := automationAIMemoryOption(step)
+	if err != nil {
+		return validation.NewError("validation_invalid_automation_ai", err.Error()+".")
+	}
+	if memory != nil && stepType != AutomationStepAIGenerate {
+		return validation.NewError("validation_invalid_automation_ai", "Memory is only supported by the AI generate step.")
+	}
+	if raw, ok := step["maxToolCalls"]; ok && raw != nil {
+		if value := toFloat(raw); value < 1 || value > AutomationAIMaxToolCalls {
+			return validation.NewError("validation_invalid_automation_ai", fmt.Sprintf("AI step maxToolCalls must be between 1 and %d.", AutomationAIMaxToolCalls))
+		}
+	}
 
 	return nil
 }

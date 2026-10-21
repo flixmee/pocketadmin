@@ -1477,6 +1477,7 @@ func (app *BaseApp) registerBaseHooks() {
 	app.registerAutomationHooks()
 	app.registerCapabilityHooks()
 	app.registerConnectorHooks()
+	app.registerAutomationAIMemoryHooks()
 	app.registerI18nHooks()
 	app.registerTranslationJobHooks()
 	app.registerMediaHooks()
