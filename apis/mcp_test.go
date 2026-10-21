@@ -68,7 +68,7 @@ func TestMCPKeysManagement(t *testing.T) {
 			ExpectedContent: []string{
 				`"name":"test"`,
 				`"keyPrefix":"pbmcp_testto"`,
-				`"permissions":["collections.read","collections.write","records.read","records.write"]`,
+				`"permissions":["collections.read","collections.write","records.read","records.write","media.read","media.write"]`,
 			},
 			NotExpectedContent: []string{`keyHash`},
 			ExpectedEvents:     map[string]int{"*": 0},

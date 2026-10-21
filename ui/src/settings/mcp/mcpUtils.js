@@ -19,6 +19,16 @@ export const mcpPermissionOptions = [
         label: "Write records",
         description: "Create, update and delete records.",
     },
+    {
+        value: "media.read",
+        label: "Read media",
+        description: "Browse and search the media library.",
+    },
+    {
+        value: "media.write",
+        label: "Upload media",
+        description: "Upload files to the media library (creating folders as needed).",
+    },
 ];
 
 export function mcpEndpointURL() {

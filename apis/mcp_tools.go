@@ -181,7 +181,7 @@ var mcpTools = []*mcpTool{
 		Name:  "create_record",
 		Title: "Create record",
 		Description: "Creates a new record. `data` is an object with the field values, e.g. `{\"title\":\"Hello\",\"tags\":[\"id1\",\"id2\"]}`. " +
-			"File fields can't be uploaded through this tool.",
+			"File fields can't be uploaded through this tool; for media fields upload the file with upload_media and use the returned url as the field value.",
 		Permission: core.MCPPermissionRecordsWrite,
 		Properties: map[string]any{
 			"collection": mcpCollectionProp,
@@ -216,6 +216,69 @@ var mcpTools = []*mcpTool{
 		},
 		Required: []string{"collection", "id"},
 		Handler:  mcpDeleteRecord,
+	},
+	{
+		Name:  "list_media",
+		Title: "List media",
+		Description: "Lists the files and folders of the media library inside `folder` (default the root), " +
+			"or searches all media items by name when `search` is set. File items include the `url` to use as a media field value.",
+		Permission: core.MCPPermissionMediaRead,
+		ReadOnly:   true,
+		Properties: map[string]any{
+			"folder": map[string]any{
+				"type":        "string",
+				"description": "Optional folder path, e.g. `/posts/covers`. Defaults to the root folder. A missing folder returns an empty list with `exists: false`.",
+			},
+			"search": map[string]any{
+				"type":        "string",
+				"description": "Optional text to search in the media item names (searches all folders).",
+			},
+			"page": map[string]any{
+				"type":        "integer",
+				"minimum":     1,
+				"description": "Page number (default 1).",
+			},
+			"perPage": map[string]any{
+				"type":        "integer",
+				"minimum":     1,
+				"maximum":     mcpMaxPerPage,
+				"description": "Items per page (default 100, max 200).",
+			},
+		},
+		Handler: mcpListMedia,
+	},
+	{
+		Name:  "upload_media",
+		Title: "Upload media",
+		Description: "Uploads a file (e.g. a post cover image) to the media library. Provide either `content` (base64, a data URI, or plain text with `encoding` `text`, e.g. for SVG) " +
+			"or a public http(s) `url` to download the file from (preferred for large binary files). " +
+			"Folders in `folder` that don't exist yet are created automatically and a numeric suffix is added when the name is taken. " +
+			"Returns the media item; set its `url` as the value of a media field (e.g. update_record with `{\"cover\":\"<url>\"}`).",
+		Permission: core.MCPPermissionMediaWrite,
+		Properties: map[string]any{
+			"name": map[string]any{
+				"type":        "string",
+				"description": "File name including the extension, e.g. `cover.jpg`. Required with `content`; defaults to the remote file name with `url`.",
+			},
+			"content": map[string]any{
+				"type":        "string",
+				"description": "The file content: base64 (a data URI is also accepted), or plain text when `encoding` is `text`.",
+			},
+			"encoding": map[string]any{
+				"type":        "string",
+				"enum":        []string{"base64", "text"},
+				"description": "Encoding of `content` (default `base64`). Use `text` for text files such as SVG, Markdown or CSV.",
+			},
+			"url": map[string]any{
+				"type":        "string",
+				"description": "Public http(s) URL to download the file from.",
+			},
+			"folder": map[string]any{
+				"type":        "string",
+				"description": "Optional destination folder path, e.g. `/posts/covers`; missing folders are created. Defaults to the root folder.",
+			},
+		},
+		Handler: mcpUploadMedia,
 	},
 }
 

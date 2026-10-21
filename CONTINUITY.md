@@ -19,9 +19,11 @@ State:
   - Done: UI Settings > System > MCP (ui/src/settings/mcp/{pageMcpSettings,mcpKeysList,mcpKeyUpsertModal,mcpKeyTokenModal,mcpUtils}.js, ui/src/css/mcp.css, route + nav in router.js/store.js). Browser-verified via headless Chrome on scratch :8091 (create/edit/toggle/regenerate/delete, dark+light). curl e2e of MCP ok. docs/mcp-api.md added.
   - Done: committed c85e570e on `mcp`, pushed (origin/mcp, tracking). Not done: ui/dist not rebuilt; local develop (merge 591d035c) not pushed.
   - Done: user guide docs/mcp-guide.md (setup, Claude Code/Desktop, Cursor, VS Code configs, prompts, security, troubleshooting), linked from docs/mcp-api.md. Committed + pushed to origin/mcp.
-  - Now: awaiting user review.
+  - Done [2026-10-21]: MCP media upload — new perms media.read/media.write; tools list_media (folder/search) + upload_media (base64/data URI or http(s) url, auto-create folders, -N suffix on conflict, size cap = _medias.file maxSize/5MB, 30s timeout); returns `url` to set as media field value. apis/mcp_tools_media.go + apis/mcp_media_test.go (pass), UI perm options + tools table, docs updated. Not committed.
+  - Done [2026-10-21]: fix "content is not valid base64" — decodeMCPContent: lenient base64 (url-safe, padding, whitespace, literal \\n, quotes, data URI incl. charset), raw `<...>` markup/non-base64 data URI stored as text, new `encoding` arg (base64|text), detailed errors (truncated / invalid char pos). list_media missing folder → empty list `exists:false` (upload already auto-creates folders). Tests pass. Not committed.
+  - Now: awaiting user review. UNCONFIRMED: exact payload the user's AI sent.
 
-Working set: core/mcp_key.go, migrations/1786000000_mcp_keys.go, apis/mcp.go, apis/mcp_tools.go, apis/mcp_test.go, ui/src/settings/mcp/*, ui/src/css/mcp.css, docs/mcp-api.md
+Working set: apis/mcp_tools_media.go, apis/mcp_media_test.go, core/mcp_key.go, migrations/1786000000_mcp_keys.go, apis/mcp.go, apis/mcp_tools.go, apis/mcp_test.go, ui/src/settings/mcp/*, ui/src/css/mcp.css, docs/mcp-api.md
 
 ---- Previous ledger ----
 

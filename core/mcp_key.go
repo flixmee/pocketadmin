@@ -22,6 +22,8 @@ const (
 	MCPPermissionCollectionsWrite = "collections.write"
 	MCPPermissionRecordsRead      = "records.read"
 	MCPPermissionRecordsWrite     = "records.write"
+	MCPPermissionMediaRead        = "media.read"
+	MCPPermissionMediaWrite       = "media.write"
 )
 
 // MCPPermissions lists all supported MCP key permissions.
@@ -30,6 +32,8 @@ var MCPPermissions = []string{
 	MCPPermissionCollectionsWrite,
 	MCPPermissionRecordsRead,
 	MCPPermissionRecordsWrite,
+	MCPPermissionMediaRead,
+	MCPPermissionMediaWrite,
 }
 
 const (

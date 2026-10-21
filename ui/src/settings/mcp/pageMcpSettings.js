@@ -14,6 +14,8 @@ const mcpToolsInfo = [
     ["create_record", "Write records"],
     ["update_record", "Write records"],
     ["delete_record", "Write records"],
+    ["list_media", "Read media"],
+    ["upload_media", "Upload media"],
 ];
 
 export function pageMcpSettings(route) {

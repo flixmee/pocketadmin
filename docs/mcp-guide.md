@@ -30,6 +30,8 @@ Every assistant connects with its own **MCP API key**. The key decides what the 
      | Manage collections | Create, update and delete collections      |
      | Read records       | List, filter and view records              |
      | Write records      | Create, update and delete records          |
+     | Read media         | Browse and search the media library        |
+     | Upload media       | Upload files to the media library          |
 
    - **Allowed collections** - leave empty to allow every non-system collection, or pick specific ones.
    - **Expires at** - optional; the key stops working after this date.
@@ -178,6 +180,7 @@ Once connected, just ask. Good first prompts:
 - "Find posts without a cover image and list their titles."
 - "Create a new product called 'Desk Lamp' priced at 39.90 in the `products` collection."
 - "Mark all tasks assigned to record `abc123` as done." (needs **Write records**)
+- "Generate a cover image for the post 'Hello world', upload it and set it as the post cover." (needs **Upload media** + **Write records**)
 - "Create a `feedback` collection with fields: message (text, required), rating (number 1-5) and user (relation to users)." (needs **Manage collections**)
 
 The assistant usually starts by listing the collections to learn their fields, then queries or changes the records. Most clients ask you to approve each tool call - read them, especially before deletes.
@@ -196,8 +199,20 @@ The assistant usually starts by listing the collections to learn their fields, t
 | `create_record`     | Creates a record                               | Write records      |
 | `update_record`     | Updates a record                               | Write records      |
 | `delete_record`     | Deletes a record                               | Write records      |
+| `list_media`        | Browses or searches the media library          | Read media         |
+| `upload_media`      | Uploads a file (base64 or from a URL)          | Upload media       |
 
 Filters and sorting use the normal PocketBase syntax, e.g. `status = 'active' && total > 100` and `-created`.
+
+### Uploading media (e.g. a post cover)
+
+Media fields point to files in the shared media library (**Media** in the sidebar). To set a cover with an assistant:
+
+1. The assistant calls `upload_media` with either the file content (base64, or plain text with `encoding: "text"` for SVG and other text files) or a public `url` to download it from, plus an optional `folder` such as `/posts/covers` (folders that don't exist yet are created). If the name is already taken a suffix is added, e.g. `cover-1.png`.
+2. The tool returns the new media item including its `url`, e.g. `/api/files/<mediaCollectionId>/<id>/cover_abc123.png`.
+3. The assistant sets that `url` as the media field value with `update_record`/`create_record`, e.g. `{"cover": "/api/files/..."}`.
+
+The file size limit is the one configured for the media library (5 MB by default). Assistants that can't produce binary data themselves (most chat clients) should pass a `url`.
 
 ## Security
 
@@ -209,6 +224,7 @@ Keep these in mind:
 - **Grant the minimum.** Prefer read-only keys and restrict them to the collections the assistant needs. A key limited to specific collections also can't create new collections.
 - **Be careful with write permissions.** AI assistants can make mistakes. Keep backups (**Settings > Backups**) and review tool calls before approving deletes or collection changes.
 - **Never commit keys.** Use environment variables or your client's secret storage.
+- **Upload media from a URL** makes the server download that URL. Only grant **Upload media** to clients you trust, since the server may reach addresses that are not public (e.g. your internal network).
 - **Use HTTPS** in production so keys are not sent in plain text.
 - **Set an expiration date** for temporary access, and disable or delete keys you no longer use.
 - If a key leaks, **Regenerate** or delete it immediately - the old key stops working right away.
@@ -224,7 +240,8 @@ On **Settings > MCP** each key shows its status, key prefix, permissions, allowe
 
 ## Limitations
 
-- File fields can't be uploaded through MCP.
+- Regular `file` fields can't be uploaded through MCP; use media fields with `upload_media` instead.
+- Media items can't be renamed, moved or deleted through MCP (use the admin UI).
 - Realtime subscriptions, backups, settings and logs are not exposed.
 - `list_records` returns at most 200 records per page; the assistant pages through larger results.
 - Editing a collection's `fields` replaces the whole field list - removed fields are deleted with their data. Assistants are told to load the collection first, but double check before approving.

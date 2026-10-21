@@ -21,6 +21,8 @@ var mcpProtocolVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26", "20
 const mcpServerInstructions = "This server exposes the PocketAdmin (PocketBase) collections and records. " +
 	"Call list_collections first to discover the available collections and their fields, " +
 	"then use the record tools to query and modify data. " +
+	"Media fields reference files from the shared media library: upload files with upload_media (or find existing ones with list_media) " +
+	"and set the returned file url as the field value. " +
 	"Filters and sorting use the PocketBase syntax, e.g. filter `status = 'active' && created > '2024-01-01'` and sort `-created,title`."
 
 const (
