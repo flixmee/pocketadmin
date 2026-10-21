@@ -1,11 +1,14 @@
 package core
 
 import (
+	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pocketbase/dbx"
 	validation "github.com/pocketbase/ozzo-validation/v4"
@@ -16,46 +19,115 @@ import (
 
 const MCPServersTableName = "_mcpServers"
 
+// MCP connection kinds.
+const (
+	// MCPServerKindHTTP is an external MCP server (Streamable HTTP).
+	MCPServerKindHTTP = "http"
+
+	// MCPServerKindGmail is the built-in Gmail tools connection (Google OAuth).
+	MCPServerKindGmail = "gmail"
+)
+
 var _ Model = (*MCPServer)(nil)
 
-// MCPServer defines a connection to an external MCP server
-// whose tools can be used by the AI automation steps.
+// MCPServer defines a connection whose tools can be used by the AI
+// automation steps - either an external MCP server or a built-in
+// integration such as Gmail.
 type MCPServer struct {
 	BaseModel
 
-	Name      string                `db:"name" json:"name"`
-	URL       string                `db:"url" json:"url"`
-	AuthToken string                `db:"authToken" json:"-"`
-	Headers   types.JSONMap[string] `db:"headers" json:"headers"`
-	Active    bool                  `db:"active" json:"active"`
-	Created   types.DateTime        `db:"created" json:"created"`
-	Updated   types.DateTime        `db:"updated" json:"updated"`
+	Name         string                `db:"name" json:"name"`
+	Kind         string                `db:"kind" json:"kind"`
+	URL          string                `db:"url" json:"url"`
+	AuthToken    string                `db:"authToken" json:"-"`
+	Headers      types.JSONMap[string] `db:"headers" json:"headers"`
+	ClientId     string                `db:"clientId" json:"clientId"`
+	ClientSecret string                `db:"clientSecret" json:"-"`
+	OAuth        MCPServerOAuth        `db:"oauth" json:"-"`
+	Active       bool                  `db:"active" json:"active"`
+	Created      types.DateTime        `db:"created" json:"created"`
+	Updated      types.DateTime        `db:"updated" json:"updated"`
+}
+
+// MCPServerOAuth holds the OAuth tokens of a connection (never exported).
+type MCPServerOAuth struct {
+	RefreshToken string         `json:"refreshToken,omitempty"`
+	AccessToken  string         `json:"accessToken,omitempty"`
+	Expiry       types.DateTime `json:"expiry"`
+	Email        string         `json:"email,omitempty"`
+}
+
+// Value implements [driver.Valuer].
+func (o MCPServerOAuth) Value() (driver.Value, error) {
+	raw, err := json.Marshal(o)
+	return string(raw), err
+}
+
+// Scan implements [sql.Scanner].
+func (o *MCPServerOAuth) Scan(value any) error {
+	*o = MCPServerOAuth{}
+
+	var raw []byte
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case string:
+		raw = []byte(v)
+	case []byte:
+		raw = v
+	default:
+		return errors.New("unsupported MCP server oauth value")
+	}
+
+	if len(raw) == 0 {
+		return nil
+	}
+
+	return json.Unmarshal(raw, o)
+}
+
+// IsConnected reports whether the OAuth account was connected.
+func (o MCPServerOAuth) IsConnected() bool {
+	return o.RefreshToken != ""
 }
 
 func (m *MCPServer) TableName() string {
 	return MCPServersTableName
 }
 
-// MarshalJSON implements [json.Marshaler] and exports whether an
-// auth token is set without exposing the token itself.
+// MarshalJSON implements [json.Marshaler] and exports whether the
+// secrets are set without exposing them.
 func (m MCPServer) MarshalJSON() ([]byte, error) {
 	type alias MCPServer
 
 	return json.Marshal(struct {
 		alias
-		HasAuthToken bool `json:"hasAuthToken"`
+		HasAuthToken    bool   `json:"hasAuthToken"`
+		HasClientSecret bool   `json:"hasClientSecret"`
+		Connected       bool   `json:"connected"`
+		Account         string `json:"account"`
 	}{
-		alias:        alias(m),
-		HasAuthToken: m.AuthToken != "",
+		alias:           alias(m),
+		HasAuthToken:    m.AuthToken != "",
+		HasClientSecret: m.ClientSecret != "",
+		Connected:       m.OAuth.IsConnected(),
+		Account:         m.OAuth.Email,
 	})
 }
 
 // Validate validates the user configurable server fields.
 func (m *MCPServer) Validate() error {
+	isHTTP := m.Kind == MCPServerKindHTTP
+
 	return validation.ValidateStruct(m,
 		validation.Field(&m.Name, validation.Required, validation.Length(1, 100)),
-		validation.Field(&m.URL, validation.Required, validation.Length(1, 2000), validation.By(validateMCPServerURL)),
+		validation.Field(&m.Kind, validation.Required, validation.In(MCPServerKindHTTP, MCPServerKindGmail)),
+		validation.Field(
+			&m.URL,
+			validation.When(isHTTP, validation.Required, validation.Length(1, 2000), validation.By(validateMCPServerURL)),
+		),
 		validation.Field(&m.Headers, validation.By(validateMCPServerHeaders)),
+		validation.Field(&m.ClientId, validation.Length(0, 500)),
 	)
 }
 
@@ -82,7 +154,26 @@ func validateMCPServerHeaders(value any) error {
 	return nil
 }
 
-// NewClient creates a new MCP client for the server.
+// MCPToolSession is a session that exposes the tools of an MCP connection.
+//
+// [mcpclient.Client] implements it for external servers and the
+// built-in integrations (e.g. Gmail) implement it in-process.
+type MCPToolSession interface {
+	ListTools(ctx context.Context) ([]mcpclient.Tool, error)
+	CallTool(ctx context.Context, name string, args map[string]any) (*mcpclient.CallToolResult, error)
+	Close(ctx context.Context) error
+}
+
+// NewToolSession creates a new tools session for the connection.
+func (m *MCPServer) NewToolSession(app App) MCPToolSession {
+	if m.Kind == MCPServerKindGmail {
+		return newGmailToolSession(app, m)
+	}
+
+	return m.NewClient()
+}
+
+// NewClient creates a new MCP client for an external (http) server.
 //
 // The auth token (if any) is sent as "Authorization: Bearer <token>".
 func (m *MCPServer) NewClient() *mcpclient.Client {
@@ -101,6 +192,7 @@ func (m *MCPServer) NewClient() *mcpclient.Client {
 // NewMCPServer initializes a new active MCP server connection model.
 func NewMCPServer() *MCPServer {
 	m := &MCPServer{
+		Kind:    MCPServerKindHTTP,
 		Active:  true,
 		Headers: types.JSONMap[string]{},
 	}
@@ -114,6 +206,11 @@ func SaveMCPServer(app App, m *MCPServer) error {
 	m.Name = strings.TrimSpace(m.Name)
 	m.URL = strings.TrimSpace(m.URL)
 	m.AuthToken = strings.TrimSpace(m.AuthToken)
+	m.ClientId = strings.TrimSpace(m.ClientId)
+	m.ClientSecret = strings.TrimSpace(m.ClientSecret)
+	if m.Kind == "" {
+		m.Kind = MCPServerKindHTTP
+	}
 
 	headers := types.JSONMap[string]{}
 	for k, v := range m.Headers {
@@ -131,12 +228,16 @@ func SaveMCPServer(app App, m *MCPServer) error {
 	m.Updated = now
 
 	params := dbx.Params{
-		"name":      m.Name,
-		"url":       m.URL,
-		"authToken": m.AuthToken,
-		"headers":   m.Headers,
-		"active":    m.Active,
-		"updated":   m.Updated.String(),
+		"name":         m.Name,
+		"kind":         m.Kind,
+		"url":          m.URL,
+		"authToken":    m.AuthToken,
+		"headers":      m.Headers,
+		"clientId":     m.ClientId,
+		"clientSecret": m.ClientSecret,
+		"oauth":        m.OAuth,
+		"active":       m.Active,
+		"updated":      m.Updated.String(),
 	}
 
 	if m.IsNew() {
@@ -203,4 +304,20 @@ func FindAllMCPServers(app App) ([]*MCPServer, error) {
 	}
 
 	return servers, nil
+}
+
+// SaveMCPServerOAuth persists only the OAuth tokens of the connection.
+func SaveMCPServerOAuth(app App, m *MCPServer) error {
+	_, err := app.NonconcurrentDB().Update(
+		MCPServersTableName,
+		dbx.Params{"oauth": m.OAuth},
+		dbx.HashExp{"id": m.Id},
+	).Execute()
+
+	return err
+}
+
+// mcpServerTokenExpired reports whether the access token is missing or about to expire.
+func mcpServerTokenExpired(o MCPServerOAuth) bool {
+	return o.AccessToken == "" || o.Expiry.IsZero() || time.Until(o.Expiry.Time()) < time.Minute
 }

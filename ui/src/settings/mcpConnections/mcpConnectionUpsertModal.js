@@ -1,3 +1,5 @@
+import { connectGoogleAccount, googleOAuthRedirectURL, mcpConnectionKindOptions } from "./mcpConnectionUtils";
+
 /**
  * Opens the create/edit MCP connection modal.
  *
@@ -28,7 +30,12 @@ function mcpConnectionUpsertModal(server, settings) {
     const data = store({
         isSubmitting: false,
         name: server?.name || "",
+        kind: server?.kind || "http",
         url: server?.url || "",
+        clientId: server?.clientId || "",
+        // null = keep the current secret
+        clientSecret: isNew ? "" : null,
+        hasClientSecret: !!server?.hasClientSecret,
         // null = keep the current token
         authToken: isNew ? "" : null,
         hasAuthToken: !!server?.hasAuthToken,
@@ -43,18 +50,33 @@ function mcpConnectionUpsertModal(server, settings) {
 
         data.isSubmitting = true;
 
+        const isGmail = data.kind === "gmail";
+
+        // new Gmail connections continue directly with the Google sign-in
+        // (the popup must be opened synchronously to avoid popup blockers)
+        const continueWithGoogle = isNew && isGmail;
+        const popup = continueWithGoogle ? window.open("", "pa_google_oauth", "width=520,height=700") : null;
+
         const body = {
             name: data.name,
-            url: data.url,
-            headers: Object.fromEntries(
+            kind: data.kind,
+            active: data.active,
+        };
+        if (isGmail) {
+            body.clientId = data.clientId;
+            if (data.clientSecret !== null) {
+                body.clientSecret = data.clientSecret;
+            }
+        } else {
+            body.url = data.url;
+            body.headers = Object.fromEntries(
                 data.headers
                     .filter((row) => row.name.trim())
                     .map((row) => [row.name.trim(), row.value]),
-            ),
-            active: data.active,
-        };
-        if (data.authToken !== null) {
-            body.authToken = data.authToken;
+            );
+            if (data.authToken !== null) {
+                body.authToken = data.authToken;
+            }
         }
 
         try {
@@ -71,7 +93,12 @@ function mcpConnectionUpsertModal(server, settings) {
             settings.onsave?.(result);
             app.toasts.success(`Successfully saved "${result.name}".`);
             app.modals.close(modal);
+
+            if (continueWithGoogle) {
+                connectGoogleAccount(result, { popup, onconnect: settings.onsave });
+            }
         } catch (err) {
+            popup?.close();
             if (!err.isAbort) {
                 app.checkApiError(err);
             }
@@ -117,7 +144,7 @@ function mcpConnectionUpsertModal(server, settings) {
                             type: "text",
                             required: true,
                             maxLength: 100,
-                            placeholder: "e.g. Web search",
+                            placeholder: () => (data.kind === "gmail" ? "e.g. Support inbox" : "e.g. Web search"),
                             value: () => data.name,
                             oninput: (e) => (data.name = e.target.value),
                         }),
@@ -127,12 +154,85 @@ function mcpConnectionUpsertModal(server, settings) {
                     { className: "col-lg-12" },
                     t.div(
                         { className: "field" },
+                        t.label({ htmlFor: uniqueId + "_kind" }, "Type"),
+                        app.components.select({
+                            id: uniqueId + "_kind",
+                            required: true,
+                            options: mcpConnectionKindOptions,
+                            value: () => data.kind,
+                            onchange: (opts) => (data.kind = opts?.[0]?.value || "http"),
+                        }),
+                    ),
+                ),
+                t.div(
+                    { className: "col-lg-12", hidden: () => data.kind !== "gmail" },
+                    t.div(
+                        { className: "mcp-gmail-info txt-sm" },
+                        t.p(
+                            { className: "m-b-xs" },
+                            "Built-in Gmail tools (search, read, send & reply) for the AI generate step. ",
+                            "Create an OAuth client (type \"Web application\") in Google Cloud Console, enable the Gmail API ",
+                            "and add this authorized redirect URI:",
+                        ),
+                        t.div(
+                            { className: "mcp-token-box" },
+                            t.code({ className: "mcp-token-value txt-code" }, () => googleOAuthRedirectURL()),
+                            app.components.copyButton(() => googleOAuthRedirectURL()),
+                        ),
+                    ),
+                ),
+                t.div(
+                    { className: "col-lg-6", hidden: () => data.kind !== "gmail" },
+                    t.div(
+                        { className: "field" },
+                        t.label({ htmlFor: uniqueId + "_clientId" }, "Google client ID"),
+                        t.input({
+                            id: uniqueId + "_clientId",
+                            name: "clientId",
+                            type: "text",
+                            placeholder: "Optional",
+                            value: () => data.clientId,
+                            oninput: (e) => (data.clientId = e.target.value),
+                        }),
+                    ),
+                ),
+                t.div(
+                    { className: "col-lg-6", hidden: () => data.kind !== "gmail" },
+                    t.div(
+                        { className: "field" },
+                        t.label({ htmlFor: uniqueId + "_clientSecret" }, "Google client secret"),
+                        t.input({
+                            id: uniqueId + "_clientSecret",
+                            name: "clientSecret",
+                            type: "password",
+                            autocomplete: "new-password",
+                            placeholder: () =>
+                                data.clientSecret === null && data.hasClientSecret
+                                    ? "* * * * * * (unchanged)"
+                                    : "Optional",
+                            value: () => data.clientSecret || "",
+                            oninput: (e) => (data.clientSecret = e.target.value),
+                        }),
+                    ),
+                ),
+                t.div(
+                    { className: "col-lg-12", hidden: () => data.kind !== "gmail" },
+                    t.div(
+                        { className: "field-help" },
+                        "Leave empty to use the Google client from Settings > Credentials. ",
+                        () => (isNew ? "After saving you'll be asked to sign in with the Gmail account." : ""),
+                    ),
+                ),
+                t.div(
+                    { className: "col-lg-12", hidden: () => data.kind !== "http" },
+                    t.div(
+                        { className: "field" },
                         t.label({ htmlFor: uniqueId + "_url" }, "Server URL"),
                         t.input({
                             id: uniqueId + "_url",
                             name: "url",
                             type: "url",
-                            required: true,
+                            required: () => data.kind === "http",
                             placeholder: "https://example.com/mcp",
                             value: () => data.url,
                             oninput: (e) => (data.url = e.target.value),
@@ -141,7 +241,7 @@ function mcpConnectionUpsertModal(server, settings) {
                     t.div({ className: "field-help" }, "The Streamable HTTP endpoint of the MCP server."),
                 ),
                 t.div(
-                    { className: "col-lg-12" },
+                    { className: "col-lg-12", hidden: () => data.kind !== "http" },
                     t.div(
                         { className: "field" },
                         t.label({ htmlFor: uniqueId + "_authToken" }, "Bearer token"),
@@ -177,7 +277,7 @@ function mcpConnectionUpsertModal(server, settings) {
                     ),
                 ),
                 t.div(
-                    { className: "col-lg-12" },
+                    { className: "col-lg-12", hidden: () => data.kind !== "http" },
                     t.div(
                         { className: "flex gap-5 m-b-xs" },
                         t.div({ className: "mcp-section-label m-0" }, "Custom headers"),

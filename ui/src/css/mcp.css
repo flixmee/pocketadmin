@@ -146,3 +146,14 @@
         }
     }
 }
+
+.mcp-gmail-info {
+    padding: 12px;
+    border-radius: var(--borderRadius);
+    background: var(--surfaceAlt1Color);
+    color: var(--surfaceTxtHintColor);
+
+    .mcp-token-box {
+        background: var(--surfaceColor);
+    }
+}

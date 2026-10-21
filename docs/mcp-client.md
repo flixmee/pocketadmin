@@ -17,6 +17,31 @@ This is the opposite direction of the [MCP API](mcp-api.md), where external AI a
 
 > Tip: you can connect PocketAdmin to itself (or another instance) by creating an [MCP API key](mcp-guide.md) and using `https://<your-app>/api/mcp` as the server URL.
 
+## Gmail (built-in)
+
+Choose **Type: Gmail (built-in)** to give the AI access to a Gmail mailbox without hosting anything:
+
+| Tool                  | What it does                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------ |
+| `gmail_search_emails` | Searches with the Gmail syntax (`from:`, `is:unread`, `after:2026/01/01`, ...) - max 50 results    |
+| `gmail_read_email`    | Reads a message: headers, plain text body (HTML converted to text), attachment names              |
+| `gmail_read_thread`   | Reads a whole conversation                                                                       |
+| `gmail_send_email`    | Sends an email (`to`, `cc`, `bcc`, `subject`, `body`, optional `html`); `replyToMessageId` replies in the thread |
+
+Setup:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) enable the **Gmail API** and create an **OAuth client ID** of type *Web application*.
+2. Add the authorized redirect URI shown in the connection form: `<App URL>/api/mcp/oauth/google/callback` (the **Application URL** in Settings > Application must be the public URL of your app).
+3. Create the connection with the client ID/secret (or leave them empty to reuse the Google client from **Settings > Credentials**).
+4. Sign in with the Gmail account in the popup (it opens right after creating the connection, or use **Connect** / **Reconnect** on the list). The list shows the connected account; **Disconnect** removes the stored tokens.
+
+Notes:
+
+- Requested scopes: `gmail.readonly`, `gmail.send` (+ `openid email` to show the account). The AI can't delete or modify emails.
+- Tokens are refreshed automatically and never returned by the API.
+- In Google's *Testing* publishing status refresh tokens expire after 7 days - publish the OAuth app (or use an *Internal* app on Google Workspace) for long-lived connections. If the authorization expires the steps fail with "reconnect the Gmail account".
+- Sending is a real side effect: deselect `gmail_send_email` in the AI generate node when the step should only read.
+
 ## 2. Use the tools in an automation
 
 1. Add or open an **AI generate** step.
@@ -69,15 +94,19 @@ All routes require superuser auth.
 | Method   | Route                          | Description                                                               |
 | -------- | ------------------------------ | ------------------------------------------------------------------------- |
 | `GET`    | `/api/mcp/servers`             | `{ items: [...connections] }` (`hasAuthToken` instead of the token)       |
-| `POST`   | `/api/mcp/servers`             | Creates a connection: `name`, `url`, `authToken`, `headers`, `active`     |
+| `POST`   | `/api/mcp/servers`             | Creates a connection: `name`, `kind` (`http`/`gmail`), `url`, `authToken`, `headers`, `clientId`, `clientSecret`, `active` |
 | `PATCH`  | `/api/mcp/servers/{id}`        | Updates a connection. Omit `authToken` to keep it, send `""` to remove it |
 | `DELETE` | `/api/mcp/servers/{id}`        | Deletes the connection (`204`)                                            |
 | `GET`    | `/api/mcp/servers/{id}/tools`  | Connects and returns `{ server, tools: [{ name, title, description }] }`  |
+| `POST`   | `/api/mcp/servers/{id}/oauth/start`      | Gmail: returns `{ authURL, redirectURL }` for the Google sign-in   |
+| `POST`   | `/api/mcp/servers/{id}/oauth/disconnect` | Gmail: removes the stored tokens                                  |
+| `GET`    | `/api/mcp/oauth/google/callback`         | Public Google redirect URI (validated with a one-time state)      |
 
 ## Code Locations
 
 - `tools/mcpclient/` - Streamable HTTP MCP client (JSON and SSE responses, sessions, pagination)
 - `core/mcp_server.go`, `migrations/1786000001_mcp_servers.go` - `_mcpServers` table and helpers
+- `core/mcp_gmail.go` - Gmail tools and Google OAuth; `migrations/1786000003_mcp_servers_oauth.go`
 - `apis/mcp_servers.go` - connections API
 - `core/automation_ai_tools.go` - tool loading and the provider tool-calling loops
 - `ui/src/settings/mcpConnections/` - settings page; `ui/src/settings/automations/stepEditor.js` (`mcpToolsEditor`) - step UI

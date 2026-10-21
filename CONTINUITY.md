@@ -1,3 +1,22 @@
+Goal (incl. success criteria) [2026-10-21, built-in Gmail MCP connection, branch `mcp_client`]:
+- MCP connections get kind "gmail": Google OAuth "Connect Google account" (offline refresh token), built-in in-process tools usable by AI generate: gmail_search_emails, gmail_read_email, gmail_read_thread, gmail_send_email (incl. replies). User chose: built-in (not external), tools = search/read + send/reply (no drafts/labels).
+- Success: tests (token refresh, search/read/send/reply, OAuth start/callback/disconnect) pass; UI type select, connect/disconnect; build ok.
+
+Key decisions:
+- `_mcpServers` gains columns kind, clientId, clientSecret, oauth (JSON: refresh/access token, expiry, email) via new ALTER migration (table already deployed).
+- Client id/secret per connection, fallback to Settings Credentials > Google Sheets client.
+- Redirect URI: {AppURL}/api/mcp/oauth/google/callback (public; validated by one-time state in app store, 15 min TTL).
+- Scopes: openid email gmail.readonly gmail.send. Tool sessions abstracted (MCPToolSession interface) so HTTP + built-in share the AI tool loop.
+
+State:
+  - Done: backend — core/mcp_gmail.go (OAuth URL/state/code exchange/refresh, 4 tools, MIME send incl. reply headers, header-injection guard), core/mcp_server.go (kind/clientId/clientSecret/oauth, MCPToolSession, NewToolSession), migrations/1786000003_mcp_servers_oauth.go (ALTER; verified on existing DB), apis oauth start/disconnect/public callback page. Tests: core/mcp_gmail_test.go, apis/mcp_servers_gmail_test.go pass.
+  - Done: UI — type select, Gmail fields + redirect URI copy, auto Google sign-in after create (popup, fallback same tab), Connect/Reconnect/Disconnect on list. Fixed: hidden required URL input blocked Gmail form submit. Headless verified (popup opened accounts.google.com with client_id; row "Not connected"; callback error page).
+  - Done: docs/mcp-client.md Gmail section. Full suite: only the 8 pre-existing failures.
+  - Done: committed + pushed to origin/mcp_client (Gmail commit). Linux binary not rebuilt.
+  - Now: awaiting next task. Real Google account flow UNCONFIRMED (needs user's Google OAuth client).
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-21, AI generate memory, branch `mcp_client`]:
 - Optional conversation memory for the "AI generate" node: when enabled, previous turns (user input + final AI answer) for the same session key are sent as chat history.
 - Success: tests pass; UI toggle/key/size + clear memory; works with and without MCP tools for OpenAI/Anthropic/Gemini.
@@ -14,7 +33,8 @@ State:
   - Done: e2e on scratch :8091 — enabled via UI, saved, 2 runs with fake provider: 2nd request contained 1st turn; modal showed 4 messages. No console errors.
   - Done: docs/ai-generate-memory.md. Full suite: only the 8 pre-existing failures.
   - Done [2026-10-21 13:49]: rebuilt ui/dist + Linux amd64 examples/base/server (includes memory).
-  - Now: awaiting user review. Not committed.
+  - Done: committed 2bb58e95 on `mcp_client` (all work except pre-existing ui/dist/index.html mod) and pushed to origin/mcp_client (tracking). develop not updated.
+  - Now: awaiting next task.
 
 ---- Previous ledger ----
 

@@ -1,5 +1,6 @@
 import { settingsSidebar } from "../settingsSidebar";
 import { openMcpConnectionUpsertModal } from "./mcpConnectionUpsertModal";
+import { connectGoogleAccount } from "./mcpConnectionUtils";
 
 export function pageMcpConnections(route) {
     app.store.title = "MCP connections";
@@ -66,6 +67,27 @@ export function pageMcpConnections(route) {
         });
     }
 
+    function connectAccount(server) {
+        connectGoogleAccount(server, { onconnect: loadServers });
+    }
+
+    function confirmDisconnect(server) {
+        app.modals.confirm(
+            `Disconnect ${
+                server.account || "the Google account"
+            } from "${server.name}"? Automation steps using it will fail until it is connected again.`,
+            () =>
+                runBusy(server, async () => {
+                    await app.pb.send(`/api/mcp/servers/${encodeURIComponent(server.id)}/oauth/disconnect`, {
+                        method: "POST",
+                        requestKey: null,
+                    });
+                    app.toasts.success(`Disconnected "${server.name}".`);
+                    loadServers();
+                }),
+        );
+    }
+
     function confirmDelete(server) {
         app.modals.confirm(
             `Do you really want to delete "${server.name}"? Automation steps using it will fail until updated.`,
@@ -110,9 +132,9 @@ export function pageMcpConnections(route) {
                 { className: "wrapper m-b-base" },
                 t.p(
                     { className: "txt-hint m-b-base" },
-                    "Connect external MCP servers (Streamable HTTP) to give the ",
+                    "Connect external MCP servers (Streamable HTTP) or built-in integrations such as Gmail to give the ",
                     t.strong(null, "AI generate"),
-                    " automation step access to their tools, e.g. web search, a CRM or another PocketAdmin instance.",
+                    " automation step access to their tools, e.g. web search, a CRM, your mailbox or another PocketAdmin instance.",
                 ),
                 t.div(
                     { className: "flex gap-10 m-b-sm" },
@@ -142,7 +164,12 @@ export function pageMcpConnections(route) {
                         data.servers.map((server) =>
                             t.div(
                                 { className: () => `list-item mcp-key-item ${data.isLoading ? "faded" : ""}` },
-                                t.i({ className: "ri-plug-line mcp-key-icon", ariaHidden: true }),
+                                t.i({
+                                    className: `${
+                                        server.kind === "gmail" ? "ri-mail-line" : "ri-plug-line"
+                                    } mcp-key-icon`,
+                                    ariaHidden: true,
+                                }),
                                 t.div(
                                     { className: "content mcp-key-content" },
                                     t.div(
@@ -152,16 +179,36 @@ export function pageMcpConnections(route) {
                                             ? t.span({ className: "label sm success" }, "Active")
                                             : t.span({ className: "label sm" }, "Disabled"),
                                     ),
-                                    t.div(
-                                        { className: "mcp-key-meta txt-hint txt-sm" },
-                                        t.span({ className: "txt-ellipsis", title: server.url }, server.url),
-                                        t.span(
-                                            null,
-                                            t.i({ className: "ri-lock-line", ariaHidden: true }),
-                                            " ",
-                                            server.hasAuthToken ? "Bearer token" : "No token",
+                                    server.kind === "gmail"
+                                        ? t.div(
+                                            { className: "mcp-key-meta txt-hint txt-sm" },
+                                            t.span(null, "Gmail"),
+                                            server.connected
+                                                ? t.span(
+                                                    { className: "txt-ellipsis", title: server.account },
+                                                    t.i({
+                                                        className: "ri-checkbox-circle-line txt-success",
+                                                        ariaHidden: true,
+                                                    }),
+                                                    " ",
+                                                    server.account || "Connected",
+                                                )
+                                                : t.span(
+                                                    { className: "txt-warning" },
+                                                    t.i({ className: "ri-error-warning-line", ariaHidden: true }),
+                                                    " Not connected",
+                                                ),
+                                        )
+                                        : t.div(
+                                            { className: "mcp-key-meta txt-hint txt-sm" },
+                                            t.span({ className: "txt-ellipsis", title: server.url }, server.url),
+                                            t.span(
+                                                null,
+                                                t.i({ className: "ri-lock-line", ariaHidden: true }),
+                                                " ",
+                                                server.hasAuthToken ? "Bearer token" : "No token",
+                                            ),
                                         ),
-                                    ),
                                     () => {
                                         const tools = data.tools[server.id];
                                         if (!tools) {
@@ -184,6 +231,30 @@ export function pageMcpConnections(route) {
                                 ),
                                 t.nav(
                                     { hidden: () => data.isLoading, className: "actions" },
+                                    server.kind === "gmail"
+                                        ? t.button(
+                                            {
+                                                type: "button",
+                                                className: "btn sm secondary transparent",
+                                                disabled: () => data.isBusy[server.id],
+                                                onclick: () => connectAccount(server),
+                                            },
+                                            t.i({ className: "ri-google-line", ariaHidden: true }),
+                                            t.span({ className: "txt" }, server.connected ? "Reconnect" : "Connect"),
+                                        )
+                                        : null,
+                                    server.kind === "gmail" && server.connected
+                                        ? t.button(
+                                            {
+                                                type: "button",
+                                                ariaLabel: app.attrs.tooltip("Disconnect account"),
+                                                className: "btn sm circle secondary transparent",
+                                                disabled: () => data.isBusy[server.id],
+                                                onclick: () => confirmDisconnect(server),
+                                            },
+                                            t.i({ className: "ri-link-unlink-m", ariaHidden: true }),
+                                        )
+                                        : null,
                                     t.div(
                                         { className: "field mcp-key-switch" },
                                         t.input({

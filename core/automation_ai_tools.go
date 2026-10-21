@@ -116,12 +116,12 @@ type automationAIMCPToolset struct {
 	Calls []map[string]any
 
 	targets map[string]automationAIMCPToolTarget
-	clients []*mcpclient.Client
+	clients []MCPToolSession
 }
 
 type automationAIMCPToolTarget struct {
 	server *MCPServer
-	client *mcpclient.Client
+	client MCPToolSession
 	tool   string
 }
 
@@ -150,7 +150,7 @@ func loadAutomationAIMCPToolset(app App, refs []automationAIMCPServerRef) (*auto
 			return nil, err
 		}
 
-		client := server.NewClient()
+		client := server.NewToolSession(app)
 		toolset.clients = append(toolset.clients, client)
 
 		ctx, cancel := context.WithTimeout(context.Background(), automationAIToolListTimeout)
