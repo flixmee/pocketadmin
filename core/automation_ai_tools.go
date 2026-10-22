@@ -281,11 +281,11 @@ func callAutomationAIProviderWithTools(provider, baseURL, apiKey, model, prompt 
 
 	switch provider {
 	case AIProviderGemini:
-		return callAutomationAIGeminiWithTools(baseURL, apiKey, model, prompt, req.History, req.Tools, req.CallTool, maxCalls)
+		return callAutomationAIGeminiWithTools(baseURL, apiKey, model, prompt, req.SystemPrompt, req.History, req.Tools, req.CallTool, maxCalls)
 	case AIProviderAnthropic:
-		return callAutomationAIAnthropicWithTools(baseURL, apiKey, model, prompt, req.History, req.Tools, req.CallTool, maxCalls)
+		return callAutomationAIAnthropicWithTools(baseURL, apiKey, model, prompt, req.SystemPrompt, req.History, req.Tools, req.CallTool, maxCalls)
 	default:
-		return callAutomationAIOpenAIWithTools(baseURL, apiKey, model, prompt, req.History, req.Tools, req.CallTool, maxCalls)
+		return callAutomationAIOpenAIWithTools(baseURL, apiKey, model, prompt, req.SystemPrompt, req.History, req.Tools, req.CallTool, maxCalls)
 	}
 }
 
@@ -297,7 +297,7 @@ func addAutomationAIUsage(total map[string]int, input, output int) {
 	total["total"] = total["input"] + total["output"]
 }
 
-func callAutomationAIOpenAIWithTools(baseURL, apiKey, model, prompt string, history []AutomationAIMessage, tools []AutomationAITool, callTool AutomationAIToolCaller, maxCalls int) (string, map[string]int, error) {
+func callAutomationAIOpenAIWithTools(baseURL, apiKey, model, prompt string, system string, history []AutomationAIMessage, tools []AutomationAITool, callTool AutomationAIToolCaller, maxCalls int) (string, map[string]int, error) {
 	endpoint := strings.TrimRight(baseURL, "/") + "/chat/completions"
 
 	definitions := make([]map[string]any, 0, len(tools))
@@ -312,7 +312,7 @@ func callAutomationAIOpenAIWithTools(baseURL, apiKey, model, prompt string, hist
 		})
 	}
 
-	messages := automationAIChatMessages(history, prompt)
+	messages := automationAIOpenAIMessages(system, history, prompt)
 	usage := map[string]int{}
 	calls := 0
 
@@ -380,7 +380,7 @@ func callAutomationAIOpenAIWithTools(baseURL, apiKey, model, prompt string, hist
 	return "", nil, fmt.Errorf("AI provider kept requesting tools after the limit of %d tool calls", maxCalls)
 }
 
-func callAutomationAIAnthropicWithTools(baseURL, apiKey, model, prompt string, history []AutomationAIMessage, tools []AutomationAITool, callTool AutomationAIToolCaller, maxCalls int) (string, map[string]int, error) {
+func callAutomationAIAnthropicWithTools(baseURL, apiKey, model, prompt string, system string, history []AutomationAIMessage, tools []AutomationAITool, callTool AutomationAIToolCaller, maxCalls int) (string, map[string]int, error) {
 	endpoint := strings.TrimRight(baseURL, "/") + "/messages"
 
 	definitions := make([]map[string]any, 0, len(tools))
@@ -403,6 +403,7 @@ func callAutomationAIAnthropicWithTools(baseURL, apiKey, model, prompt string, h
 			"messages":   messages,
 			"tools":      definitions,
 		}
+		applyAutomationAISystem(AIProviderAnthropic, body, system)
 		if calls >= maxCalls {
 			body["tool_choice"] = map[string]any{"type": "none"}
 		}
@@ -474,7 +475,7 @@ func callAutomationAIAnthropicWithTools(baseURL, apiKey, model, prompt string, h
 	return "", nil, fmt.Errorf("AI provider kept requesting tools after the limit of %d tool calls", maxCalls)
 }
 
-func callAutomationAIGeminiWithTools(baseURL, apiKey, model, prompt string, history []AutomationAIMessage, tools []AutomationAITool, callTool AutomationAIToolCaller, maxCalls int) (string, map[string]int, error) {
+func callAutomationAIGeminiWithTools(baseURL, apiKey, model, prompt string, system string, history []AutomationAIMessage, tools []AutomationAITool, callTool AutomationAIToolCaller, maxCalls int) (string, map[string]int, error) {
 	normalizedModel := strings.TrimPrefix(strings.TrimSpace(model), "models/")
 	parsed, err := url.Parse(strings.TrimRight(baseURL, "/") + "/models/" + url.PathEscape(normalizedModel) + ":generateContent")
 	if err != nil {
@@ -502,6 +503,7 @@ func callAutomationAIGeminiWithTools(baseURL, apiKey, model, prompt string, hist
 			"contents": contents,
 			"tools":    []map[string]any{{"functionDeclarations": declarations}},
 		}
+		applyAutomationAISystem(AIProviderGemini, body, system)
 		if calls >= maxCalls {
 			body["toolConfig"] = map[string]any{"functionCallingConfig": map[string]any{"mode": "NONE"}}
 		}

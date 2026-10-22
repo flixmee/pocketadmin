@@ -16,6 +16,7 @@ State:
   - Done [2026-10-22 15:57]: rebuilt ui/dist + Linux amd64 examples/base/server (includes Zalo).
   - Done [2026-10-22]: Zalo automation nodes — trigger `zalo.message` (fired from zalo_messages after-create, ignores is_self, dedupe by msg_id, `{{zalo.*}}` + `{{trigger.zalo.*}}`, template root whitelisted) and step `zalo.send` (creates zalo_outbox record -> bridge kick; threadId/threadType/phone/text/replyTo, optional waitForDelivery 60s). UI: palette entry, zaloStepForm.js, trigger options/labels/hint, tokens, icon. Tests core/automation_zalo_test.go pass; e2e via API + headless UI verified. Docs in docs/zalo.md.
   - Done [2026-10-22 16:15]: rebuilt Linux binary (Zalo + nodes); committed and pushed branch zalo_bridge to origin (tracking). develop not updated with Zalo.
+  - Done [2026-10-22]: AI generate `systemPrompt` (template; OpenAI system message / Anthropic `system` / Gemini `systemInstruction`; plain + tool loop; not stored in memory; validated string <= max template size; preview/schema). UI field in AI generate node. Tests pass; headless verified (saved). Docs in docs/ai-generate-memory.md. On branch zalo_bridge; Linux binary rebuilt 2026-10-22 16:56; committed + pushed to origin/zalo_bridge.
   - Now: awaiting next task. demo/ folder is untracked (user's) - not modified, not committed.
 
 ---- Previous ledger ----

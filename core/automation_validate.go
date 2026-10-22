@@ -584,6 +584,16 @@ func validateAutomationAIStep(step map[string]any) error {
 	if len(refs) > 0 && stepType != AutomationStepAIGenerate {
 		return validation.NewError("validation_invalid_automation_ai", "MCP tools are only supported by the AI generate step.")
 	}
+	if raw, ok := step["systemPrompt"]; ok && raw != nil {
+		value, isString := raw.(string)
+		if !isString {
+			return validation.NewError("validation_invalid_automation_ai", "AI step systemPrompt must be a string.")
+		}
+		if len(value) > AutomationMaxTemplateStringSize {
+			return validation.NewError("validation_invalid_automation_ai", fmt.Sprintf("AI step systemPrompt exceeds %d bytes.", AutomationMaxTemplateStringSize))
+		}
+	}
+
 	memory, err := automationAIMemoryOption(step)
 	if err != nil {
 		return validation.NewError("validation_invalid_automation_ai", err.Error()+".")

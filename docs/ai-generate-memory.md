@@ -1,4 +1,4 @@
-# AI Generate Memory
+# AI Generate: Memory and System Prompt
 
 The **AI generate** automation step can remember previous conversations. When memory is enabled, the earlier inputs and AI answers with the same **session key** are sent to the model as chat history, so a Telegram bot or a support assistant can follow up on what was said before.
 
@@ -37,6 +37,16 @@ The step output gets a `memory` object with the resolved `key` and the number of
 - Dry runs don't read or write memory.
 - Works with all AI providers (OpenAI/OpenAI-compatible, Anthropic, Gemini) and together with [MCP tools](mcp-client.md).
 - Deleting the automation deletes its memory.
+
+## System prompt
+
+The **System prompt** field of the AI generate node sets the AI's role, tone and rules (e.g. *"You are a support assistant for Acme. Answer in Vietnamese, briefly. Never promise refunds."*). It supports templates (`{{input.*}}`, `{{record.*}}`, `{{zalo.*}}`...), is sent with every request - including each round of the MCP tool loop - and is **not** stored in the memory, so changing it applies to existing conversations right away.
+
+It's sent as the provider's native system instruction: a leading `system` message (OpenAI-compatible), the `system` field (Anthropic) or `systemInstruction` (Gemini).
+
+```json
+{ "type": "ai.generate", "systemPrompt": "You are a support assistant for {{automation.name}}.", "input": "{{zalo.text}}" }
+```
 
 ## Manage memory
 

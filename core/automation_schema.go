@@ -94,10 +94,11 @@ func codeStepSchema() AutomationSchema {
 
 func aiStepSchema(key string, label string) AutomationSchema {
 	input := map[string]any{
-		"type":   constStringSchema(key),
-		"model":  stringSchema(),
-		"input":  map[string]any{},
-		"schema": objectSchema(nil),
+		"type":         constStringSchema(key),
+		"model":        stringSchema(),
+		"systemPrompt": stringSchema(),
+		"input":        map[string]any{},
+		"schema":       objectSchema(nil),
 	}
 	if key == AutomationStepAIClassify {
 		input["labels"] = arraySchema(stringSchema())

@@ -157,6 +157,7 @@ func TestAutomationAIGenerateWithMCPTools(t *testing.T) {
 			automation.SetSteps(mustParseJSONRaw(t, `[{
 				"type":"ai.generate",
 				"input":"What is the weather in Hanoi?",
+				"systemPrompt":"You are a weather bot.",
 				"mcpServers":[{"server":"`+connection.Id+`","tools":["get_weather"]}],
 				"maxToolCalls":3
 			}]`))
@@ -210,6 +211,13 @@ func TestAutomationAIGenerateWithMCPTools(t *testing.T) {
 			}
 			if strings.Contains(string(firstRequest), "$schema") {
 				t.Fatalf("Expected $schema to be removed, got %s", firstRequest)
+			}
+
+			// the system prompt is sent with every request of the tool loop
+			for i, body := range bodies {
+				if got := requestSystemPrompt(provider, body); got != "You are a weather bot." {
+					t.Fatalf("Request %d: expected the system prompt, got %q", i+1, got)
+				}
 			}
 		})
 	}

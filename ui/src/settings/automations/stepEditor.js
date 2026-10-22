@@ -3251,6 +3251,7 @@ function createAIStep(base, rawStep = {}) {
     return {
         ...base,
         model: toString(rawStep.model),
+        systemPrompt: toString(rawStep.systemPrompt),
         inputText: rawStep.inputText !== undefined ? toString(rawStep.inputText) : stringifyLooseValue(rawStep.input),
         labels: aiLabelRows(rawStep.labels),
         schemaRows: Array.isArray(rawStep.schemaRows)
@@ -3900,6 +3901,30 @@ function aiStepForm(step, context) {
                 ),
             ),
         ),
+        () =>
+            step.type === "ai.generate"
+                ? t.div(
+                    { className: "field" },
+                    t.label({ htmlFor: `${step.__id}_systemPrompt` }, "System prompt"),
+                    app.components.automationInput({
+                        id: `${step.__id}_systemPrompt`,
+                        className: "pre-wrap",
+                        placeholder:
+                            "You are a friendly support assistant for {{automation.name}}. Answer in Vietnamese, briefly.",
+                        value: () => step.systemPrompt,
+                        triggerType: () => context.triggerType,
+                        triggerCollectionRef: () => context.triggerCollectionRef,
+                        oninput: (value) => (step.systemPrompt = value),
+                    }),
+                )
+                : null,
+        () =>
+            step.type === "ai.generate"
+                ? t.div(
+                    { className: "field-help m-b-sm" },
+                    "Optional instructions that set the AI's role, tone and rules for every request (supports templates). It isn't stored in the memory.",
+                )
+                : null,
         () =>
             step.type === "ai.classify"
                 ? editableStringList({
@@ -4623,6 +4648,10 @@ function buildAIPayload(step, index) {
     const schema = schemaRowsToObject(step.schemaRows);
     if (schema) {
         payload.schema = schema;
+    }
+
+    if (step.type === "ai.generate" && step.systemPrompt?.trim()) {
+        payload.systemPrompt = step.systemPrompt.trim();
     }
 
     if (step.type === "ai.generate" && step.memoryEnabled) {

@@ -257,3 +257,110 @@ func TestAutomationAIMemoryValidation(t *testing.T) {
 		t.Fatalf("Expected valid step, got %v", err)
 	}
 }
+
+// requestSystemPrompt extracts the system prompt from a provider request body.
+func requestSystemPrompt(provider string, body map[string]any) string {
+	switch provider {
+	case core.AIProviderAnthropic:
+		system, _ := body["system"].(string)
+		return system
+	case core.AIProviderGemini:
+		instruction, _ := body["systemInstruction"].(map[string]any)
+		parts, _ := instruction["parts"].([]any)
+		if len(parts) == 0 {
+			return ""
+		}
+		text, _ := parts[0].(map[string]any)["text"].(string)
+		return text
+	default:
+		messages, _ := body["messages"].([]any)
+		if len(messages) == 0 {
+			return ""
+		}
+		first, _ := messages[0].(map[string]any)
+		if first["role"] != "system" {
+			return ""
+		}
+		content, _ := first["content"].(string)
+		return content
+	}
+}
+
+func TestAutomationAIGenerateSystemPrompt(t *testing.T) {
+	t.Parallel()
+
+	for _, provider := range []string{core.AIProviderOpenAI, core.AIProviderAnthropic, core.AIProviderGemini} {
+		t.Run(provider, func(t *testing.T) {
+			app, _ := tests.NewTestApp()
+			defer app.Cleanup()
+
+			var mu sync.Mutex
+			var bodies []map[string]any
+
+			server := httptest.NewServer(fakeMemoryAIProvider(provider, &bodies, &mu))
+			defer server.Close()
+
+			app.Settings().AI.Enabled = true
+			app.Settings().AI.Provider = provider
+			app.Settings().AI.APIKey = "test_key"
+			app.Settings().AI.Model = "test-model"
+			app.Settings().AI.BaseURL = server.URL
+
+			automation := core.NewAutomation(app)
+			populateValidAutomation(automation)
+			automation.SetActive(true)
+			automation.SetSteps(mustParseJSONRaw(t, `[
+				{"type":"ai.generate","input":"{{input.message}}","systemPrompt":"You are a {{input.role}}. Answer briefly.","memory":{"enabled":true}},
+				{"type":"ai.generate","input":"no system prompt"}
+			]`))
+			if err := app.Save(automation); err != nil {
+				t.Fatal(err)
+			}
+
+			for _, message := range []string{"first", "second"} {
+				result, err := app.RunAutomationManuallyWithOptions(automation.Id, core.AutomationManualRunOptions{
+					Input: map[string]any{"message": message, "role": "support agent"},
+					Wait:  true,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result.Status != core.AutomationRunStatusSuccess {
+					t.Fatalf("Expected success, got %q: %s", result.Status, result.Error)
+				}
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+
+			if len(bodies) != 4 {
+				t.Fatalf("Expected 4 provider requests, got %d", len(bodies))
+			}
+
+			for _, i := range []int{0, 2} {
+				if got := requestSystemPrompt(provider, bodies[i]); got != "You are a support agent. Answer briefly." {
+					t.Fatalf("Request %d: expected the rendered system prompt, got %q", i+1, got)
+				}
+			}
+			for _, i := range []int{1, 3} {
+				if got := requestSystemPrompt(provider, bodies[i]); got != "" {
+					t.Fatalf("Request %d: expected no system prompt, got %q", i+1, got)
+				}
+			}
+
+			// the system prompt isn't stored in the memory (OpenAI only sends it as the leading system message)
+			history := []string{}
+			for _, m := range requestHistory(provider, bodies[2]) {
+				if !strings.HasPrefix(m, "system: ") {
+					history = append(history, m)
+				}
+			}
+			if strings.Contains(strings.Join(history, "|"), "support agent") {
+				t.Fatalf("Expected the system prompt not to be in the history, got %v", history)
+			}
+			if len(history) != 3 || !strings.HasPrefix(history[0], "user: first") {
+				t.Fatalf("Expected the memory turn before the prompt, got %v", history)
+			}
+		})
+	}
+}

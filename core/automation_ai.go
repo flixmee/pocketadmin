@@ -29,6 +29,9 @@ type AutomationAIRequest struct {
 	// History lists the previous conversation messages (oldest first)
 	// that are sent before the current prompt (AI generate memory).
 	History []AutomationAIMessage `json:"history,omitempty"`
+
+	// SystemPrompt is the optional system instruction sent with the request.
+	SystemPrompt string `json:"systemPrompt,omitempty"`
 }
 
 // AutomationAIMessage is a single conversation message of the AI memory.
@@ -136,7 +139,7 @@ func (p settingsAutomationAIProvider) RunAutomationAI(req AutomationAIRequest) (
 	if len(req.Tools) > 0 && req.CallTool != nil {
 		responseText, tokenUsage, err = callAutomationAIProviderWithTools(config.Provider, baseURL, config.APIKey, model, prompt, req)
 	} else {
-		responseText, tokenUsage, err = callAutomationAIProvider(config.Provider, baseURL, config.APIKey, model, prompt, req.History)
+		responseText, tokenUsage, err = callAutomationAIProvider(config.Provider, baseURL, config.APIKey, model, prompt, req.SystemPrompt, req.History)
 	}
 	if err != nil {
 		return AutomationAIResponse{}, err
@@ -234,14 +237,40 @@ func parseAutomationAIJSONObject(text string) (map[string]any, error) {
 	return result, nil
 }
 
-func callAutomationAIProvider(provider, baseURL, apiKey, model, prompt string, history []AutomationAIMessage) (string, map[string]int, error) {
+func callAutomationAIProvider(provider, baseURL, apiKey, model, prompt string, system string, history []AutomationAIMessage) (string, map[string]int, error) {
 	switch provider {
 	case AIProviderGemini:
-		return callAutomationAIGemini(baseURL, apiKey, model, prompt, history)
+		return callAutomationAIGemini(baseURL, apiKey, model, prompt, system, history)
 	case AIProviderAnthropic:
-		return callAutomationAIAnthropic(baseURL, apiKey, model, prompt, history)
+		return callAutomationAIAnthropic(baseURL, apiKey, model, prompt, system, history)
 	default:
-		return callAutomationAIOpenAICompatible(baseURL, apiKey, model, prompt, history)
+		return callAutomationAIOpenAICompatible(baseURL, apiKey, model, prompt, system, history)
+	}
+}
+
+// automationAIOpenAIMessages returns the OpenAI style messages list with
+// the optional system message, the history and the current prompt.
+func automationAIOpenAIMessages(system string, history []AutomationAIMessage, prompt string) []any {
+	messages := automationAIChatMessages(history, prompt)
+	if system == "" {
+		return messages
+	}
+
+	return append([]any{map[string]any{"role": "system", "content": system}}, messages...)
+}
+
+// applyAutomationAISystem sets the provider specific system instruction
+// of the Anthropic and Gemini request bodies (OpenAI uses a system message).
+func applyAutomationAISystem(provider string, body map[string]any, system string) {
+	if system == "" {
+		return
+	}
+
+	switch provider {
+	case AIProviderAnthropic:
+		body["system"] = system
+	case AIProviderGemini:
+		body["systemInstruction"] = map[string]any{"parts": []map[string]any{{"text": system}}}
 	}
 }
 
@@ -271,11 +300,11 @@ func automationAIGeminiContents(history []AutomationAIMessage, prompt string) []
 	return append(contents, map[string]any{"role": "user", "parts": []map[string]any{{"text": prompt}}})
 }
 
-func callAutomationAIOpenAICompatible(baseURL, apiKey, model, prompt string, history []AutomationAIMessage) (string, map[string]int, error) {
+func callAutomationAIOpenAICompatible(baseURL, apiKey, model, prompt string, system string, history []AutomationAIMessage) (string, map[string]int, error) {
 	endpoint := strings.TrimRight(baseURL, "/") + "/chat/completions"
 	body := map[string]any{
 		"model":    model,
-		"messages": automationAIChatMessages(history, prompt),
+		"messages": automationAIOpenAIMessages(system, history, prompt),
 	}
 
 	var response struct {
@@ -305,7 +334,7 @@ func callAutomationAIOpenAICompatible(baseURL, apiKey, model, prompt string, his
 	}, nil
 }
 
-func callAutomationAIGemini(baseURL, apiKey, model, prompt string, history []AutomationAIMessage) (string, map[string]int, error) {
+func callAutomationAIGemini(baseURL, apiKey, model, prompt string, system string, history []AutomationAIMessage) (string, map[string]int, error) {
 	normalizedModel := strings.TrimPrefix(strings.TrimSpace(model), "models/")
 	endpoint := strings.TrimRight(baseURL, "/") + "/models/" + url.PathEscape(normalizedModel) + ":generateContent"
 	parsed, err := url.Parse(endpoint)
@@ -319,6 +348,7 @@ func callAutomationAIGemini(baseURL, apiKey, model, prompt string, history []Aut
 	body := map[string]any{
 		"contents": automationAIGeminiContents(history, prompt),
 	}
+	applyAutomationAISystem(AIProviderGemini, body, system)
 
 	var response struct {
 		Candidates []struct {
@@ -349,13 +379,14 @@ func callAutomationAIGemini(baseURL, apiKey, model, prompt string, history []Aut
 	}, nil
 }
 
-func callAutomationAIAnthropic(baseURL, apiKey, model, prompt string, history []AutomationAIMessage) (string, map[string]int, error) {
+func callAutomationAIAnthropic(baseURL, apiKey, model, prompt string, system string, history []AutomationAIMessage) (string, map[string]int, error) {
 	endpoint := strings.TrimRight(baseURL, "/") + "/messages"
 	body := map[string]any{
 		"model":      model,
 		"max_tokens": 1024,
 		"messages":   automationAIChatMessages(history, prompt),
 	}
+	applyAutomationAISystem(AIProviderAnthropic, body, system)
 
 	var response struct {
 		Content []struct {
@@ -453,12 +484,18 @@ func executeAutomationAIStep(ctx *automationExecutionContext, step map[string]an
 		return nil, err
 	}
 
+	systemPrompt, err := renderAutomationAISystemPrompt(ctx, step["systemPrompt"])
+	if err != nil {
+		return nil, err
+	}
+
 	req := AutomationAIRequest{
-		StepType: stepType,
-		Model:    strings.TrimSpace(toString(step["model"])),
-		Input:    input,
-		Schema:   schema,
-		Labels:   labels,
+		StepType:     stepType,
+		Model:        strings.TrimSpace(toString(step["model"])),
+		Input:        input,
+		Schema:       schema,
+		Labels:       labels,
+		SystemPrompt: systemPrompt,
 	}
 
 	memory, err := automationAIMemoryOption(step)
@@ -547,6 +584,20 @@ func executeAutomationAIStep(ctx *automationExecutionContext, step map[string]an
 	}
 
 	return result, nil
+}
+
+// renderAutomationAISystemPrompt renders the optional AI step system prompt template.
+func renderAutomationAISystemPrompt(ctx *automationExecutionContext, raw any) (string, error) {
+	if raw == nil {
+		return "", nil
+	}
+
+	rendered, err := renderAutomationTemplateValue(raw, ctx.TemplateData)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(automationAIMemoryText(rendered)), nil
 }
 
 // automationAIMemoryOwner returns the id of the automation that owns the AI memory.

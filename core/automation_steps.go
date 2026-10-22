@@ -297,7 +297,7 @@ func previewAutomationStep(ctx *automationExecutionContext, step map[string]any)
 		return executeAutomationExecutionDataStep(ctx, step)
 	case AutomationStepWaitDelay, AutomationStepWaitWebhook, AutomationStepWaitEvent, AutomationStepWaitApproval,
 		AutomationStepAIExtract, AutomationStepAIClassify, AutomationStepAIGenerate, AutomationStepAISummarize:
-		for _, key := range []string{"duration", "key", "assignee", "role", "model", "input", "schema", "labels"} {
+		for _, key := range []string{"duration", "key", "assignee", "role", "model", "systemPrompt", "input", "schema", "labels"} {
 			if _, ok := step[key]; !ok {
 				continue
 			}
