@@ -62,6 +62,23 @@ const automationMappingBaseGroups = [
         triggerTypes: ["telegram.message"],
     },
     {
+        title: "Zalo",
+        tokens: [
+            "{{zalo.text}}",
+            "{{zalo.threadId}}",
+            "{{zalo.threadType}}",
+            "{{zalo.senderId}}",
+            "{{zalo.senderName}}",
+            "{{zalo.messageId}}",
+            "{{zalo.msgId}}",
+            "{{zalo.msgType}}",
+            "{{zalo.ts}}",
+            "{{zalo.content.*}}",
+            "{{zalo.message.*}}",
+        ],
+        triggerTypes: ["zalo.message"],
+    },
+    {
         title: "Input",
         tokens: [
             "{{input.*}}",

@@ -355,6 +355,7 @@ func (s *Settings) MarshalJSON() ([]byte, error) {
 		&copy.AI.APIKey,
 		&copy.Credentials.Telegram.AccessToken,
 		&copy.Credentials.GoogleSheets.ClientSecret,
+		&copy.Credentials.Zalo.Secret,
 	}
 
 	// mask all sensitive fields
@@ -531,6 +532,7 @@ func (c AIConfig) Validate() error {
 type CredentialsConfig struct {
 	Telegram     TelegramCredentialsConfig     `form:"telegram" json:"telegram"`
 	GoogleSheets GoogleSheetsCredentialsConfig `form:"googleSheets" json:"googleSheets"`
+	Zalo         ZaloCredentialsConfig         `form:"zalo" json:"zalo"`
 }
 
 // Validate makes CredentialsConfig validatable by implementing [validation.Validatable] interface.
@@ -538,7 +540,40 @@ func (c CredentialsConfig) Validate() error {
 	return validation.ValidateStruct(&c,
 		validation.Field(&c.Telegram),
 		validation.Field(&c.GoogleSheets),
+		validation.Field(&c.Zalo),
 	)
+}
+
+// ZaloDefaultBridgeURL is the default address of the zalo-bridge process.
+const ZaloDefaultBridgeURL = "http://127.0.0.1:3939"
+
+// ZaloCredentialsConfig configures the connection to the external
+// zalo-bridge process (zca-js) that links a personal Zalo account.
+type ZaloCredentialsConfig struct {
+	Enabled bool `form:"enabled" json:"enabled"`
+
+	// BridgeURL is the internal HTTP address of the bridge.
+	BridgeURL string `form:"bridgeURL" json:"bridgeURL"`
+
+	// Secret is the shared secret sent in the X-Bridge-Secret header
+	// (the BRIDGE_SECRET of the bridge).
+	Secret string `form:"secret" json:"secret,omitempty"`
+}
+
+// Validate makes ZaloCredentialsConfig validatable by implementing [validation.Validatable] interface.
+func (c ZaloCredentialsConfig) Validate() error {
+	return validation.ValidateStruct(&c,
+		validation.Field(&c.BridgeURL, is.URL),
+		validation.Field(&c.Secret, validation.When(c.Enabled, validation.Required), validation.Length(16, 500)),
+	)
+}
+
+// BridgeBaseURL returns the configured bridge URL or the default one.
+func (c ZaloCredentialsConfig) BridgeBaseURL() string {
+	if u := strings.TrimRight(strings.TrimSpace(c.BridgeURL), "/"); u != "" {
+		return u
+	}
+	return ZaloDefaultBridgeURL
 }
 
 type TelegramCredentialsConfig struct {

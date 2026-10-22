@@ -132,6 +132,11 @@ window.app.store = store({
                 icon: "ri-plug-line",
                 label: "MCP connections",
             },
+            {
+                href: "#/settings/zalo",
+                icon: "ri-chat-3-line",
+                label: "Zalo",
+            },
         ],
         Sync: [
             {

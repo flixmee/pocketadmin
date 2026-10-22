@@ -6,6 +6,7 @@ import { mailStepForm } from "./mailStepForm";
 import { recordStepForm } from "./recordStepForm";
 import { responseStepForm } from "./responseStepForm";
 import { telegramStepForm } from "./telegramStepForm";
+import { zaloStepForm } from "./zaloStepForm";
 
 const stepTypeOptions = [
     {
@@ -49,6 +50,13 @@ const stepTypeOptions = [
         icon: "ti ti-send",
         category: "communication",
         description: "Send a message to a Telegram chat",
+    },
+    {
+        value: "zalo.send",
+        label: "Send Zalo",
+        icon: "ti ti-message-circle",
+        category: "communication",
+        description: "Send a message through the Zalo bridge",
     },
     {
         value: "record.create",
@@ -796,6 +804,13 @@ function renderStepForm(step, error, context = {}) {
             });
         case "telegram.send":
             return telegramStepForm({
+                step,
+                error,
+                triggerType: () => context.triggerType,
+                triggerCollectionRef: () => context.triggerCollectionRef,
+            });
+        case "zalo.send":
+            return zaloStepForm({
                 step,
                 error,
                 triggerType: () => context.triggerType,
@@ -3122,6 +3137,16 @@ function createEditorStep(type, rawStep = {}) {
                 parseMode: toString(rawStep.parseMode),
                 disableWebPagePreview: !!rawStep.disableWebPagePreview,
             };
+        case "zalo.send":
+            return {
+                ...base,
+                threadId: toString(rawStep.threadId),
+                threadType: toString(rawStep.threadType) || "user",
+                phone: toString(rawStep.phone),
+                text: toString(rawStep.text),
+                replyTo: toString(rawStep.replyTo),
+                waitForDelivery: !!rawStep.waitForDelivery,
+            };
         case "record.create":
             return {
                 ...base,
@@ -3282,6 +3307,8 @@ function buildStepPayload(step, index) {
             return buildMailPayload(step, index);
         case "telegram.send":
             return buildTelegramPayload(step, index);
+        case "zalo.send":
+            return buildZaloPayload(step, index);
         case "record.create":
             return buildRecordCreatePayload(step, index);
         case "record.update":
@@ -4803,6 +4830,39 @@ function buildMailPayload(step, index) {
     return payload;
 }
 
+function buildZaloPayload(step, index) {
+    const threadId = step.threadId.trim();
+    const phone = step.phone.trim();
+    if (!threadId && !phone) {
+        throw new Error(`Step ${index + 1}: Zalo thread ID or phone number is required.`);
+    }
+
+    const text = step.text.trim();
+    if (!text) {
+        throw new Error(`Step ${index + 1}: Zalo message is required.`);
+    }
+
+    const payload = {
+        type: "zalo.send",
+        text,
+    };
+    if (threadId) {
+        payload.threadId = threadId;
+        payload.threadType = step.threadType || "user";
+    }
+    if (phone) {
+        payload.phone = phone;
+    }
+    if (step.replyTo.trim()) {
+        payload.replyTo = step.replyTo.trim();
+    }
+    if (step.waitForDelivery) {
+        payload.waitForDelivery = true;
+    }
+
+    return payload;
+}
+
 function buildTelegramPayload(step, index) {
     const chatId = step.chatId.trim();
     if (!chatId) {
@@ -4929,6 +4989,8 @@ function summarizeStep(step) {
             return `Send mail to ${firstStringListValue(step.toText) || "recipient"}`;
         case "telegram.send":
             return `Send Telegram to ${step.chatId || "chat"}`;
+        case "zalo.send":
+            return `Send Zalo to ${step.threadId || step.phone || "thread"}`;
         case "record.create":
             return `Create record in ${step.collection || "collection"}`;
         case "record.update":
@@ -5010,6 +5072,14 @@ function clientValidateStep(step) {
             }
             if (!step.text?.trim()) {
                 messages.push("Telegram message is required.");
+            }
+            break;
+        case "zalo.send":
+            if (!step.threadId?.trim() && !step.phone?.trim()) {
+                messages.push("Zalo thread ID or phone number is required.");
+            }
+            if (!step.text?.trim()) {
+                messages.push("Zalo message is required.");
             }
             break;
         case "record.create":

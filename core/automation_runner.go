@@ -25,6 +25,7 @@ type automationTriggerPayload struct {
 	Request        map[string]any `json:"request,omitempty"`
 	I18n           map[string]any `json:"i18n,omitempty"`
 	Telegram       map[string]any `json:"telegram,omitempty"`
+	Zalo           map[string]any `json:"zalo,omitempty"`
 	Input          map[string]any `json:"input,omitempty"`
 	Caller         map[string]any `json:"caller,omitempty"`
 	Record         map[string]any `json:"record,omitempty"`

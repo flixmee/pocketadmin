@@ -416,6 +416,8 @@ function formatTriggerType(triggerType) {
             return "Webhook";
         case "telegram.message":
             return "On Telegram message";
+        case "zalo.message":
+            return "On Zalo message";
         case "schedule.cron":
             return "Scheduled cron";
         case "record.beforeCreate":

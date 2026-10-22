@@ -1,3 +1,25 @@
+Goal (incl. success criteria) [2026-10-22, built-in Zalo bridge integration, branch `zalo_bridge`]:
+- Replace demo/zalo-pocketbase pb_hooks + JS migration with built-in Go support: settings (enable, bridge URL, secret), auto-created collections zalo_session/zalo_messages/zalo_outbox, outbox hooks (normalize + kick bridge), /api/zalo/* routes; admin UI page to enable, check bridge online/offline, show QR, Login/Logout.
+- External Bun bridge (zca-js) stays a separate process (JS-only lib); protocol unchanged (X-Bridge-Secret, /status /login /logout /kick).
+- Success: tests pass; UI verified against a fake bridge; build ok.
+
+Key decisions:
+- Settings: Credentials.Zalo {enabled, bridgeURL (default http://127.0.0.1:3939), secret (masked)}.
+- Collections created on enable/startup only when Zalo enabled (no test churn; existing ones from the JS migration are reused untouched); non-system, same schema/rules as the demo migration.
+- Keep /api/zalo/status|login|logout|kick compatible with demo hooks; add superuser /api/zalo/overview + /api/zalo/settings.
+- Old pb_hooks/zalo.pb.js + zalo/bridge.js must be removed (route conflict).
+
+State:
+  - Done: core/zalo.go (EnsureZaloCollections, outbox request/after-create hooks w/ async kick, CallZaloBridge, bootstrap ensure), settings Credentials.Zalo (secret masked, min 16), apis/zalo.go (overview, settings; compat status/{action} registered in late OnServe (priority 9999) and skipped if old JS hooks registered them -> no duplicate-route panic, verified with demo hooks installed). Tests apis/zalo_test.go pass.
+  - Done: UI Settings > Zalo (ui/src/settings/zalo/pageZaloSettings.js, css/zalo.css, route+nav): enable/URL/secret(generate), bridge online/offline w/ reason, account status, QR, Login/Logout/Send pending, setup .env template; 3s polling without re-creating form inputs. Headless e2e with fake bridge: offline -> online -> QR -> logged in -> logged out, no console errors.
+  - Done: docs/zalo.md. Full suite: only the 8 pre-existing failures.
+  - Done [2026-10-22 15:57]: rebuilt ui/dist + Linux amd64 examples/base/server (includes Zalo).
+  - Done [2026-10-22]: Zalo automation nodes — trigger `zalo.message` (fired from zalo_messages after-create, ignores is_self, dedupe by msg_id, `{{zalo.*}}` + `{{trigger.zalo.*}}`, template root whitelisted) and step `zalo.send` (creates zalo_outbox record -> bridge kick; threadId/threadType/phone/text/replyTo, optional waitForDelivery 60s). UI: palette entry, zaloStepForm.js, trigger options/labels/hint, tokens, icon. Tests core/automation_zalo_test.go pass; e2e via API + headless UI verified. Docs in docs/zalo.md.
+  - Done [2026-10-22 16:15]: rebuilt Linux binary (Zalo + nodes); committed and pushed branch zalo_bridge to origin (tracking). develop not updated with Zalo.
+  - Now: awaiting next task. demo/ folder is untracked (user's) - not modified, not committed.
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-21, built-in Gmail MCP connection, branch `mcp_client`]:
 - MCP connections get kind "gmail": Google OAuth "Connect Google account" (offline refresh token), built-in in-process tools usable by AI generate: gmail_search_emails, gmail_read_email, gmail_read_thread, gmail_send_email (incl. replies). User chose: built-in (not external), tools = search/read + send/reply (no drafts/labels).
 - Success: tests (token refresh, search/read/send/reply, OAuth start/callback/disconnect) pass; UI type select, connect/disconnect; build ok.
@@ -14,7 +36,8 @@ State:
   - Done: docs/mcp-client.md Gmail section. Full suite: only the 8 pre-existing failures.
   - Done: committed a4c29148 + pushed to origin/mcp_client. Rebuilt ui/dist + Linux amd64 examples/base/server (2026-10-22 08:57, includes Gmail).
   - Done [2026-10-22]: fix Gmail redirect URI behind nginx (was built from Application URL = localhost). UI now derives it from the browser location (app.pb.buildURL + location) and sends it to /oauth/start; server validates (NormalizeGoogleOAuthRedirectURL: absolute http(s), path ends with callback, no query/userinfo), stores it in the one-time state and reuses it for the code exchange. AppURL remains fallback. Tests pass; verified behind a sub-path reverse proxy. Committed + pushed to origin/mcp_client. Linux binary rebuilt 2026-10-22 09:22 (includes fix).
-  - Now: awaiting next task. Real Google account flow UNCONFIRMED (needs user's Google OAuth client).
+  - Done [2026-10-22]: fast-forward merged mcp_client (594b8883) into local develop (NOT pushed; develop ahead of origin/develop). Created branch `zalo_bridge` from develop (current).
+  - Now: on `zalo_bridge`, awaiting next task. Real Google account flow UNCONFIRMED (needs user's Google OAuth client).
 
 ---- Previous ledger ----
 

@@ -60,6 +60,7 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 		"request":        payload.Request,
 		"i18n":           payload.I18n,
 		"telegram":       payload.Telegram,
+		"zalo":           payload.Zalo,
 		"input":          automationPayloadInput(payload),
 		"caller":         payload.Caller,
 	}
@@ -76,6 +77,7 @@ func newAutomationExecutionContext(app App, automation *Automation, run *Automat
 			"request":                           payload.Request,
 			"i18n":                              payload.I18n,
 			"telegram":                          payload.Telegram,
+			"zalo":                              payload.Zalo,
 			"input":                             automationPayloadInput(payload),
 			"record":                            payload.Record,
 			"recordOriginal":                    payload.RecordOriginal,
@@ -173,6 +175,9 @@ func executeAutomationStep(ctx *automationExecutionContext, step map[string]any)
 	case AutomationStepTelegramSend:
 		output, err := executeAutomationTelegramStep(ctx, step)
 		return automationStepStatusSuccess, output, err
+	case AutomationStepZaloSend:
+		output, err := executeAutomationZaloStep(ctx, step)
+		return automationStepStatusSuccess, output, err
 	case AutomationStepRecordCreate:
 		output, err := executeAutomationRecordCreateStep(ctx, step)
 		return automationStepStatusSuccess, output, err
@@ -252,6 +257,18 @@ func previewAutomationStep(ctx *automationExecutionContext, step map[string]any)
 		if _, ok := step["disableWebPagePreview"]; ok {
 			output["disableWebPagePreview"] = automationTelegramBool(step["disableWebPagePreview"])
 		}
+	case AutomationStepZaloSend:
+		for _, key := range []string{"threadId", "threadType", "phone", "text", "replyTo"} {
+			if _, ok := step[key]; !ok {
+				continue
+			}
+			rendered, err := renderAutomationTemplateValue(step[key], ctx.TemplateData)
+			if err != nil {
+				return nil, err
+			}
+			output[key] = rendered
+		}
+		output["waitForDelivery"] = automationTelegramBool(step["waitForDelivery"])
 	case AutomationStepRecordCreate, AutomationStepRecordUpdate, AutomationStepRecordDelete:
 		for _, key := range []string{"collection", "id", "filter", "data"} {
 			if _, ok := step[key]; !ok {

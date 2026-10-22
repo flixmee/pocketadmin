@@ -42,6 +42,7 @@ func NewRouter(app core.App) (*router.Router[*core.RequestEvent], error) {
 	bindAutomationApi(app, apiGroup)
 	bindMCPApi(app, apiGroup)
 	bindMCPServersApi(app, apiGroup)
+	bindZaloApi(app, apiGroup)
 	bindI18nApi(app, apiGroup)
 	bindCollectionApi(app, apiGroup)
 	bindRecordCrudApi(app, apiGroup)

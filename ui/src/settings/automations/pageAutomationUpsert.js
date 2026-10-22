@@ -19,6 +19,7 @@ const automationTriggerOptions = [
     { value: "manual", label: "Manual" },
     { value: "webhook", label: "Webhook" },
     { value: "telegram.message", label: "On Telegram message" },
+    { value: "zalo.message", label: "On Zalo message" },
     { value: "schedule.cron", label: "Scheduled cron" },
     { value: "record.beforeCreate", label: "Before record create" },
     { value: "record.beforeUpdate", label: "Before record update" },
@@ -80,6 +81,9 @@ export function pageAutomationUpsert(route) {
         },
         get isTelegramTrigger() {
             return data.form.triggerType === "telegram.message";
+        },
+        get isZaloTrigger() {
+            return data.form.triggerType === "zalo.message";
         },
         get isManualTrigger() {
             return data.form.triggerType === "manual";
@@ -652,6 +656,26 @@ export function pageAutomationUpsert(route) {
                                 t.div(
                                     { className: "txt-sm txt-hint automation-field-desc m-t-5" },
                                     "Values are available as {{input.name}}. Other automations can call this one with the \"Call automation\" step.",
+                                ),
+                            ),
+                            t.div(
+                                {
+                                    className: "field",
+                                    hidden: () => !data.isZaloTrigger,
+                                },
+                                t.label({ className: "automation-field-label" }, "Zalo messages"),
+                                t.div(
+                                    { className: "txt-sm txt-hint automation-field-desc" },
+                                    "Runs for each message received by the Zalo bridge (messages sent by the connected account are ignored). ",
+                                    "Use ",
+                                    t.code(null, "{{zalo.text}}"),
+                                    ", ",
+                                    t.code(null, "{{zalo.threadId}}"),
+                                    " or ",
+                                    t.code(null, "{{zalo.senderName}}"),
+                                    " and reply with the \"Send Zalo\" step. Requires ",
+                                    t.a({ href: "#/settings/zalo" }, "Settings > Zalo"),
+                                    ".",
                                 ),
                             ),
                             t.div(

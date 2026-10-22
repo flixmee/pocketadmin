@@ -395,7 +395,7 @@ func validateAutomationTemplateRoots(value any) error {
 		root := automationTemplateRootPattern.FindString(strings.TrimSpace(placeholder))
 
 		switch root {
-		case "trigger", "request", "i18n", "telegram", "input", "record", "recordOriginal", "automation", "run", "steps", "prevStep":
+		case "trigger", "request", "i18n", "telegram", "zalo", "input", "record", "recordOriginal", "automation", "run", "steps", "prevStep":
 			continue
 		case "", "Array", "Boolean", "Date", "JSON", "Math", "Number", "Object", "RegExp", "String", "parseFloat", "parseInt":
 			continue

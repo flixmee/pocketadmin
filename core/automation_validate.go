@@ -28,6 +28,7 @@ var (
 		AutomationTriggerScheduleCron,
 		AutomationTriggerWebhook,
 		AutomationTriggerTelegramMessage,
+		AutomationTriggerZaloMessage,
 		AutomationTriggerManual,
 		AutomationTriggerI18nMissing,
 		AutomationTriggerI18nPublished,
@@ -40,6 +41,7 @@ var (
 		AutomationStepHTTP,
 		AutomationStepMailSend,
 		AutomationStepTelegramSend,
+		AutomationStepZaloSend,
 		AutomationStepRecordCreate,
 		AutomationStepRecordUpdate,
 		AutomationStepRecordDelete,
@@ -494,6 +496,8 @@ func validateAutomationStepDefinition(app App, automationRecord *Record, step ma
 		return validateAutomationMailStep(app, automationRecord, step)
 	case AutomationStepTelegramSend:
 		return validateAutomationTelegramStep(step)
+	case AutomationStepZaloSend:
+		return validateAutomationZaloStep(step)
 	case AutomationStepRecordCreate:
 		return validateAutomationRecordCreateStep(step)
 	case AutomationStepRecordUpdate:
@@ -528,6 +532,18 @@ func validateAutomationTelegramStep(step map[string]any) error {
 
 	if strings.TrimSpace(toString(step["text"])) == "" {
 		return validation.NewError("validation_invalid_automation_telegram", "Telegram step requires a message.")
+	}
+
+	return nil
+}
+
+func validateAutomationZaloStep(step map[string]any) error {
+	if strings.TrimSpace(toString(step["threadId"])) == "" && strings.TrimSpace(toString(step["phone"])) == "" {
+		return validation.NewError("validation_invalid_automation_zalo", "Zalo step requires a thread ID or a phone number.")
+	}
+
+	if strings.TrimSpace(toString(step["text"])) == "" {
+		return validation.NewError("validation_invalid_automation_zalo", "Zalo step requires a message.")
 	}
 
 	return nil

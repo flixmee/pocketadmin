@@ -5,6 +5,7 @@ const triggerLabels = {
     "manual": "Manual",
     "webhook": "Webhook",
     "telegram.message": "On Telegram message",
+    "zalo.message": "On Zalo message",
     "schedule.cron": "Scheduled cron",
     "record.beforeCreate": "Before record create",
     "record.beforeUpdate": "Before record update",
@@ -621,6 +622,10 @@ function describeAutomationScope(automation) {
 
     if (automation.triggerType === "telegram.message") {
         return "POST /api/automation-telegram/<access-token>";
+    }
+
+    if (automation.triggerType === "zalo.message") {
+        return "Incoming Zalo messages (zalo_messages)";
     }
 
     if (

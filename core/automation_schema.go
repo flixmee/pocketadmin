@@ -38,6 +38,7 @@ func AutomationSchemas() AutomationSchemaCatalog {
 			AutomationTriggerScheduleCron:       simpleTriggerSchema(AutomationTriggerScheduleCron, "Schedule"),
 			AutomationTriggerWebhook:            webhookTriggerSchema(),
 			AutomationTriggerTelegramMessage:    telegramMessageTriggerSchema(),
+			AutomationTriggerZaloMessage:        zaloMessageTriggerSchema(),
 			AutomationTriggerManual:             manualTriggerSchema(),
 			AutomationTriggerI18nMissing:        i18nTriggerSchema(AutomationTriggerI18nMissing, "Translation missing"),
 			AutomationTriggerI18nPublished:      i18nTriggerSchema(AutomationTriggerI18nPublished, "Locale published"),
@@ -50,6 +51,7 @@ func AutomationSchemas() AutomationSchemaCatalog {
 			AutomationStepHTTP:          httpStepSchema(),
 			AutomationStepMailSend:      mailStepSchema(),
 			AutomationStepTelegramSend:  telegramStepSchema(),
+			AutomationStepZaloSend:      zaloStepSchema(),
 			AutomationStepRecordCreate:  recordWriteStepSchema(AutomationStepRecordCreate, "Create record"),
 			AutomationStepRecordUpdate:  recordWriteStepSchema(AutomationStepRecordUpdate, "Update record"),
 			AutomationStepRecordDelete:  recordDeleteStepSchema(),
@@ -279,6 +281,33 @@ func telegramMessageTriggerSchema() AutomationSchema {
 	return schema
 }
 
+func zaloMessageTriggerSchema() AutomationSchema {
+	schema := simpleTriggerSchema(AutomationTriggerZaloMessage, "Zalo message")
+	zalo := objectSchema(map[string]any{
+		"messageId":  stringSchema(),
+		"msgId":      stringSchema(),
+		"threadId":   stringSchema(),
+		"threadType": stringSchema(),
+		"senderId":   stringSchema(),
+		"senderName": stringSchema(),
+		"msgType":    stringSchema(),
+		"text":       stringSchema(),
+		"isSelf":     boolSchema(),
+		"ts":         numberSchema(),
+		"content":    map[string]any{},
+		"quote":      map[string]any{},
+		"message":    objectSchema(nil),
+	})
+	schema.OutputSchema = objectSchema(map[string]any{
+		"trigger": objectSchema(map[string]any{
+			"type": stringSchema(),
+			"zalo": zalo,
+		}),
+		"zalo": zalo,
+	})
+	return schema
+}
+
 func i18nTriggerSchema(key string, label string) AutomationSchema {
 	schema := simpleTriggerSchema(key, label)
 	schema.OutputSchema = objectSchema(map[string]any{
@@ -416,6 +445,32 @@ func telegramStepSchema() AutomationSchema {
 			"sent":      boolSchema(),
 			"chatId":    stringSchema(),
 			"messageId": numberSchema(),
+		}),
+	}
+}
+
+func zaloStepSchema() AutomationSchema {
+	return AutomationSchema{
+		Key:      AutomationStepZaloSend,
+		Label:    "Send Zalo message",
+		Category: "communication",
+		InputSchema: objectSchema(map[string]any{
+			"type":            constStringSchema(AutomationStepZaloSend),
+			"threadId":        stringSchema(),
+			"threadType":      stringSchema(),
+			"phone":           stringSchema(),
+			"text":            stringSchema(),
+			"replyTo":         stringSchema(),
+			"waitForDelivery": boolSchema(),
+		}),
+		OutputSchema: objectSchema(map[string]any{
+			"queued":     boolSchema(),
+			"outboxId":   stringSchema(),
+			"status":     stringSchema(),
+			"threadId":   stringSchema(),
+			"threadType": stringSchema(),
+			"phone":      stringSchema(),
+			"zaloMsgId":  stringSchema(),
 		}),
 	}
 }

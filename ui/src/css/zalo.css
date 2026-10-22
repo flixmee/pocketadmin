@@ -1,0 +1,52 @@
+.page-zalo-settings {
+    .zalo-card {
+        padding: var(--baseSpacing);
+        border-radius: var(--borderRadius);
+        background: var(--surfaceColor);
+        border: 1px solid var(--surfaceAlt3Color);
+    }
+
+    .zalo-status-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .zalo-status-error {
+        flex-basis: 100%;
+    }
+
+    .zalo-qr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--baseSpacing);
+        margin-top: var(--smSpacing);
+
+        img {
+            width: 220px;
+            max-width: 100%;
+            height: auto;
+            padding: 10px;
+            border-radius: var(--borderRadius);
+            background: #fff;
+            image-rendering: pixelated;
+        }
+
+        .txt-hint {
+            flex: 1;
+            min-width: 200px;
+        }
+    }
+
+    .zalo-setup summary {
+        cursor: pointer;
+    }
+
+    .zalo-setup ol {
+        margin: 10px 0;
+        padding-left: 20px;
+    }
+}

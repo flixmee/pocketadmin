@@ -7,6 +7,7 @@ const automationTriggerOptions = [
     { value: "manual", label: "Manual" },
     { value: "webhook", label: "Webhook" },
     { value: "telegram.message", label: "On Telegram message" },
+    { value: "zalo.message", label: "On Zalo message" },
     { value: "schedule.cron", label: "Scheduled cron" },
     { value: "record.beforeCreate", label: "Before record create" },
     { value: "record.beforeUpdate", label: "Before record update" },
@@ -73,6 +74,9 @@ function automationUpsertModal(automation, settings) {
         },
         get isTelegramTrigger() {
             return data.form.triggerType === "telegram.message";
+        },
+        get isZaloTrigger() {
+            return data.form.triggerType === "zalo.message";
         },
         get canSave() {
             return !data.isSaving && !!data.form.name.trim() && data.form.steps.length > 0 && data.hasChanges;
@@ -370,6 +374,17 @@ function automationUpsertModal(automation, settings) {
                         t.code(null, "{{request.body.*}}"),
                         ". Add a webhook response step to return custom status, headers, or body.",
                     ),
+                ),
+                t.div(
+                    {
+                        className: "col-lg-12 txt-sm txt-hint",
+                        hidden: () => !data.isZaloTrigger,
+                    },
+                    "Runs for each message received by the Zalo bridge (messages sent by the connected account are ignored). Use ",
+                    t.code(null, "{{zalo.text}}"),
+                    " and reply with the \"Send Zalo\" step. Requires ",
+                    t.a({ href: "#/settings/zalo" }, "Settings > Zalo"),
+                    ".",
                 ),
                 t.div(
                     {
