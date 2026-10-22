@@ -179,6 +179,11 @@ function mcpConnectionUpsertModal(server, settings) {
                             t.code({ className: "mcp-token-value txt-code" }, () => googleOAuthRedirectURL()),
                             app.components.copyButton(() => googleOAuthRedirectURL()),
                         ),
+                        t.p(
+                            { className: "m-t-xs m-b-0" },
+                            "This is the address you're using right now. If you open the admin from a different URL ",
+                            "(e.g. another domain), add that callback URL to the Google client too.",
+                        ),
                     ),
                 ),
                 t.div(

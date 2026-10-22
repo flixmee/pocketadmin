@@ -181,14 +181,33 @@ func mcpServerOAuthStart(e *core.RequestEvent) error {
 		return e.BadRequestError("Only Gmail connections can be connected with OAuth.", nil)
 	}
 
-	authURL, err := server.GoogleOAuthAuthURL(e.App, core.NewMCPServerOAuthState(e.App, server.Id))
+	// the admin UI sends the callback URL as seen by the browser so that it
+	// works behind reverse proxies without relying on the application URL setting
+	form := struct {
+		RedirectURL string `json:"redirectURL"`
+	}{}
+	if e.Request.ContentLength != 0 {
+		if err := e.BindBody(&form); err != nil {
+			return e.BadRequestError("Failed to load the submitted data due to invalid formatting.", err)
+		}
+	}
+
+	redirectURL := core.GoogleOAuthRedirectURL(e.App)
+	if form.RedirectURL != "" {
+		redirectURL, err = core.NormalizeGoogleOAuthRedirectURL(form.RedirectURL)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+	}
+
+	authURL, err := server.GoogleOAuthAuthURL(e.App, core.NewMCPServerOAuthState(e.App, server.Id, redirectURL), redirectURL)
 	if err != nil {
 		return e.BadRequestError(err.Error(), nil)
 	}
 
 	return e.JSON(http.StatusOK, map[string]any{
 		"authURL":     authURL,
-		"redirectURL": core.GoogleOAuthRedirectURL(e.App),
+		"redirectURL": redirectURL,
 	})
 }
 
@@ -212,7 +231,7 @@ func mcpServerOAuthDisconnect(e *core.RequestEvent) error {
 func mcpServerGoogleOAuthCallback(e *core.RequestEvent) error {
 	query := e.Request.URL.Query()
 
-	serverId, err := core.ConsumeMCPServerOAuthState(e.App, query.Get("state"))
+	serverId, redirectURL, err := core.ConsumeMCPServerOAuthState(e.App, query.Get("state"))
 	if err != nil {
 		return mcpOAuthResultPage(e, http.StatusBadRequest, false, err.Error())
 	}
@@ -229,7 +248,7 @@ func mcpServerGoogleOAuthCallback(e *core.RequestEvent) error {
 	ctx, cancel := context.WithTimeout(e.Request.Context(), mcpServerToolsTimeout)
 	defer cancel()
 
-	if err := server.ConnectGoogleAccount(ctx, e.App, query.Get("code")); err != nil {
+	if err := server.ConnectGoogleAccount(ctx, e.App, query.Get("code"), redirectURL); err != nil {
 		return mcpOAuthResultPage(e, http.StatusBadRequest, false, err.Error())
 	}
 

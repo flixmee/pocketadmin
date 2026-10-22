@@ -31,7 +31,7 @@ Choose **Type: Gmail (built-in)** to give the AI access to a Gmail mailbox witho
 Setup:
 
 1. In [Google Cloud Console](https://console.cloud.google.com/) enable the **Gmail API** and create an **OAuth client ID** of type *Web application*.
-2. Add the authorized redirect URI shown in the connection form: `<App URL>/api/mcp/oauth/google/callback` (the **Application URL** in Settings > Application must be the public URL of your app).
+2. Add the authorized redirect URI shown in the connection form, e.g. `https://admin.example.com/api/mcp/oauth/google/callback`. It is built from the address you use to open the admin UI, so it is the public URL even behind a reverse proxy such as nginx (including sub-path setups). If you open the admin from several URLs, register each callback URL in the Google client.
 3. Create the connection with the client ID/secret (or leave them empty to reuse the Google client from **Settings > Credentials**).
 4. Sign in with the Gmail account in the popup (it opens right after creating the connection, or use **Connect** / **Reconnect** on the list). The list shows the connected account; **Disconnect** removes the stored tokens.
 
@@ -98,7 +98,7 @@ All routes require superuser auth.
 | `PATCH`  | `/api/mcp/servers/{id}`        | Updates a connection. Omit `authToken` to keep it, send `""` to remove it |
 | `DELETE` | `/api/mcp/servers/{id}`        | Deletes the connection (`204`)                                            |
 | `GET`    | `/api/mcp/servers/{id}/tools`  | Connects and returns `{ server, tools: [{ name, title, description }] }`  |
-| `POST`   | `/api/mcp/servers/{id}/oauth/start`      | Gmail: returns `{ authURL, redirectURL }` for the Google sign-in   |
+| `POST`   | `/api/mcp/servers/{id}/oauth/start`      | Gmail: body `{ redirectURL }` (public callback URL; defaults to the Application URL), returns `{ authURL, redirectURL }` |
 | `POST`   | `/api/mcp/servers/{id}/oauth/disconnect` | Gmail: removes the stored tokens                                  |
 | `GET`    | `/api/mcp/oauth/google/callback`         | Public Google redirect URI (validated with a one-time state)      |
 

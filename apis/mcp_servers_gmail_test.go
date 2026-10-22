@@ -95,6 +95,31 @@ func TestMCPServersGmailOAuth(t *testing.T) {
 			ExpectedEvents: map[string]int{"*": 0},
 		},
 		{
+			Name:           "oauth start with the public (proxied) redirect URL",
+			Method:         http.MethodPost,
+			URL:            "/api/mcp/servers/mcpgmailtest001/oauth/start",
+			Headers:        superuser,
+			Body:           strings.NewReader(`{"redirectURL":"https://admin.example.com/pa/api/mcp/oauth/google/callback"}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) { createGmailServerFixture(t, app) },
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`redirect_uri=https%3A%2F%2Fadmin.example.com%2Fpa%2Fapi%2Fmcp%2Foauth%2Fgoogle%2Fcallback`,
+				`"redirectURL":"https://admin.example.com/pa/api/mcp/oauth/google/callback"`,
+			},
+			ExpectedEvents: map[string]int{"*": 0},
+		},
+		{
+			Name:            "oauth start with invalid redirect URL",
+			Method:          http.MethodPost,
+			URL:             "/api/mcp/servers/mcpgmailtest001/oauth/start",
+			Headers:         superuser,
+			Body:            strings.NewReader(`{"redirectURL":"https://evil.example.com/steal"}`),
+			BeforeTestFunc:  func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) { createGmailServerFixture(t, app) },
+			ExpectedStatus:  400,
+			ExpectedContent: []string{`Invalid redirect URL`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
 			Name:            "oauth start unauthorized",
 			Method:          http.MethodPost,
 			URL:             "/api/mcp/servers/mcpgmailtest001/oauth/start",
@@ -118,7 +143,7 @@ func TestMCPServersGmailOAuth(t *testing.T) {
 			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 				createGmailServerFixture(t, app)
 				// replicate NewMCPServerOAuthState with a known state value
-				state := core.NewMCPServerOAuthState(app, "mcpgmailtest001")
+				state := core.NewMCPServerOAuthState(app, "mcpgmailtest001", "https://admin.example.com"+core.GoogleOAuthCallbackPath)
 				app.Store().Set("pbMCPOAuthState_fixedstate", app.Store().Get("pbMCPOAuthState_"+state))
 			},
 			ExpectedStatus:  200,
@@ -137,7 +162,7 @@ func TestMCPServersGmailOAuth(t *testing.T) {
 			URL:    "/api/mcp/oauth/google/callback?state=fixedstate&error=access_denied",
 			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 				createGmailServerFixture(t, app)
-				state := core.NewMCPServerOAuthState(app, "mcpgmailtest001")
+				state := core.NewMCPServerOAuthState(app, "mcpgmailtest001", "https://admin.example.com"+core.GoogleOAuthCallbackPath)
 				app.Store().Set("pbMCPOAuthState_fixedstate", app.Store().Get("pbMCPOAuthState_"+state))
 			},
 			ExpectedStatus:  400,

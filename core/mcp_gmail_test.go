@@ -304,27 +304,30 @@ func TestGmailToolSession(t *testing.T) {
 	t.Run("connect account", func(t *testing.T) {
 		connection := createGmailConnection(t, app, "")
 
-		state := core.NewMCPServerOAuthState(app, connection.Id)
-		authURL, err := connection.GoogleOAuthAuthURL(app, state)
+		// public URL behind a reverse proxy (with a sub-path)
+		redirectURL := "https://admin.example.com/pa" + core.GoogleOAuthCallbackPath
+
+		state := core.NewMCPServerOAuthState(app, connection.Id, redirectURL)
+		authURL, err := connection.GoogleOAuthAuthURL(app, state, redirectURL)
 		if err != nil {
 			t.Fatal(err)
 		}
 		parsed, _ := url.Parse(authURL)
 		q := parsed.Query()
 		if q.Get("client_id") != "cid" || q.Get("access_type") != "offline" || q.Get("state") != state ||
-			!strings.Contains(q.Get("scope"), "gmail.send") || q.Get("redirect_uri") != core.GoogleOAuthRedirectURL(app) {
+			!strings.Contains(q.Get("scope"), "gmail.send") || q.Get("redirect_uri") != redirectURL {
 			t.Fatalf("Unexpected auth URL %s", authURL)
 		}
 
-		serverId, err := core.ConsumeMCPServerOAuthState(app, state)
-		if err != nil || serverId != connection.Id {
-			t.Fatalf("Expected the state to resolve to %s, got %s (%v)", connection.Id, serverId, err)
+		serverId, stateRedirectURL, err := core.ConsumeMCPServerOAuthState(app, state)
+		if err != nil || serverId != connection.Id || stateRedirectURL != redirectURL {
+			t.Fatalf("Expected the state to resolve to %s %s, got %s %s (%v)", connection.Id, redirectURL, serverId, stateRedirectURL, err)
 		}
-		if _, err := core.ConsumeMCPServerOAuthState(app, state); err == nil {
+		if _, _, err := core.ConsumeMCPServerOAuthState(app, state); err == nil {
 			t.Fatal("Expected the state to be usable only once")
 		}
 
-		if err := connection.ConnectGoogleAccount(context.Background(), app, "good_code"); err != nil {
+		if err := connection.ConnectGoogleAccount(context.Background(), app, "good_code", redirectURL); err != nil {
 			t.Fatal(err)
 		}
 		stored, _ := core.FindMCPServerById(app, connection.Id)
@@ -355,4 +358,38 @@ func TestGmailToolSession(t *testing.T) {
 			t.Fatalf("Expected the app credentials fallback, got %q %q %v", id, secret, err)
 		}
 	})
+}
+
+func TestNormalizeGoogleOAuthRedirectURL(t *testing.T) {
+	t.Parallel()
+
+	scenarios := []struct {
+		raw      string
+		expected string
+	}{
+		{"https://admin.example.com/api/mcp/oauth/google/callback", "https://admin.example.com/api/mcp/oauth/google/callback"},
+		{" https://example.com/pa/api/mcp/oauth/google/callback ", "https://example.com/pa/api/mcp/oauth/google/callback"},
+		{"http://localhost:8090/api/mcp/oauth/google/callback", "http://localhost:8090/api/mcp/oauth/google/callback"},
+		{"", ""},
+		{"/api/mcp/oauth/google/callback", ""},
+		{"javascript:alert(1)//api/mcp/oauth/google/callback", ""},
+		{"https://example.com/other", ""},
+		{"https://example.com/api/mcp/oauth/google/callback?x=1", ""},
+		{"https://user:pass@example.com/api/mcp/oauth/google/callback", ""},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.raw, func(t *testing.T) {
+			result, err := core.NormalizeGoogleOAuthRedirectURL(s.raw)
+			if s.expected == "" {
+				if err == nil {
+					t.Fatalf("Expected error, got %q", result)
+				}
+				return
+			}
+			if err != nil || result != s.expected {
+				t.Fatalf("Expected %q, got %q (%v)", s.expected, result, err)
+			}
+		})
+	}
 }

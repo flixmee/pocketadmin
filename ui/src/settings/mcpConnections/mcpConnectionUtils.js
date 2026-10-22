@@ -3,9 +3,14 @@ export const mcpConnectionKindOptions = [
     { value: "gmail", label: "Gmail (built-in)" },
 ];
 
+/**
+ * Returns the Google OAuth redirect URI as seen by the browser.
+ *
+ * It is resolved from the current admin UI location so that it is the
+ * public URL even behind a reverse proxy (nginx, sub-path deployments, etc.).
+ */
 export function googleOAuthRedirectURL() {
-    const appURL = (app.store.settings?.meta?.appURL || window.location.origin).replace(/\/+$/, "");
-    return appURL + "/api/mcp/oauth/google/callback";
+    return new URL(app.pb.buildURL("/api/mcp/oauth/google/callback"), window.location.href).href;
 }
 
 /**
@@ -23,6 +28,7 @@ export async function connectGoogleAccount(server, options = {}) {
     try {
         result = await app.pb.send(`/api/mcp/servers/${encodeURIComponent(server.id)}/oauth/start`, {
             method: "POST",
+            body: { redirectURL: googleOAuthRedirectURL() },
             requestKey: null,
         });
     } catch (err) {

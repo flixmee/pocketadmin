@@ -12,7 +12,8 @@ State:
   - Done: backend — core/mcp_gmail.go (OAuth URL/state/code exchange/refresh, 4 tools, MIME send incl. reply headers, header-injection guard), core/mcp_server.go (kind/clientId/clientSecret/oauth, MCPToolSession, NewToolSession), migrations/1786000003_mcp_servers_oauth.go (ALTER; verified on existing DB), apis oauth start/disconnect/public callback page. Tests: core/mcp_gmail_test.go, apis/mcp_servers_gmail_test.go pass.
   - Done: UI — type select, Gmail fields + redirect URI copy, auto Google sign-in after create (popup, fallback same tab), Connect/Reconnect/Disconnect on list. Fixed: hidden required URL input blocked Gmail form submit. Headless verified (popup opened accounts.google.com with client_id; row "Not connected"; callback error page).
   - Done: docs/mcp-client.md Gmail section. Full suite: only the 8 pre-existing failures.
-  - Done: committed + pushed to origin/mcp_client (Gmail commit). Linux binary not rebuilt.
+  - Done: committed a4c29148 + pushed to origin/mcp_client. Rebuilt ui/dist + Linux amd64 examples/base/server (2026-10-22 08:57, includes Gmail).
+  - Done [2026-10-22]: fix Gmail redirect URI behind nginx (was built from Application URL = localhost). UI now derives it from the browser location (app.pb.buildURL + location) and sends it to /oauth/start; server validates (NormalizeGoogleOAuthRedirectURL: absolute http(s), path ends with callback, no query/userinfo), stores it in the one-time state and reuses it for the code exchange. AppURL remains fallback. Tests pass; verified behind a sub-path reverse proxy. Committed + pushed to origin/mcp_client. Linux binary rebuilt 2026-10-22 09:22 (includes fix).
   - Now: awaiting next task. Real Google account flow UNCONFIRMED (needs user's Google OAuth client).
 
 ---- Previous ledger ----

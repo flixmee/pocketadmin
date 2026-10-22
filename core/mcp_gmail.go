@@ -57,9 +57,24 @@ const (
 	gmailMaxResponseSize  = 25 << 20
 )
 
-// GoogleOAuthRedirectURL returns the redirect URI to register in the Google OAuth client.
+// GoogleOAuthRedirectURL returns the default redirect URI based on the
+// application URL setting (used when the admin UI doesn't provide one).
 func GoogleOAuthRedirectURL(app App) string {
 	return strings.TrimRight(app.Settings().Meta.AppURL, "/") + GoogleOAuthCallbackPath
+}
+
+// NormalizeGoogleOAuthRedirectURL validates a redirect URI provided by the
+// admin UI (e.g. the public URL behind a reverse proxy). It must be an
+// absolute http(s) URL pointing to the Google OAuth callback route.
+func NormalizeGoogleOAuthRedirectURL(raw string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" ||
+		parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" ||
+		!strings.HasSuffix(parsed.Path, GoogleOAuthCallbackPath) {
+		return "", errors.New("invalid redirect URL - it must be an absolute http(s) URL ending with " + GoogleOAuthCallbackPath)
+	}
+
+	return parsed.String(), nil
 }
 
 // GoogleOAuthClient returns the Google OAuth client credentials of the
@@ -78,7 +93,7 @@ func (m *MCPServer) GoogleOAuthClient(app App) (string, string, error) {
 }
 
 // GoogleOAuthAuthURL returns the Google consent screen URL to connect the Gmail account.
-func (m *MCPServer) GoogleOAuthAuthURL(app App, state string) (string, error) {
+func (m *MCPServer) GoogleOAuthAuthURL(app App, state string, redirectURL string) (string, error) {
 	clientId, _, err := m.GoogleOAuthClient(app)
 	if err != nil {
 		return "", err
@@ -86,7 +101,7 @@ func (m *MCPServer) GoogleOAuthAuthURL(app App, state string) (string, error) {
 
 	query := url.Values{}
 	query.Set("client_id", clientId)
-	query.Set("redirect_uri", GoogleOAuthRedirectURL(app))
+	query.Set("redirect_uri", redirectURL)
 	query.Set("response_type", "code")
 	query.Set("scope", strings.Join(GmailOAuthScopes, " "))
 	query.Set("access_type", "offline")
@@ -98,22 +113,29 @@ func (m *MCPServer) GoogleOAuthAuthURL(app App, state string) (string, error) {
 }
 
 type mcpOAuthState struct {
-	ServerId string
-	Expires  time.Time
+	ServerId    string
+	RedirectURL string
+	Expires     time.Time
 }
 
-// NewMCPServerOAuthState creates a one-time OAuth state bound to the connection.
-func NewMCPServerOAuthState(app App, serverId string) string {
+// NewMCPServerOAuthState creates a one-time OAuth state bound to the
+// connection and the redirect URI used for the sign-in (the same URI
+// must be sent again when exchanging the code).
+func NewMCPServerOAuthState(app App, serverId string, redirectURL string) string {
 	state := security.RandomString(40)
-	app.Store().Set(mcpOAuthStateKey+state, mcpOAuthState{ServerId: serverId, Expires: time.Now().Add(mcpOAuthStateTTL)})
+	app.Store().Set(mcpOAuthStateKey+state, mcpOAuthState{
+		ServerId:    serverId,
+		RedirectURL: redirectURL,
+		Expires:     time.Now().Add(mcpOAuthStateTTL),
+	})
 	return state
 }
 
 // ConsumeMCPServerOAuthState validates and removes the OAuth state,
-// returning the id of the connection it was created for.
-func ConsumeMCPServerOAuthState(app App, state string) (string, error) {
+// returning the id of the connection and the redirect URI it was created for.
+func ConsumeMCPServerOAuthState(app App, state string) (string, string, error) {
 	if state == "" {
-		return "", errors.New("missing OAuth state")
+		return "", "", errors.New("missing OAuth state")
 	}
 
 	raw := app.Store().Get(mcpOAuthStateKey + state)
@@ -121,10 +143,10 @@ func ConsumeMCPServerOAuthState(app App, state string) (string, error) {
 
 	data, ok := raw.(mcpOAuthState)
 	if !ok || time.Now().After(data.Expires) {
-		return "", errors.New("invalid or expired OAuth state - please try connecting again")
+		return "", "", errors.New("invalid or expired OAuth state - please try connecting again")
 	}
 
-	return data.ServerId, nil
+	return data.ServerId, data.RedirectURL, nil
 }
 
 type googleTokenResponse struct {
@@ -171,7 +193,7 @@ func googleTokenRequest(ctx context.Context, form url.Values) (*googleTokenRespo
 
 // ConnectGoogleAccount exchanges the OAuth code and stores the tokens
 // and the account email in the connection.
-func (m *MCPServer) ConnectGoogleAccount(ctx context.Context, app App, code string) error {
+func (m *MCPServer) ConnectGoogleAccount(ctx context.Context, app App, code string, redirectURL string) error {
 	clientId, clientSecret, err := m.GoogleOAuthClient(app)
 	if err != nil {
 		return err
@@ -181,7 +203,7 @@ func (m *MCPServer) ConnectGoogleAccount(ctx context.Context, app App, code stri
 	form.Set("code", code)
 	form.Set("client_id", clientId)
 	form.Set("client_secret", clientSecret)
-	form.Set("redirect_uri", GoogleOAuthRedirectURL(app))
+	form.Set("redirect_uri", redirectURL)
 	form.Set("grant_type", "authorization_code")
 
 	token, err := googleTokenRequest(ctx, form)
