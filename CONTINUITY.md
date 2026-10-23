@@ -1,3 +1,14 @@
+Goal (incl. success criteria) [2026-10-23, Automations page UI + bulk approvals, branch `improve_automations`]:
+- Tabs on the Automations page (Automations | Approvals with pending badge); approvals get Pending/History views, search, multi-select and bulk approve/reject.
+
+State:
+  - Done: API POST /api/automations/approvals/decisions {ids, decision, comment} -> {resolved, failed} (max 500, dedupe, workflows continued sequentially in background); approvals list adds automationName (custom record data), status=resolved filter, limit. Tests apis/automation_approvals_bulk_test.go pass.
+  - Done: UI pageAutomationsSettings.js tabs (remembered in localStorage, counts, both lists kept mounted), automationApprovalsList.js rewrite (segmented Pending/History, search, checkboxes, select-all, sticky bulk bar, confirm), automationsList oncount, CSS (+ fixed pre-existing mobile search-field height bug). Headless verified desktop + 390px.
+  - Done [2026-10-23 11:41]: rebuilt Linux binary; committed and pushed branch improve_automations to origin (tracking).
+  - Now: awaiting next task.
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-22, built-in Zalo bridge integration, branch `zalo_bridge`]:
 - Replace demo/zalo-pocketbase pb_hooks + JS migration with built-in Go support: settings (enable, bridge URL, secret), auto-created collections zalo_session/zalo_messages/zalo_outbox, outbox hooks (normalize + kick bridge), /api/zalo/* routes; admin UI page to enable, check bridge online/offline, show QR, Login/Logout.
 - External Bun bridge (zca-js) stays a separate process (JS-only lib); protocol unchanged (X-Bridge-Secret, /status /login /logout /kick).
@@ -17,7 +28,8 @@ State:
   - Done [2026-10-22]: Zalo automation nodes — trigger `zalo.message` (fired from zalo_messages after-create, ignores is_self, dedupe by msg_id, `{{zalo.*}}` + `{{trigger.zalo.*}}`, template root whitelisted) and step `zalo.send` (creates zalo_outbox record -> bridge kick; threadId/threadType/phone/text/replyTo, optional waitForDelivery 60s). UI: palette entry, zaloStepForm.js, trigger options/labels/hint, tokens, icon. Tests core/automation_zalo_test.go pass; e2e via API + headless UI verified. Docs in docs/zalo.md.
   - Done [2026-10-22 16:15]: rebuilt Linux binary (Zalo + nodes); committed and pushed branch zalo_bridge to origin (tracking). develop not updated with Zalo.
   - Done [2026-10-22]: AI generate `systemPrompt` (template; OpenAI system message / Anthropic `system` / Gemini `systemInstruction`; plain + tool loop; not stored in memory; validated string <= max template size; preview/schema). UI field in AI generate node. Tests pass; headless verified (saved). Docs in docs/ai-generate-memory.md. On branch zalo_bridge; Linux binary rebuilt 2026-10-22 16:56; committed + pushed to origin/zalo_bridge.
-  - Now: awaiting next task. demo/ folder is untracked (user's) - not modified, not committed.
+  - Done [2026-10-23]: fast-forward merged zalo_bridge (929864e2) into local develop (NOT pushed; develop 10 commits ahead of origin/develop). Created branch `improve_automations` from develop (current).
+  - Now: on `improve_automations`, awaiting next task. demo/ folder is untracked (user's) - not modified, not committed.
 
 ---- Previous ledger ----
 

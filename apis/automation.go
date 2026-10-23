@@ -4,13 +4,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
-	validation "github.com/pocketbase/ozzo-validation/v4"
 	"github.com/pocketbase/dbx"
+	validation "github.com/pocketbase/ozzo-validation/v4"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/inflector"
 	"github.com/pocketbase/pocketbase/tools/router"
@@ -49,6 +50,7 @@ func bindAutomationApi(app core.App, rg *router.RouterGroup[*core.RequestEvent])
 	subGroup.POST("/workflow-states/{id}/resume", automationWorkflowStateResume)
 	subGroup.GET("/approvals", automationApprovalsList)
 	subGroup.POST("/approvals/{id}/decision", automationApprovalDecision)
+	subGroup.POST("/approvals/decisions", automationApprovalBulkDecision)
 	subGroup.POST("", automationCreate)
 	subGroup.GET("/{id}", automationView)
 	subGroup.PATCH("/{id}", automationUpdate)
@@ -165,12 +167,37 @@ func automationResumeByToken(e *core.RequestEvent) error {
 func automationApprovalsList(e *core.RequestEvent) error {
 	approvals := []*core.Approval{}
 	query := e.App.RecordQuery(core.CollectionNameApprovals).OrderBy("created DESC")
-	if status := strings.TrimSpace(e.Request.URL.Query().Get("status")); status != "" {
+
+	switch status := strings.TrimSpace(e.Request.URL.Query().Get("status")); status {
+	case "":
+	case "resolved":
+		query.AndWhere(dbx.NotIn("status", core.ApprovalStatusPending))
+	default:
 		query.AndWhere(dbx.HashExp{"status": status})
+	}
+
+	if limit, err := strconv.Atoi(e.Request.URL.Query().Get("limit")); err == nil && limit > 0 {
+		query.Limit(int64(min(limit, 1000)))
 	}
 
 	if err := query.All(&approvals); err != nil {
 		return e.BadRequestError("Failed to load approvals.", err)
+	}
+
+	// expose the automation names for the admin UI
+	names := map[string]string{}
+	for _, approval := range approvals {
+		ref := approval.AutomationRef()
+		if _, ok := names[ref]; !ok && ref != "" {
+			if automation, err := e.App.FindRecordById(core.CollectionNameAutomations, ref); err == nil {
+				names[ref] = automation.GetString("name")
+			} else {
+				names[ref] = ""
+			}
+		}
+
+		approval.Record.WithCustomData(true)
+		approval.Record.Set("automationName", names[ref])
 	}
 
 	return execAfterSuccessTx(true, e.App, func() error {
@@ -203,6 +230,85 @@ func automationApprovalDecision(e *core.RequestEvent) error {
 
 	return execAfterSuccessTx(true, e.App, func() error {
 		return e.NoContent(http.StatusNoContent)
+	})
+}
+
+const automationApprovalBulkMax = 500
+
+type automationApprovalBulkForm struct {
+	Ids      []string `json:"ids"`
+	Decision string   `json:"decision"`
+	Comment  string   `json:"comment"`
+}
+
+type automationApprovalBulkFailure struct {
+	Id    string `json:"id"`
+	Error string `json:"error"`
+}
+
+// automationApprovalBulkDecision approves or rejects multiple pending approvals.
+//
+// Each approval is resolved independently - the response lists the
+// resolved ids and the ones that failed (e.g. already resolved).
+func automationApprovalBulkDecision(e *core.RequestEvent) error {
+	form := &automationApprovalBulkForm{}
+	if err := e.BindBody(form); err != nil {
+		return e.BadRequestError("Failed to load the approval decisions.", err)
+	}
+
+	ids := make([]string, 0, len(form.Ids))
+	seen := map[string]struct{}{}
+	for _, id := range form.Ids {
+		id = strings.TrimSpace(id)
+		if _, ok := seen[id]; ok || id == "" {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	if len(ids) == 0 {
+		return e.BadRequestError("Select at least one approval.", nil)
+	}
+	if len(ids) > automationApprovalBulkMax {
+		return e.BadRequestError(fmt.Sprintf("Too many approvals (max %d per request).", automationApprovalBulkMax), nil)
+	}
+
+	decision := core.AutomationApprovalDecision{Decision: form.Decision, Comment: form.Comment}
+
+	resolved := []string{}
+	failed := []automationApprovalBulkFailure{}
+	for _, id := range ids {
+		approval, err := e.App.ResolveAutomationApprovalDecision(id, decision)
+		if err != nil {
+			failed = append(failed, automationApprovalBulkFailure{Id: id, Error: err.Error()})
+			continue
+		}
+		resolved = append(resolved, approval.Id)
+	}
+
+	// continue the paused workflows one by one in the background
+	if len(resolved) > 0 {
+		app := e.App
+		continueIds := append([]string{}, resolved...)
+		routine.FireAndForget(func() {
+			for _, id := range continueIds {
+				if err := app.ContinueAutomationApproval(id, nil); err != nil {
+					app.Logger().Warn(
+						"Failed to continue automation approval workflow",
+						"approvalId", id,
+						"error", err,
+					)
+				}
+			}
+		})
+	}
+
+	return execAfterSuccessTx(true, e.App, func() error {
+		return e.JSON(http.StatusOK, map[string]any{
+			"resolved": resolved,
+			"failed":   failed,
+		})
 	})
 }
 

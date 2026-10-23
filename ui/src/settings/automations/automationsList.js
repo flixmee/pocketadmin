@@ -21,6 +21,8 @@ const triggerLabels = {
 export function automationsList(propsArg = {}) {
     const props = store({
         reset: null,
+        // called with the number of automations after each load
+        oncount: null,
     });
 
     const watchers = app.utils.extendStore(props, propsArg);
@@ -68,6 +70,7 @@ export function automationsList(propsArg = {}) {
             data.automations = await app.pb.send("/api/automations", {
                 requestKey: "automationsList.load",
             });
+            props.oncount?.(data.automations.length);
             data.isLoading = false;
         } catch (err) {
             if (!err?.isAbort) {
