@@ -45,6 +45,24 @@ const customTagOptionValue = "__pocketadmin_custom_tag__";
 // number of recent runs used for the template autocomplete suggestions
 const runSamplesLimit = 10;
 
+const inputFieldsOpenStorageKey = "pbAutomationInputFieldsOpen";
+
+function loadInputFieldsOpen() {
+    try {
+        return window.localStorage.getItem(inputFieldsOpenStorageKey) !== "0";
+    } catch {
+        return true;
+    }
+}
+
+function saveInputFieldsOpen(open) {
+    try {
+        window.localStorage.setItem(inputFieldsOpenStorageKey, open ? "1" : "0");
+    } catch {
+        // storage unavailable (e.g. private mode) - the state just isn't remembered
+    }
+}
+
 export function pageAutomationUpsert(route) {
     const automationId = route.params?.id || "";
     const isNew = !automationId;
@@ -57,6 +75,7 @@ export function pageAutomationUpsert(route) {
         isLoadingTags: false,
         isSaving: false,
         infoPanelCollapsed: false,
+        inputFieldsOpen: loadInputFieldsOpen(),
         automation: null,
         automationTags: [],
         form: initialForm,
@@ -104,6 +123,11 @@ export function pageAutomationUpsert(route) {
         data.form = normalizeAutomationForm(automation);
         data.initialSerialized = serializeAutomationForm(normalizeAutomationForm(automation));
         app.store.title = isNew ? "Create automation" : data.form.name || "Edit automation";
+    }
+
+    // keep the input fields visible while they have validation errors
+    function isInputFieldsOpen() {
+        return data.inputFieldsOpen || !!app.store.errors?.manualInputs;
     }
 
     async function loadPageData() {
@@ -676,15 +700,41 @@ export function pageAutomationUpsert(route) {
                                     className: "automation-workflow-info-block",
                                     hidden: () => !data.isManualTrigger,
                                 },
-                                t.label({ className: "automation-field-label" }, "Input fields"),
-                                manualInputsEditor({
-                                    rows: () => data.form.manualInputs,
-                                    idPrefix: formId + "_manualInput",
-                                }),
-                                () => fieldError(app.store.errors?.manualInputs),
-                                t.div(
-                                    { className: "txt-sm txt-hint automation-field-desc m-t-5" },
-                                    "Values are available as {{input.name}}. Other automations can call this one with the \"Call automation\" step.",
+                                t.button(
+                                    {
+                                        type: "button",
+                                        className: "automation-field-label automation-info-block-toggle",
+                                        ariaExpanded: () => isInputFieldsOpen(),
+                                        onclick: () => {
+                                            data.inputFieldsOpen = !isInputFieldsOpen();
+                                            saveInputFieldsOpen(data.inputFieldsOpen);
+                                        },
+                                    },
+                                    t.span({ className: "txt" }, "Input fields"),
+                                    t.span(
+                                        { className: "automation-info-block-count" },
+                                        () => data.form.manualInputs.length,
+                                    ),
+                                    t.i({
+                                        className: () =>
+                                            `ti ${isInputFieldsOpen() ? "ti-chevron-up" : "ti-chevron-down"} m-l-auto`,
+                                        ariaHidden: true,
+                                    }),
+                                ),
+                                app.components.slide(
+                                    () => isInputFieldsOpen(),
+                                    t.div(
+                                        null,
+                                        manualInputsEditor({
+                                            rows: () => data.form.manualInputs,
+                                            idPrefix: formId + "_manualInput",
+                                        }),
+                                        () => fieldError(app.store.errors?.manualInputs),
+                                        t.div(
+                                            { className: "txt-sm txt-hint automation-field-desc m-t-5" },
+                                            "Values are available as {{input.name}}. Other automations can call this one with the \"Call automation\" step.",
+                                        ),
+                                    ),
                                 ),
                             ),
                             t.div(

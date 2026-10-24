@@ -1667,6 +1667,45 @@
     border-color: var(--color-border-strong);
 }
 
+.automation-info-block-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 2px 0;
+    border: 0;
+    background: none;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: color var(--animationSpeed);
+}
+
+.automation-workflow-info-panel .automation-info-block-toggle {
+    margin-bottom: 4px;
+}
+
+.automation-info-block-toggle:hover,
+.automation-info-block-toggle:focus-visible {
+    outline: 0;
+    color: var(--surfaceTxtColor);
+}
+
+.automation-info-block-toggle .ti {
+    font-size: 14px;
+}
+
+.automation-info-block-count {
+    min-width: 18px;
+    padding: 1px 5px;
+    border-radius: 9999px;
+    background: var(--surfaceAlt2Color);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.4;
+    text-align: center;
+}
+
 .automation-workflow-info-panel .field > .automation-field-label {
     padding: 8px 10px 0;
     margin: 0;
