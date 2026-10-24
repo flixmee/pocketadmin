@@ -1,3 +1,29 @@
+Goal (incl. success criteria) [2026-10-24, automations editor autocomplete from recent runs, branch `automation_run_autocomplete`]:
+- When an automation has recent runs, the template `{{` autocomplete (and Data mapping palette) suggests the real data paths seen in those runs, with their last value.
+
+Constraints/Assumptions:
+- UI-only change; no API/Go changes (uses existing GET /api/automations/{id}/runs?limit=10).
+- Out-of-band store in ui/src/base/automationInput.js (not on reactive form objects), same pattern as automationEditorManualInputNames.
+
+Key decisions:
+- Paths from run.input (trigger.type/collectionId/collectionName/caller, request, telegram, zalo, i18n, input, record, recordOriginal) and run.stepResults (steps.N.status/output/error; N = executed order, same as template `steps`).
+- Array indexes use dot form (`a.0.b`, Go fast path; keeps typing-filter working since codeEditor word chars exclude `[`); non-identifier keys use `["key"]` and then indexes switch to `[0]` (goja-evaluated). All verified to resolve at runtime.
+- Limits: 400 paths, depth 6, 50 keys/object, newest run's value wins; sample values truncated to 60 chars; string values under keys matching authorization/cookie/password/secret/token/api key masked.
+- Run paths hidden for roots of other trigger types (request->webhook, telegram, zalo, i18n, record*); input/trigger/steps always shown.
+- Autocomplete ranks sampled paths first (after startsWith); items show the last value under the token. Palette "Recent runs" group capped to 60 buttons, hover shows the last value.
+- Samples reload after the Recent runs modal closes and after Run; cleared on mount/unmount.
+
+State:
+  - Done: automationInput.js (setAutomationRunSamples, automationRunSampleValue, Recent runs group, label/sort), pageAutomationUpsert.js (loadRunSamples), stepEditor.js palette, automations.css. vite build ok. Headless e2e on scratch :8091 (webhook automation, 2+ runs): suggestions with values, `{{order.lines.0.s` filter, Enter inserts, saved and resolved at runtime ("ok B-9", bracket keys "ok Ann z"), trigger filtering, no console errors.
+  - Done [2026-10-24 08:15]: rebuilt ui/dist + Linux amd64 examples/base/server.
+  - Done [2026-10-24]: committed on new branch `automation_run_autocomplete` (from develop 4fdabb51); NOT pushed. ui/dist/index.html left uncommitted (build output, as before).
+  - Now: awaiting next task. User chose to skip the template bug below for now.
+  - Found (pre-existing, not fixed): core/automation_templates.go automationWholeTemplatePattern `^\s*\{\{\s*(.*?)\s*\}\}\s*$` treats `{{a}} {{b}}` (whole value = two tokens) as one expression -> eval error.
+
+Working set: ui/src/base/automationInput.js, ui/src/settings/automations/{pageAutomationUpsert,stepEditor}.js, ui/src/css/automations.css
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-23, Automations page UI + bulk approvals, branch `improve_automations`]:
 - Tabs on the Automations page (Automations | Approvals with pending badge); approvals get Pending/History views, search, multi-select and bulk approve/reject.
 

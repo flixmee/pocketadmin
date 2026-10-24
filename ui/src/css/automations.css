@@ -3072,3 +3072,23 @@
         opacity: 1;
     }
 }
+
+/* template autocomplete items with a value from the recent runs */
+.automation-autocomplete-item {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-width: 100%;
+}
+.automation-autocomplete-sample {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--monospaceFontFamily);
+    font-size: var(--xsFontSize);
+    color: var(--surfaceTxtHintColor);
+}
+.dropdown-item.active .automation-autocomplete-sample {
+    color: inherit;
+    opacity: 0.75;
+}

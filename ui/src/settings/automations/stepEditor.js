@@ -2824,6 +2824,9 @@ function renderServerStepError(stepError) {
     );
 }
 
+// the run paths can be many - the rest are still available in the autocomplete
+const mappingPaletteMaxRunTokens = 60;
+
 function renderMappingPalette(options) {
     return t.div(
         { className: "automation-builder-card" },
@@ -2842,28 +2845,45 @@ function renderMappingPalette(options) {
                         triggerCollectionRef: () => options.triggerCollectionRef,
                         steps: () => options.steps,
                     })
-                        .map((group) =>
-                            t.div(
+                        .map((group) => {
+                            const tokens = group.isRunSample
+                                ? group.tokens.slice(0, mappingPaletteMaxRunTokens)
+                                : group.tokens;
+                            const hiddenTotal = group.tokens.length - tokens.length;
+
+                            return t.div(
                                 { className: "automation-token-group" },
                                 t.div({ className: "txt-xs txt-hint" }, group.title),
+                                group.description
+                                    ? t.div({ className: "txt-xs txt-hint" }, group.description)
+                                    : null,
                                 t.div(
                                     { className: "flex gap-5 flex-wrap" },
-                                    ...group.tokens.map((token) =>
-                                        t.button(
+                                    ...tokens.map((token) => {
+                                        const sample = app.utils.automationRunSampleValue(token);
+
+                                        return t.button(
                                             {
                                                 type: "button",
                                                 className: "label code-like",
+                                                title: sample === undefined ? "" : `Last value: ${sample}`,
                                                 onclick: () => {
                                                     app.utils.copyToClipboard(token);
                                                     app.toasts.success("Mapping token copied.");
                                                 },
                                             },
                                             token,
-                                        )
-                                    ),
+                                        );
+                                    }),
                                 ),
-                            )
-                        ),
+                                hiddenTotal > 0
+                                    ? t.div(
+                                        { className: "txt-xs txt-hint" },
+                                        `+${hiddenTotal} more - type {{ in any template field to search them.`,
+                                    )
+                                    : null,
+                            );
+                        }),
                 ),
         ),
     );

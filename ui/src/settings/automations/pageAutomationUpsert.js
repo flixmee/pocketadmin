@@ -42,6 +42,9 @@ const automationWebhookMethodOptions = [
 
 const customTagOptionValue = "__pocketadmin_custom_tag__";
 
+// number of recent runs used for the template autocomplete suggestions
+const runSamplesLimit = 10;
+
 export function pageAutomationUpsert(route) {
     const automationId = route.params?.id || "";
     const isNew = !automationId;
@@ -107,7 +110,26 @@ export function pageAutomationUpsert(route) {
         await Promise.all([
             loadAutomation(),
             loadAutomationTags(),
+            loadRunSamples(),
         ]);
+    }
+
+    async function loadRunSamples() {
+        if (isNew) {
+            return;
+        }
+
+        try {
+            const runs = await app.pb.send(`/api/automations/${automationId}/runs?limit=${runSamplesLimit}`, {
+                requestKey: "automationUpsert.loadRunSamples",
+            });
+            app.utils.setAutomationRunSamples(runs);
+        } catch (err) {
+            // the suggestions are optional - don't interrupt the editing
+            if (!err?.isAbort) {
+                console.warn("failed to load the recent automation runs", err);
+            }
+        }
     }
 
     async function loadAutomation() {
@@ -320,7 +342,9 @@ export function pageAutomationUpsert(route) {
             return;
         }
 
-        openAutomationRunsModal(data.automation);
+        openAutomationRunsModal(data.automation, {
+            onafterclose: loadRunSamples,
+        });
     }
 
     function openRunModal() {
@@ -332,7 +356,9 @@ export function pageAutomationUpsert(route) {
             app.toasts.info("Running the last saved version of this automation.");
         }
 
-        openAutomationRunModal(data.automation);
+        openAutomationRunModal(data.automation, {
+            onrun: loadRunSamples,
+        });
     }
 
     function openDryRunModal() {
@@ -375,10 +401,13 @@ export function pageAutomationUpsert(route) {
                 app.utils.automationEditorManualInputNames = () =>
                     data.form.manualInputs.map((row) => row.name.trim()).filter(Boolean);
 
+                app.utils.setAutomationRunSamples([]);
+
                 loadPageData();
             },
             onunmount: () => {
                 delete app.utils.automationEditorManualInputNames;
+                app.utils.setAutomationRunSamples([]);
 
                 if (app.store.errors) {
                     app.store.errors = null;

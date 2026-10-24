@@ -120,6 +120,32 @@ const automationMappingBaseGroups = [
     },
 ];
 
+// trigger payload roots collected from the recent runs and the trigger types
+// they belong to (used to hide stale paths after the trigger type was changed)
+const automationRunSampleRoots = {
+    request: ["webhook"],
+    telegram: ["telegram.message"],
+    zalo: ["zalo.message"],
+    i18n: automationI18nTriggerTypes,
+    input: null,
+    record: [...automationRecordTriggerTypes, ...automationI18nTriggerTypes],
+    recordOriginal: [...automationRecordTriggerTypes, ...automationI18nTriggerTypes],
+};
+const automationRunSampleMaxPaths = 400;
+const automationRunSampleMaxDepth = 6;
+const automationRunSampleMaxKeys = 50;
+const automationRunSampleMaxLength = 60;
+const automationRunSampleSensitiveKey = /authorization|cookie|password|secret|token|api[-_]?key/i;
+const automationIdentifierPattern = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+
+// data paths (and a sample value for each) collected from the recent runs
+// of the automation that is currently being edited
+const automationRunSamples = store({
+    runsCount: 0,
+    paths: [],
+});
+let automationRunSampleValues = new Map();
+
 /**
  * Creates a CodeEditor-powered input for automation template fields.
  * Typing `{{` opens data mapping autocomplete suggestions.
@@ -200,7 +226,67 @@ window.app.utils.automationMappingTokenGroups = function(options = {}) {
         });
     }
 
+    const runTokens = runSampleMappingTokens(triggerType);
+    if (runTokens.length) {
+        result.push({
+            title: "Recent runs",
+            description:
+                `Paths found in the last ${automationRunSamples.runsCount} run(s). Hover a token to see its last value.`,
+            tokens: runTokens,
+            isRunSample: true,
+        });
+    }
+
     return result;
+};
+
+/**
+ * Collects the template data paths of the specified runs so that they
+ * can be suggested by the template autocomplete and the mapping palette.
+ *
+ * Newer runs should be first - their values are used as samples.
+ *
+ * @param {Array} runs
+ */
+window.app.utils.setAutomationRunSamples = function(runs) {
+    runs = Array.isArray(runs) ? runs : [];
+
+    const samples = new Map();
+    for (const run of runs) {
+        const payload = parseRunSampleJSON(run?.input);
+        if (payload && typeof payload == "object" && !Array.isArray(payload)) {
+            collectRunSamplePaths(samples, "trigger.type", payload.triggerType || run.triggerType);
+            collectRunSamplePaths(samples, "trigger.collectionId", payload.collectionId || undefined);
+            collectRunSamplePaths(samples, "trigger.collectionName", payload.collectionName || undefined);
+            collectRunSamplePaths(samples, "trigger.caller", payload.caller);
+            for (const root of Object.keys(automationRunSampleRoots)) {
+                collectRunSamplePaths(samples, root, payload[root]);
+            }
+        }
+
+        const stepResults = parseRunSampleJSON(run?.stepResults);
+        if (Array.isArray(stepResults)) {
+            stepResults.forEach((result, i) => {
+                collectRunSamplePaths(samples, `steps.${i}.status`, result?.status);
+                collectRunSamplePaths(samples, `steps.${i}.output`, result?.output);
+                collectRunSamplePaths(samples, `steps.${i}.error`, result?.error || undefined);
+            });
+        }
+    }
+
+    automationRunSampleValues = samples;
+    automationRunSamples.runsCount = samples.size ? runs.length : 0;
+    automationRunSamples.paths = [...samples.keys()];
+};
+
+/**
+ * Returns the last seen value of the specified mapping token (if any).
+ *
+ * @param  {string} token
+ * @return {string|undefined}
+ */
+window.app.utils.automationRunSampleValue = function(token) {
+    return automationRunSampleValues.get(tokenPath(token));
 };
 
 window.app.utils.automationMappingTokens = function(options = {}) {
@@ -216,6 +302,7 @@ window.app.utils.automationMappingTokens = function(options = {}) {
             tokens.push({
                 value: token,
                 label: `${token} · ${group.title}`,
+                sample: app.utils.automationRunSampleValue(token),
             });
         }
     }
@@ -243,9 +330,11 @@ window.app.utils.automationMappingAutocomplete = function(word, options = {}) {
         }
 
         matches.push({
-            ...token,
             value: templateMatch.prefix + token.value,
+            label: token.sample === undefined ? token.label : () => autocompleteSampleLabel(token),
             _startsWith: normalizedQuery && expression.startsWith(normalizedQuery) ? 0 : 1,
+            // prefer the paths that were seen in the recent runs
+            _hasSample: token.sample === undefined ? 1 : 0,
             _length: expression.length,
         });
     }
@@ -254,12 +343,117 @@ window.app.utils.automationMappingAutocomplete = function(word, options = {}) {
         if (a._startsWith !== b._startsWith) {
             return a._startsWith - b._startsWith;
         }
+        if (a._hasSample !== b._hasSample) {
+            return a._hasSample - b._hasSample;
+        }
         return a._length - b._length;
     });
 
     const maxItems = Number(options.maxItems) > 0 ? Number(options.maxItems) : 60;
-    return matches.slice(0, maxItems).map(({ _startsWith, _length, ...item }) => item);
+    return matches.slice(0, maxItems).map(({ _startsWith, _hasSample, _length, ...item }) => item);
 };
+
+function autocompleteSampleLabel(token) {
+    return t.span(
+        { className: "automation-autocomplete-item" },
+        t.span({ className: "automation-autocomplete-token" }, token.label),
+        t.span({ className: "automation-autocomplete-sample" }, token.sample),
+    );
+}
+
+function runSampleMappingTokens(triggerType) {
+    const tokens = [];
+    for (const path of automationRunSamples.paths) {
+        const triggerTypes = automationRunSampleRoots[path.split(/[.[]/)[0]];
+        if (triggerType && triggerTypes && !triggerTypes.includes(triggerType)) {
+            continue;
+        }
+        tokens.push(`{{${path}}}`);
+    }
+    return tokens;
+}
+
+function collectRunSamplePaths(samples, path, value, depth = 0) {
+    if (value === undefined || samples.size >= automationRunSampleMaxPaths) {
+        return;
+    }
+
+    if (!samples.has(path)) {
+        samples.set(path, formatRunSampleValue(path, value));
+    }
+
+    if (depth >= automationRunSampleMaxDepth || value === null || typeof value != "object") {
+        return;
+    }
+
+    if (Array.isArray(value)) {
+        if (value.length) {
+            // dot indexes are resolved without a JS VM but can't follow a bracket key
+            const indexPath = path.includes("[") ? `${path}[0]` : `${path}.0`;
+            collectRunSamplePaths(samples, indexPath, value[0], depth + 1);
+        }
+        return;
+    }
+
+    for (const key of Object.keys(value).slice(0, automationRunSampleMaxKeys)) {
+        let keyPath;
+        if (automationIdentifierPattern.test(key)) {
+            keyPath = `${path}.${key}`;
+        } else {
+            // the path is evaluated as JS expression -> convert the dot indexes too
+            // (a path without brackets can't contain quoted keys)
+            const jsPath = path.includes("[") ? path : path.replace(/\.(\d+)(?=\.|$)/g, "[$1]");
+            keyPath = `${jsPath}[${JSON.stringify(key)}]`;
+        }
+        collectRunSamplePaths(samples, keyPath, value[key], depth + 1);
+    }
+}
+
+function formatRunSampleValue(path, value) {
+    if (value === null) {
+        return "null";
+    }
+
+    if (Array.isArray(value)) {
+        return value.length == 1 ? "[1 item]" : `[${value.length} items]`;
+    }
+
+    if (typeof value == "object") {
+        const total = Object.keys(value).length;
+        return total == 1 ? "{1 key}" : `{${total} keys}`;
+    }
+
+    if (typeof value == "string" && automationRunSampleSensitiveKey.test(path.split(/[.[]/).pop())) {
+        return "••••••";
+    }
+
+    const result = typeof value == "string" ? JSON.stringify(value) : String(value);
+    if (result.length > automationRunSampleMaxLength) {
+        return result.substring(0, automationRunSampleMaxLength - 1) + "…";
+    }
+
+    return result;
+}
+
+function parseRunSampleJSON(value) {
+    if (typeof value != "string") {
+        return value;
+    }
+
+    try {
+        return JSON.parse(value);
+    } catch (_) {
+        return null;
+    }
+}
+
+function tokenPath(token) {
+    token = String(token || "").trim();
+    if (token.startsWith("{{") && token.endsWith("}}")) {
+        token = token.substring(2, token.length - 2);
+    }
+    return token.trim();
+}
 
 function templateAutocompleteMatch(word) {
     word = typeof word == "string" ? word : "";
