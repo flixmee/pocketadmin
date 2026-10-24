@@ -164,14 +164,24 @@ const stepTypeOptions = [
 
 // groups shown in the "Add action" drawer, keyed by stepTypeOptions category
 const stepPaletteGroups = [
-    { label: "Logic", tone: "logic", categories: ["control"] },
-    { label: "Records", tone: "data", categories: ["record"] },
-    { label: "Messaging", tone: "messaging", categories: ["communication"] },
-    { label: "Integrations", tone: "integration", categories: ["integration", "capability"] },
-    { label: "Wait & approval", tone: "wait", categories: ["wait", "approval"] },
-    { label: "AI", tone: "ai", categories: ["ai"] },
-    { label: "Output", tone: "output", categories: ["output", "webhook"] },
+    { label: "Logic", tone: "logic", icon: "ti ti-git-merge", categories: ["control"] },
+    { label: "Records", tone: "data", icon: "ti ti-database-plus", categories: ["record"] },
+    { label: "Messaging", tone: "messaging", icon: "ti ti-message-circle", categories: ["communication"] },
+    { label: "Integrations", tone: "integration", icon: "ti ti-world", categories: ["integration", "capability"] },
+    { label: "Wait & approval", tone: "wait", icon: "ti ti-clock", categories: ["wait", "approval"] },
+    { label: "AI", tone: "ai", icon: "ti ti-sparkles", categories: ["ai"] },
+    { label: "Output", tone: "output", icon: "ti ti-arrow-back-up", categories: ["output", "webhook"] },
 ];
+
+// capability schema icons that have a matching .ti-* icon in automations.css
+const capabilityPaletteIcons = {
+    send: "ti ti-send",
+    mail: "ti ti-mail",
+    plus: "ti ti-database-plus",
+    pencil: "ti ti-edit",
+    edit: "ti ti-edit",
+    trash: "ti ti-trash",
+};
 
 const valueTypeOptions = [
     { value: "text", label: "Text" },
@@ -296,6 +306,10 @@ export function stepEditor(propsArg = {}) {
 
     function addStep(type, insertIndex = -1, branchPath = rootBranchPath, insertOptions = {}) {
         const nextStep = createReactiveEditorStep(type, insertOptions.id ? { __id: insertOptions.id } : {});
+        // optional preset fields (e.g. the capability picked in the "Add action" drawer)
+        if (insertOptions.init) {
+            Object.assign(nextStep, insertOptions.init);
+        }
         insertNewStep(nextStep, insertIndex, branchPath, insertOptions);
     }
 
@@ -332,8 +346,11 @@ export function stepEditor(propsArg = {}) {
         return true;
     }
 
-    function changeStepType(step, nextType) {
+    function changeStepType(step, nextType, init) {
         resetStep(step, createEditorStep(nextType, { __id: step.__id }));
+        if (init) {
+            Object.assign(step, init);
+        }
         data.expandedById[step.__id] = true;
     }
 
@@ -737,9 +754,11 @@ export function stepEditor(propsArg = {}) {
                     getSelectedStepId: () => data.selectedStepId,
                     getTriggerType: () => props.triggerType,
                     getStepLimit: () => data.schemas?.limits?.maxSteps || 100,
+                    getSchemas: () => data.schemas,
                     selectStep,
                     addStep,
-                    addDetachedStep: (type, id) => addStep(type, -1, rootBranchPath, { detached: true, id }),
+                    addDetachedStep: (type, id, init) =>
+                        addStep(type, -1, rootBranchPath, { detached: true, id, init }),
                     removeSteps,
                     setSteps,
                     setWorkspace,
@@ -970,9 +989,10 @@ function renderVisualBuilder(options) {
     const positions = {};
     const local = store({
         actionsOpen: false,
-        actionsQuery: "",
         addContext: null,
     });
+    // search and opened levels of the "Add action" drawer
+    const paletteState = createPaletteState();
 
     const getSteps = () => options.getSteps?.() || options.steps || [];
     const getDetachedGroups = () => options.getDetachedGroups?.() || [];
@@ -1114,9 +1134,9 @@ function renderVisualBuilder(options) {
         return position;
     }
 
-    function addPaletteStep(type) {
+    function addPaletteStep(type, init) {
         if (local.addContext) {
-            options.addStep(type, local.addContext.index, local.addContext.path);
+            options.addStep(type, local.addContext.index, local.addContext.path, { init });
             local.actionsOpen = false;
             local.addContext = null;
             return;
@@ -1125,13 +1145,13 @@ function renderVisualBuilder(options) {
         // "Add node" creates an unconnected node - connections are drawn manually
         const id = app.utils.randomString();
         positions[id] = nextFreeNodePosition();
-        options.addDetachedStep(type, id);
+        options.addDetachedStep(type, id, init);
         local.actionsOpen = false;
     }
 
     function openFlowAddContext(context = {}) {
         local.addContext = normalizeFlowAddContext(context);
-        local.actionsQuery = "";
+        resetPaletteState(paletteState);
         local.actionsOpen = true;
     }
 
@@ -1184,7 +1204,7 @@ function renderVisualBuilder(options) {
         return options.removeSteps?.(nodeIds) !== false;
     }
 
-    const actionDrawer = renderFlowActionDrawer(options, addPaletteStep, getTriggerType, local);
+    const actionDrawer = renderFlowActionDrawer(options, addPaletteStep, getTriggerType, local, paletteState);
 
     return t.div(
         { className: "automation-flow-builder" },
@@ -1284,7 +1304,7 @@ function renderVisualBuilder(options) {
                     className: "btn automation-flow-add-node-btn",
                     onclick: () => {
                         local.addContext = null;
-                        local.actionsQuery = "";
+                        resetPaletteState(paletteState);
                         local.actionsOpen = true;
                     },
                 },
@@ -1304,7 +1324,7 @@ const automationColumnGap = 330;
 const automationBranchGap = 230;
 const automationRootY = 180;
 
-function renderFlowActionDrawer(options, addStep, getTriggerType, local) {
+function renderFlowActionDrawer(options, addStep, getTriggerType, local, paletteState) {
     let portal = null;
 
     const createPortal = () =>
@@ -1345,79 +1365,11 @@ function renderFlowActionDrawer(options, addStep, getTriggerType, local) {
                         t.i({ className: "ti ti-x", ariaHidden: true }),
                     ),
                 ),
-                t.div(
-                    { className: "automation-flow-action-search" },
-                    t.i({ className: "ri-search-line", ariaHidden: true }),
-                    t.input({
-                        type: "search",
-                        placeholder: "Search actions...",
-                        ariaLabel: "Search actions",
-                        value: () => local.actionsQuery,
-                        oninput: (e) => (local.actionsQuery = e.target.value),
-                        onkeydown: (e) => {
-                            if (e.key !== "Enter") {
-                                return;
-                            }
-                            e.preventDefault();
-                            const first = groupedPaletteOptions(getTriggerType(), local.actionsQuery)[0]?.options[0];
-                            if (first) {
-                                addStep(first.value);
-                            }
-                        },
-                    }),
-                ),
-                t.div(
-                    { className: "automation-builder-palette-actions" },
-                    () => {
-                        const groups = groupedPaletteOptions(getTriggerType(), local.actionsQuery);
-                        if (!groups.length) {
-                            return t.div(
-                                { className: "automation-flow-action-empty" },
-                                `No actions match "${local.actionsQuery.trim()}".`,
-                            );
-                        }
-
-                        return t.div(
-                            { className: "automation-builder-palette-actions-inner" },
-                            ...groups.map((group) =>
-                                t.section(
-                                    { className: `automation-palette-group tone-${group.tone}` },
-                                    t.div(
-                                        { className: "automation-palette-group-title" },
-                                        t.span(null, group.label),
-                                        t.span({ className: "automation-palette-group-count" }, group.options.length),
-                                    ),
-                                    ...group.options.map((option) =>
-                                        t.button(
-                                            {
-                                                type: "button",
-                                                className: "automation-builder-palette-action",
-                                                title: option.label,
-                                                onclick: () => addStep(option.value),
-                                            },
-                                            t.div(
-                                                { className: "automation-palette-icon-wrap" },
-                                                t.i({ className: option.icon || "ti ti-plus", ariaHidden: true }),
-                                            ),
-                                            t.div(
-                                                { className: "content block txt-left" },
-                                                t.div({ className: "automation-node-title" }, option.label),
-                                                t.div(
-                                                    { className: "automation-node-meta" },
-                                                    option.description || option.category || "step",
-                                                ),
-                                            ),
-                                            t.i({
-                                                className: "ti ti-plus automation-palette-add-icon",
-                                                ariaHidden: true,
-                                            }),
-                                        )
-                                    ),
-                                )
-                            ),
-                        );
-                    },
-                ),
+                renderPaletteDrillDown({
+                    state: paletteState,
+                    getTree: () => buildPaletteTree(getTriggerType(), options.getSchemas?.()),
+                    onpick: (node) => addStep(node.type, node.init),
+                }),
             ),
         );
 
@@ -2787,20 +2739,115 @@ function renderStepTypeSelect(step, options) {
             t.div(
                 { className: "field" },
                 t.label({ htmlFor: `${step.__id}_type` }, "Step type"),
-                app.components.select({
-                    id: `${step.__id}_type`,
-                    value: () => step.type,
-                    options: () => stepTypeSelectOptions(options.triggerType, step.type),
-                    onchange: (selected) => {
-                        const nextType = selected?.[0]?.value || "condition";
-                        if (nextType !== step.type) {
-                            options.changeStepType(step, nextType);
-                        }
-                    },
-                }),
+                renderStepTypePicker(step, options),
             ),
         ),
     );
+}
+
+// Drill-down picker (groups > step types > capabilities) for changing the type of a step.
+function renderStepTypePicker(step, options) {
+    const state = createPaletteState();
+    const getTree = () => buildPaletteTree(options.triggerType, options.schemas, step.type);
+
+    // the picked capability node, otherwise the step type node
+    const currentNode = () => {
+        const tree = getTree();
+        return (
+            (step.type === "capability" && step.capability
+                && findPaletteNode(tree, (node) => node.init?.capability === step.capability))
+            || findPaletteNode(tree, (node) => node.path.length > 1 && node.type === step.type && !node.init)
+        );
+    };
+
+    const isActive = (node) => {
+        const path = currentNode()?.path || [];
+        return node.path.every((id, i) => path[i] === id);
+    };
+
+    const dropdown = t.div(
+        {
+            tabIndex: -1,
+            popover: "auto",
+            className: "dropdown automation-type-picker-dropdown",
+            onbeforetoggle: (e) => {
+                // open at the level of the current type
+                if (e.newState === "open") {
+                    resetPaletteState(state, currentNode()?.path.slice(0, -1) || []);
+                }
+            },
+            ontoggle: (e) => {
+                if (e.newState === "open") {
+                    focusPaletteSearch(dropdown);
+                }
+            },
+        },
+        renderPaletteDrillDown({
+            state,
+            getTree,
+            isActive,
+            onpick: (node) => {
+                dropdown.hidePopover();
+                if (node.path.join("/") !== currentNode()?.path.join("/")) {
+                    options.changeStepType(step, node.type, node.init);
+                }
+            },
+        }),
+    );
+
+    return t.div(
+        { className: "input select single automation-type-picker" },
+        t.button(
+            {
+                type: "button",
+                id: `${step.__id}_type`,
+                className: "selected-container",
+                popoverTargetElement: dropdown,
+            },
+            () => {
+                const node = currentNode();
+                const option = stepTypeOptions.find((item) => item.value === step.type);
+                const title = option?.label || step.type || "Select type";
+                const capability = step.type === "capability" ? step.capability : "";
+
+                return t.div(
+                    { className: `automation-type-picker-value automation-tone-${node?.tone || "other"}` },
+                    t.div(
+                        { className: "automation-palette-icon-wrap" },
+                        t.i({ className: node?.icon || option?.icon || "ti ti-puzzle", ariaHidden: true }),
+                    ),
+                    t.div(
+                        { className: "content" },
+                        t.div(
+                            { className: "automation-node-title" },
+                            title,
+                            capability ? t.span({ className: "automation-type-picker-sub" }, ` · ${capability}`) : null,
+                        ),
+                        t.div(
+                            { className: "automation-node-meta" },
+                            paletteNodeTrail(getTree(), node),
+                            option?.description ? ` · ${option.description}` : "",
+                        ),
+                    ),
+                );
+            },
+        ),
+        dropdown,
+    );
+}
+
+// Returns the labels of the parent groups of the node (e.g. "Integrations").
+function paletteNodeTrail(tree, node) {
+    if (!node) {
+        return "";
+    }
+
+    return node.path
+        .slice(0, -1)
+        .map((_, i) => findPaletteNode(tree, (item) => item.path.join("/") === node.path.slice(0, i + 1).join("/")))
+        .filter((item) => item && item.type !== node.type)
+        .map((item) => item.label)
+        .join(" › ");
 }
 
 function renderValidationLabel(step) {
@@ -3072,14 +3119,12 @@ function stepTypeAddOptions(triggerType) {
     return stepTypeOptions.filter((option) => !option.triggerTypes || option.triggerTypes.includes(triggerType));
 }
 
-function groupedPaletteOptions(triggerType, query = "") {
-    const needle = String(query || "").trim().toLowerCase();
-    const options = stepTypeAddOptions(triggerType).filter((option) =>
-        !needle
-        || [option.label, option.description, option.category, option.value]
-            .some((value) => String(value || "").toLowerCase().includes(needle))
-    );
-
+// Builds the "Add action" drawer levels: groups > step types > (capabilities).
+function buildPaletteTree(triggerType, schemas, selectedType = "") {
+    // the selected type stays pickable even when it isn't available for the trigger
+    const options = selectedType
+        ? stepTypeSelectOptions(triggerType, selectedType)
+        : stepTypeAddOptions(triggerType);
     const groups = stepPaletteGroups.map((group) => ({
         ...group,
         options: options.filter((option) => group.categories.includes(option.category)),
@@ -3089,10 +3134,321 @@ function groupedPaletteOptions(triggerType, query = "") {
     const known = new Set(stepPaletteGroups.flatMap((group) => group.categories));
     const other = options.filter((option) => !known.has(option.category));
     if (other.length) {
-        groups.push({ label: "Other", tone: "other", options: other });
+        groups.push({ label: "Other", tone: "other", icon: "ti ti-puzzle", options: other });
     }
 
-    return groups.filter((group) => group.options.length);
+    return groups
+        .filter((group) => group.options.length)
+        .map((group) => {
+            const path = [group.tone];
+            return {
+                id: group.tone,
+                path,
+                label: group.label,
+                icon: group.icon,
+                tone: group.tone,
+                description: group.options.map((option) => option.label).join(", "),
+                children: group.options.map((option) => paletteStepNode(option, group, path, schemas)),
+            };
+        });
+}
+
+function paletteStepNode(option, group, parentPath, schemas) {
+    const path = [...parentPath, option.value];
+    const node = {
+        id: option.value,
+        path,
+        label: option.label,
+        icon: option.icon || "ti ti-plus",
+        tone: group.tone,
+        description: option.description || option.category || "step",
+        keywords: [option.value, option.category, group.label],
+        type: option.value,
+    };
+
+    if (option.value === "capability") {
+        const capabilities = Object.values(schemas?.capabilities || {})
+            .filter((capability) => capability?.key && capability.active !== false)
+            .sort((a, b) => a.key.localeCompare(b.key));
+
+        if (capabilities.length) {
+            node.children = capabilities.map((capability) => ({
+                id: capability.key,
+                path: [...path, capability.key],
+                label: capability.key,
+                icon: capabilityPaletteIcons[capability.icon] || node.icon,
+                tone: group.tone,
+                description: `${capability.category || "capability"} · v${capability.version || "1"}`,
+                keywords: [capability.category, option.label, group.label],
+                type: "capability",
+                init: { capability: capability.key },
+            }));
+        }
+    }
+
+    return node;
+}
+
+function createPaletteState() {
+    return store({
+        query: "",
+        // ids of the opened levels (e.g. ["integration", "capability"])
+        path: [],
+        direction: "forward",
+    });
+}
+
+function resetPaletteState(state, path = []) {
+    state.query = "";
+    state.direction = "forward";
+    state.path = path;
+}
+
+// Returns the first node (depth-first) that satisfies the matcher.
+function findPaletteNode(nodes, matcher) {
+    for (const node of nodes || []) {
+        if (matcher(node)) {
+            return node;
+        }
+        const child = findPaletteNode(node.children, matcher);
+        if (child) {
+            return child;
+        }
+    }
+    return null;
+}
+
+// Renders the back/breadcrumb navigation, the search and the current level nodes.
+//
+// config:
+// - state:     palette state store (see createPaletteState)
+// - getTree:   returns the buildPaletteTree nodes
+// - onpick:    called with the picked leaf node
+// - isActive:  optional node matcher used to highlight the current selection
+function renderPaletteDrillDown(config) {
+    const state = config.state;
+    let root = null;
+
+    function pickNode(node) {
+        if (node.children?.length) {
+            state.direction = "forward";
+            state.query = "";
+            state.path = node.path;
+            focusSearch();
+            return;
+        }
+        config.onpick(node);
+    }
+
+    // keeps typing/backspace navigation working after a level change
+    // (skipped on touch devices to avoid popping the on-screen keyboard)
+    function focusSearch() {
+        focusPaletteSearch(root);
+    }
+
+    return t.div(
+        {
+            className: "automation-palette-drilldown",
+            onmount: (el) => (root = el),
+        },
+        () => renderPaletteNav(state, config.getTree(), focusSearch),
+        t.div(
+            { className: "automation-flow-action-search" },
+            t.i({ className: "ri-search-line", ariaHidden: true }),
+            t.input({
+                type: "search",
+                placeholder: () => {
+                    const level = resolvePaletteLevel(config.getTree(), state.path);
+                    return level.trail.length
+                        ? `Search ${level.trail[level.trail.length - 1].label.toLowerCase()}...`
+                        : "Search actions...";
+                },
+                ariaLabel: "Search actions",
+                value: () => state.query,
+                oninput: (e) => (state.query = e.target.value),
+                onkeydown: (e) => {
+                    // backspace in the empty search goes one level up
+                    if (e.key === "Backspace" && !e.target.value && state.path.length) {
+                        e.preventDefault();
+                        goPaletteBack(state);
+                        return;
+                    }
+
+                    if (e.key !== "Enter") {
+                        return;
+                    }
+                    e.preventDefault();
+                    const first = visiblePaletteNodes(config.getTree(), state)[0];
+                    if (first) {
+                        pickNode(first);
+                    }
+                },
+            }),
+        ),
+        t.div(
+            { className: "automation-builder-palette-actions" },
+            () => {
+                const query = state.query.trim();
+                const nodes = visiblePaletteNodes(config.getTree(), state);
+                if (!nodes.length) {
+                    return t.div(
+                        { className: "automation-flow-action-empty" },
+                        query ? `No actions match "${query}".` : "No actions available.",
+                    );
+                }
+
+                return t.div(
+                    {
+                        // re-created on each level change to replay the slide animation
+                        className: `automation-builder-palette-actions-inner automation-palette-level ${
+                            query ? "search" : state.direction
+                        }`,
+                    },
+                    ...nodes.map((node) => renderPaletteNode(node, !!query, pickNode, !!config.isActive?.(node))),
+                );
+            },
+        ),
+    );
+}
+
+function focusPaletteSearch(root) {
+    if (window.matchMedia?.("(pointer: fine)").matches) {
+        root?.querySelector(".automation-flow-action-search input")?.focus();
+    }
+}
+
+// Returns the nodes of the deepest existing level of the path and the opened parents.
+function resolvePaletteLevel(tree, path) {
+    let nodes = tree;
+    const trail = [];
+    for (const id of path || []) {
+        const node = nodes.find((item) => item.id === id);
+        if (!node?.children?.length) {
+            break;
+        }
+        trail.push(node);
+        nodes = node.children;
+    }
+
+    return { nodes, trail };
+}
+
+// Returns the current level nodes or, while searching, the matching nodes of all its sublevels.
+function visiblePaletteNodes(tree, state) {
+    const level = resolvePaletteLevel(tree, state.path);
+    const needle = String(state.query || "").trim().toLowerCase();
+    if (!needle) {
+        return level.nodes;
+    }
+
+    const result = [];
+    const visit = (nodes, trail) => {
+        for (const node of nodes) {
+            const matches = [node.label, node.description, ...(node.keywords || [])]
+                .some((value) => String(value || "").toLowerCase().includes(needle));
+
+            // the top level groups are covered by the keywords of their step types
+            if (matches && (node.path.length > 1 || !node.children?.length)) {
+                result.push({ ...node, trailLabel: trail.map((item) => item.label).join(" › ") });
+            }
+
+            if (node.children?.length) {
+                visit(node.children, [...trail, node]);
+            }
+        }
+    };
+    visit(level.nodes, level.trail);
+
+    return result;
+}
+
+function goPaletteBack(state, depth = state.path.length - 1) {
+    state.direction = "back";
+    state.query = "";
+    state.path = state.path.slice(0, Math.max(depth, 0));
+}
+
+function renderPaletteNav(state, tree, onnavigate) {
+    const { trail } = resolvePaletteLevel(tree, state.path);
+    if (!trail.length) {
+        return null;
+    }
+
+    const crumbs = [{ label: "Actions" }, ...trail];
+
+    return t.div(
+        { className: `automation-palette-nav automation-tone-${trail[0].tone}` },
+        t.button(
+            {
+                type: "button",
+                className: "btn sm secondary transparent circle",
+                ariaLabel: app.attrs.tooltip("Back"),
+                onclick: () => {
+                    goPaletteBack(state);
+                    onnavigate?.();
+                },
+            },
+            t.i({ className: "ti ti-chevron-left", ariaHidden: true }),
+        ),
+        t.nav(
+            { className: "automation-palette-breadcrumbs" },
+            ...crumbs.map((crumb, i) => {
+                if (i === crumbs.length - 1) {
+                    return t.span({ className: "automation-palette-crumb current" }, crumb.label);
+                }
+
+                return [
+                    t.button(
+                        {
+                            type: "button",
+                            className: "automation-palette-crumb",
+                            onclick: () => {
+                                goPaletteBack(state, i);
+                                onnavigate?.();
+                            },
+                        },
+                        crumb.label,
+                    ),
+                    t.i({ className: "ti ti-chevron-right automation-palette-crumb-sep", ariaHidden: true }),
+                ];
+            }).flat(),
+        ),
+    );
+}
+
+function renderPaletteNode(node, isSearch, pick, isActive = false) {
+    const hasChildren = !!node.children?.length;
+
+    return t.button(
+        {
+            type: "button",
+            className: `automation-builder-palette-action automation-tone-${node.tone} ${isActive ? "active" : ""}`,
+            title: node.label,
+            onclick: () => pick(node),
+        },
+        t.div(
+            { className: "automation-palette-icon-wrap" },
+            t.i({ className: node.icon || "ti ti-plus", ariaHidden: true }),
+        ),
+        t.div(
+            { className: "content block txt-left" },
+            t.div({ className: "automation-node-title" }, node.label),
+            t.div(
+                { className: "automation-node-meta" },
+                isSearch && node.trailLabel
+                    ? t.span({ className: "automation-palette-trail" }, `${node.trailLabel} · `)
+                    : null,
+                node.description,
+            ),
+        ),
+        hasChildren ? t.span({ className: "automation-palette-group-count" }, node.children.length) : null,
+        t.i({
+            className: hasChildren
+                ? "ti ti-chevron-right automation-palette-next-icon"
+                : "ti ti-plus automation-palette-add-icon",
+            ariaHidden: true,
+        }),
+    );
 }
 
 function stepTypeSelectOptions(triggerType, selectedType) {
