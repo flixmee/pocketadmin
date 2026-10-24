@@ -1,3 +1,27 @@
+Goal (incl. success criteria) [2026-10-24, "Add action" picker as multi-level drill-down, branch `automation_run_autocomplete`]:
+- Replace the long grouped list in the automation editor's Actions drawer with a drill-down: categories -> step types -> (capabilities).
+
+Key decisions:
+- Level 1: 7 groups (stepPaletteGroups + new group icons; "Other" for unmapped categories), row shows preview of child labels + count + chevron.
+- Level 2: step types of the group. Level 3: only Capability -> active registered capabilities from /api/automations/schemas; picking one adds a capability step preset via addStep insertOptions.init ({capability: key}); works for "Add node" (detached) and node "+" (connected).
+- Back button + clickable breadcrumb (Actions > Group > ...); Backspace in empty search goes up; Enter picks first visible item; slide animation per direction (reduced-motion off).
+- Search is scoped to the current level and its sublevels, flat results with colored trail ("Integrations > Capability ·").
+- Search input re-focused after navigation only on (pointer: fine) devices.
+- Drawer state (actionsPath/direction) kept in the local visual-builder store, reset on open. Old groupedPaletteOptions and .automation-palette-group/-title CSS removed; tone colors now `.automation-flow-drawer-portal .tone-*`.
+
+State:
+  - Done: stepEditor.js (buildPaletteTree, paletteStepNode, resolvePaletteLevel, visiblePaletteNodes, renderPaletteNav, renderPaletteNode, goPaletteBack), automations.css. vite build ok. Headless verified on scratch :8091: levels 1-3, breadcrumb/back/Backspace, search across levels, capability preset via Add node and "+" (connected, 3/100 steps), focus, 375px mobile (no h-scroll, no focus), no script errors.
+  - Done [2026-10-24 08:27]: rebuilt ui/dist + Linux amd64 examples/base/server.
+  - Done [2026-10-24]: step "Step type" select (step dialog + structured list) replaced by renderStepTypePicker: select-styled trigger (tone icon, label, "· capability key", group · description) + popover dropdown with the same drill-down; opens at the current type's level with the chain highlighted (.active); picking calls changeStepType(step, type, init) (init presets capability). Drawer + picker share renderPaletteDrillDown/createPaletteState; tone classes renamed to automation-tone-*, drawer-only CSS scoped to .automation-palette-drilldown. buildPaletteTree keeps the selected type even if not allowed for the trigger. Verified: open/active/back/Backspace/3-level change to Capability mail.send, reopen at Capability, Escape closes only the popover, drawer still OK, 375px fits, no console errors. Linux binary rebuilt.
+  - Done [2026-10-24]: flow canvas controls (zoom in/out, fit, lock) in ui/src/base/flowdesigner.vanilla.js got type="button" (no submit inside forms). Linux binary rebuilt.
+  - Verified [2026-10-24]: user reported controls still submitting -> page was running a pre-fix build (7 failed PATCH saves logged before reload). With the current build: controls are type=button, real clicks on Zoom in/Fit view send no PATCH/submit, only "Save changes" is a submit button in the form, step modal (and type picker) is mounted outside the form. Needs hard reload / redeploy of the rebuilt binary.
+  - Done [2026-10-24]: user confirmed controls fix after reload; committed drill-down pickers and the controls fix as two commits on `automation_run_autocomplete` (after b9552974). NOT pushed (user: keep local). ui/dist/index.html left uncommitted.
+  - Now: awaiting next task.
+
+Working set: ui/src/settings/automations/stepEditor.js (renderFlowActionDrawer + palette helpers near stepTypeAddOptions), ui/src/css/automations.css
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-24, automations editor autocomplete from recent runs, branch `automation_run_autocomplete`]:
 - When an automation has recent runs, the template `{{` autocomplete (and Data mapping palette) suggests the real data paths seen in those runs, with their last value.
 

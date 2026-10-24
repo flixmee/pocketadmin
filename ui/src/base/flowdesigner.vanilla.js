@@ -672,16 +672,16 @@ const FlowDesigner = (function() {
             this.el = document.createElement("div");
             this.el.className = "fd-controls";
             this.el.innerHTML = `
-        <button class="fd-controls__btn" data-action="zoom-in" title="Zoom in">
+        <button type="button" class="fd-controls__btn" data-action="zoom-in" title="Zoom in">
           <i class="ti ti-zoom-in" aria-hidden="true"></i>
         </button>
-        <button class="fd-controls__btn" data-action="zoom-out" title="Zoom out">
+        <button type="button" class="fd-controls__btn" data-action="zoom-out" title="Zoom out">
           <i class="ti ti-zoom-out" aria-hidden="true"></i>
         </button>
-        <button class="fd-controls__btn" data-action="fit" title="Fit view">
+        <button type="button" class="fd-controls__btn" data-action="fit" title="Fit view">
           <i class="ti ti-focus-centered" aria-hidden="true"></i>
         </button>
-        <button class="fd-controls__btn" data-action="lock" title="Toggle lock">
+        <button type="button" class="fd-controls__btn" data-action="lock" title="Toggle lock">
           <i class="ti ti-lock" aria-hidden="true"></i>
         </button>
       `;
