@@ -2738,7 +2738,6 @@ function renderStepTypeSelect(step, options) {
             { className: "col-lg-12" },
             t.div(
                 { className: "field" },
-                t.label({ htmlFor: `${step.__id}_type` }, "Step type"),
                 renderStepTypePicker(step, options),
             ),
         ),
@@ -2802,6 +2801,7 @@ function renderStepTypePicker(step, options) {
                 type: "button",
                 id: `${step.__id}_type`,
                 className: "selected-container",
+                ariaLabel: "Step type",
                 popoverTargetElement: dropdown,
             },
             () => {

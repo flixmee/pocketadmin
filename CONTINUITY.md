@@ -18,6 +18,7 @@ State:
   - Done [2026-10-24]: user confirmed controls fix after reload; committed drill-down pickers and the controls fix as two commits on `automation_run_autocomplete` (after b9552974). User pushed the branch to origin (tracking) on 2026-10-24; no PR yet. ui/dist/index.html left uncommitted.
   - Done [2026-10-24]: manual trigger "Input fields" block in the editor info panel is collapsible (type=button toggle with field count + chevron, app.components.slide, aria-expanded; open state remembered in localStorage pbAutomationInputFieldsOpen, default open; forced open while manualInputs has validation errors). Verified on scratch :8091 in a separate tab (user's pane tab is their vite dev server localhost:5173 - don't drive it). Committed on `automation_run_autocomplete`; NOT pushed (origin is behind by this commit).
   - Done [2026-10-24 12:38]: rebuilt ui/dist + Linux amd64 examples/base/server (includes all editor work + collapsible Input fields).
+  - Done [2026-10-24 12:42]: removed the visible "Step type" label above the step type picker (button keeps aria-label "Step type"); rebuilt ui/dist + Linux binary. Committed on `automation_run_autocomplete`; NOT pushed (branch 2 commits ahead of origin).
   - Now: awaiting next task.
 
 Working set: ui/src/settings/automations/stepEditor.js (renderFlowActionDrawer + palette helpers near stepTypeAddOptions), ui/src/css/automations.css
