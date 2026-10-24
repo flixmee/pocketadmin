@@ -114,6 +114,8 @@ export function pageZaloSettings() {
             initForm(overview);
             app.store.errors = null;
             app.toasts.success("Successfully saved the Zalo settings.");
+            // show/hide the Conversations menu
+            app.store.loadConversationChannels();
         } catch (err) {
             if (!err.isAbort) {
                 app.checkApiError(err);
@@ -145,6 +147,7 @@ export function pageZaloSettings() {
 
         data.busyAction = "";
         loadOverview();
+        app.store.loadConversationChannels();
     }
 
     function confirmLogout() {

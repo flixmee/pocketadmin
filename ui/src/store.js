@@ -78,6 +78,13 @@ window.app.store = store({
             label: "Automations",
         },
         {
+            href: "#/conversations",
+            icon: "ri-chat-3-line",
+            label: "Conversations",
+            // optional: isHidden
+            isHidden: () => !app.store.activeConversationChannels.length,
+        },
+        {
             href: "#/settings",
             icon: "ri-settings-3-line",
             label: "Settings",
@@ -360,6 +367,46 @@ window.app.store = store({
                 app.checkApiError(err);
                 app.store.isLoadingOAuth2Providers = false;
             }
+        }
+    },
+
+    // conversation channels (e.g. Zalo) and whether they can be used
+    conversationChannels: [],
+    conversationChannelsRealtimeUnsubscribe: null,
+    get activeConversationChannels() {
+        return app.store.conversationChannels.filter((channel) => channel.active);
+    },
+    async loadConversationChannels() {
+        try {
+            app.store.conversationChannels = await app.pb.send("/api/conversations/channels", {
+                requestKey: "appStore.loadConversationChannels",
+            });
+        } catch (err) {
+            if (!err?.isAbort) {
+                console.warn("failed to load the conversation channels:", err);
+            }
+        }
+    },
+    async initConversationChannelsRealtime() {
+        app.store.disposeConversationChannelsRealtime();
+
+        try {
+            // the Zalo account logged in/out
+            app.store.conversationChannelsRealtimeUnsubscribe = await app.pb
+                .collection("zalo_session")
+                .subscribe("*", () => app.store.loadConversationChannels());
+        } catch (err) {
+            if (!err?.isAbort) {
+                console.warn("failed to initialize the conversation channels realtime:", err);
+            }
+        }
+    },
+    disposeConversationChannelsRealtime() {
+        if (app.store.conversationChannelsRealtimeUnsubscribe) {
+            app.store.conversationChannelsRealtimeUnsubscribe().catch((err) => {
+                console.warn("failed to unsubscribe from the conversation channels realtime:", err);
+            });
+            app.store.conversationChannelsRealtimeUnsubscribe = null;
         }
     },
 

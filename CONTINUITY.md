@@ -1,3 +1,21 @@
+Goal (incl. success criteria) [2026-10-24, Conversations menu (Zalo inbox), branch `conversations`]:
+- New admin header menu "Conversations" with channel tabs (first: Zalo; more channels later). Zalo tab lists conversations, admin can reply and send new messages.
+- Menu shown only when Zalo is enabled AND the account is logged in (zalo_session.status == "logged_in").
+
+Key decisions:
+- Backend: core/zalo_conversations.go (ZaloConversations: SQL union of zalo_messages + zalo_outbox grouped by thread; outbox thread = resolved_thread_id || thread_id || "phone:<phone>"; search HAVING LIKE; user names = latest non-self sender_name, groups unnamed; phone from resolved outbox. ZaloConversationMessages: merge + dedupe outbox by zalo_msg_id == msg_id, `before` cursor on created, hasMore. ZaloSendMessage: validated, creates pending outbox record via app.Save -> existing after-create hook kicks the bridge; reply_to quote rendered as {msg, fromD}).
+- API apis/conversations.go (superuser only): GET /api/conversations/channels, GET /api/conversations/zalo, GET /api/conversations/zalo/{threadId}/messages, POST /api/conversations/zalo/messages. Tests apis/conversations_test.go.
+- UI: headerLinks entry with new optional isHidden (appHeader filters); app.store.conversationChannels + loadConversationChannels + realtime on zalo_session (pb.js on login; Zalo settings page reloads after save/actions). Routes #/conversations and #/conversations/{channel}; pageConversations (tabs, stable view store so channel reloads don't remount), zaloConversations.js (list/search/load more, thread with day separators, quotes, photos/links, outbox status, reply on hover, composer Enter/Shift+Enter/IME-safe, new message modal by phone/user/group id, realtime on zalo_messages/zalo_outbox, phone thread auto-switch on resolve, mobile single pane), css/conversations.css. No attachment sending yet.
+
+State:
+  - Done [2026-10-24]: implemented + docs (docs/zalo.md). Tests: conversations + Zalo API pass; full apis/core packages have only 7 failures, all verified pre-existing on the base commit (TestSettingsRegisterTelegramWebhook, TestSQLRun, TestCollectionPresetsList, TestSettings_DBExport, TestNotifyWatcher_CollectionsUpdate, TestSettingsMarshalJSON, TestCollectionDBExport). E2E on scratch :8091 with a fake bridge (scratchpad/fake_bridge.py, port 3999): menu hidden/shown live on logout/login, list, thread, reply w/ quote + multiline, /kick called, delivery dedupe, incoming realtime, new message by phone + invalid phone error, phone->thread switch, 375px mobile, no script errors. Rebuilt ui/dist + Linux binary.
+  - Done [2026-10-24]: committed on `conversations` (not pushed; develop 5 ahead of origin, also not pushed). ui/dist/index.html left uncommitted.
+  - Now: awaiting next task.
+
+Working set: core/zalo_conversations.go, apis/conversations.go(+_test), apis/base.go, ui/src/conversations/*, ui/src/css/conversations.css, ui/src/store.js, ui/src/pb.js, ui/src/base/appHeader.js, ui/src/router.js, ui/src/css/_main.css, ui/src/settings/zalo/pageZaloSettings.js, docs/zalo.md
+
+---- Previous ledger ----
+
 Goal (incl. success criteria) [2026-10-24, "Add action" picker as multi-level drill-down, branch `automation_run_autocomplete`]:
 - Replace the long grouped list in the automation editor's Actions drawer with a drill-down: categories -> step types -> (capabilities).
 

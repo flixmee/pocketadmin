@@ -34,7 +34,7 @@ export function appHeader() {
                     className: "app-main-nav",
                 },
                 () => {
-                    return app.store.headerLinks.map((link) => {
+                    return app.store.headerLinks.filter((link) => !link.isHidden?.()).map((link) => {
                         const isLocal = link.href.startsWith("#/");
 
                         return t.a(

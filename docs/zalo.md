@@ -36,6 +36,17 @@ Delete `pb_hooks/zalo.pb.js` and `pb_hooks/zalo/bridge.js`. If they are still in
 
 Default rules (same as the demo migration): authenticated users can list/view the three collections and create outbox records. Adjust them in the collection settings if needed.
 
+## Conversations (admin inbox)
+
+When Zalo is enabled **and the account is logged in**, the admin header shows a **Conversations** menu (it appears/disappears live when the account logs in or out). The **Zalo** tab lists the conversations and lets superusers read and answer them:
+
+- **Conversations list** - grouped by thread (users and groups), newest first, with the last message and its delivery state; search by name, phone, thread id or message text.
+- **Conversation** - the received/sent messages (`zalo_messages`) merged with the messages queued in `zalo_outbox` (*Queued*, *Sending*, *Failed* + error). Queued messages that the bridge already saved in `zalo_messages` (same Zalo message id) are shown once. Photos/links from `content` are displayed, quotes are shown above the text; older messages load on demand.
+- **Reply** - type in the composer (Enter sends, Shift+Enter adds a line; IME composition is respected), optionally quoting a message (*Reply* on hover).
+- **New message** - to a phone number, a Zalo user id or a group id. A message queued by phone shows up as `phone:<number>` until the bridge resolves the account (`resolved_thread_id`), then the conversation switches to the real thread automatically.
+
+Everything updates in realtime (`zalo_messages`/`zalo_outbox` subscriptions). Group names aren't part of the Zalo messages, so groups are labeled with their id and the previews show the sender. Attachments can't be sent from the inbox yet (create a `zalo_outbox` record with `attachments` instead).
+
 ## Automations
 
 ### Trigger: On Zalo message
@@ -83,6 +94,15 @@ Example auto-reply: trigger **On Zalo message** + **Send Zalo** with thread ID `
 
 The first four routes are compatible with the former hooks, so existing app code keeps working.
 
+Conversations (superusers only):
+
+| Method | Route                                         | Description                                                                                         |
+| ------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `GET`  | `/api/conversations/channels`                 | `[{ id: "zalo", enabled, active, status, accountName }]` - `active` when enabled and logged in      |
+| `GET`  | `/api/conversations/zalo`                     | Conversations (`?search=&limit=&offset=`, max 100) with `name`, `threadType`, `lastMessage`, `lastAt` |
+| `GET`  | `/api/conversations/zalo/{threadId}/messages` | `{ items, hasMore }` in chronological order (`?limit=` max 200, `?before=<created>` for older)      |
+| `POST` | `/api/conversations/zalo/messages`            | `{ threadId, threadType, phone, text, replyTo }` - queues a `zalo_outbox` message (`threadId` may be `phone:<number>`) |
+
 ## Code Locations
 
 - `core/zalo.go` - collections, outbox/messages hooks, bridge client; settings in `core/settings_model.go` (`Credentials.Zalo`)
@@ -90,3 +110,5 @@ The first four routes are compatible with the former hooks, so existing app code
 - `apis/zalo.go` - routes
 - `ui/src/settings/zalo/pageZaloSettings.js`, `ui/src/css/zalo.css` - admin page
 - `ui/src/settings/automations/zaloStepForm.js` - step form
+- `core/zalo_conversations.go`, `apis/conversations.go` - conversations list/messages/send
+- `ui/src/conversations/` (`pageConversations.js`, `zaloConversations.js`), `ui/src/css/conversations.css` - Conversations page; the menu visibility comes from `app.store.conversationChannels`

@@ -31,6 +31,8 @@ app.pb.authStore.onChange((_, record) => {
     if (!record?.id) {
         app.store.disposeNotificationsRealtime();
         app.store.resetNotifications();
+        app.store.disposeConversationChannelsRealtime();
+        app.store.conversationChannels = [];
     }
 });
 
@@ -58,6 +60,8 @@ app.pb.authStore.onChange((_, record) => {
         app.store.loadOAuth2Providers();
         app.store.loadNotificationState();
         app.store.initNotificationsRealtime();
+        app.store.loadConversationChannels();
+        app.store.initConversationChannelsRealtime();
     }
 });
 

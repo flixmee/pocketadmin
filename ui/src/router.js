@@ -1,5 +1,6 @@
 import { pageSuperuserLogin } from "@/auth/pageSuperuserLogin";
 import { pageCollections } from "@/collections/pageCollections";
+import { pageConversations } from "@/conversations/pageConversations";
 import { pageLogs } from "@/logs/pageLogs";
 import { pageMedia } from "@/media/pageMedia";
 import { pageApplicationSettings } from "@/settings/application/pageApplicationSettings";
@@ -176,6 +177,8 @@ app.routes.superuserOnly("#/logs", pageLogs);
 app.routes.superuserOnly("#/automations", pageAutomationsSettings);
 app.routes.superuserOnly("#/automations/new", pageAutomationUpsert);
 app.routes.superuserOnly("#/automations/{id}", pageAutomationUpsert);
+app.routes.superuserOnly("#/conversations", pageConversations);
+app.routes.superuserOnly("#/conversations/{channel}", pageConversations);
 app.routes.superuserOnly("#/settings", pageApplicationSettings);
 app.routes.superuserOnly("#/settings/mail", pageMailSettings);
 app.routes.superuserOnly("#/settings/credentials", pageCredentialsSettings);
